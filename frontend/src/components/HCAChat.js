@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -399,7 +401,10 @@ function AgentCard({ id, data, steps, approved, denied, onApprove, onDeny }) {
                 color={result.status === "success" ? "#059669" : "#dc2626"}
               />
               {result.outputs && (
-                <DataRow label="Output" value={_renderOutput(result.outputs)} />
+                <div style={S.dataRow}>
+                  <span style={S.dataLabel}>Output</span>
+                  <MarkdownOutput text={_renderOutput(result.outputs)} />
+                </div>
               )}
               {result.error && <DataRow label="Error" value={result.error} color="#dc2626" />}
               {result.artifacts?.length > 0 && (
@@ -523,6 +528,35 @@ function Collapsible({ label, open, toggle, children }) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function MarkdownOutput({ text }) {
+  return (
+    <div style={S.mdOutput}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p:      ({ children }) => <p style={S.mdP}>{children}</p>,
+          strong: ({ children }) => <strong style={S.mdStrong}>{children}</strong>,
+          em:     ({ children }) => <em style={S.mdEm}>{children}</em>,
+          ol:     ({ children }) => <ol style={S.mdOl}>{children}</ol>,
+          ul:     ({ children }) => <ul style={S.mdUl}>{children}</ul>,
+          li:     ({ children }) => <li style={S.mdLi}>{children}</li>,
+          h1:     ({ children }) => <h1 style={S.mdH}>{children}</h1>,
+          h2:     ({ children }) => <h2 style={{ ...S.mdH, fontSize: 17 }}>{children}</h2>,
+          h3:     ({ children }) => <h3 style={{ ...S.mdH, fontSize: 16 }}>{children}</h3>,
+          code:   ({ inline, children }) =>
+            inline
+              ? <code style={S.mdInlineCode}>{children}</code>
+              : <pre style={S.mdPre}><code style={S.mdCode}>{children}</code></pre>,
+          blockquote: ({ children }) => <blockquote style={S.mdBlockquote}>{children}</blockquote>,
+          hr:     () => <hr style={S.mdHr} />,
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
 
 function _renderOutput(outputs) {
   if (!outputs) return "";
@@ -800,6 +834,51 @@ const S = {
   // ── Run ID ────────────────────────────────────────────────────────────────────
   runIdLine: { fontSize: 12, color: "#cbd5e1", marginTop: 4 },
   runIdVal:  { fontFamily: "monospace", color: "#94a3b8" },
+
+  // ── Markdown output ───────────────────────────────────────────────────────────
+  mdOutput: { flex: 1, minWidth: 0 },
+  mdP:      { fontSize: 15, color: C.text, lineHeight: 1.7, marginBottom: 10 },
+  mdStrong: { fontWeight: 700, color: C.text },
+  mdEm:     { fontStyle: "italic", color: C.muted },
+  mdH:      { fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8, marginTop: 12 },
+  mdOl:     { paddingLeft: 22, marginBottom: 10 },
+  mdUl:     { paddingLeft: 22, marginBottom: 10 },
+  mdLi:     { fontSize: 15, color: C.text, lineHeight: 1.7, marginBottom: 4 },
+  mdInlineCode: {
+    background:   "#f1f5f9",
+    border:       "1px solid #e2e8f0",
+    borderRadius: 4,
+    padding:      "1px 5px",
+    fontFamily:   "'JetBrains Mono', monospace",
+    fontSize:     13,
+    color:        C.mono,
+  },
+  mdPre: {
+    background:   "#f8fafc",
+    border:       "1px solid #e2e8f0",
+    borderRadius: 8,
+    padding:      "12px 16px",
+    overflowX:    "auto",
+    marginBottom: 10,
+  },
+  mdCode: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize:   13,
+    color:      C.mono,
+    background: "none",
+    border:     "none",
+    padding:    0,
+  },
+  mdBlockquote: {
+    borderLeft:  `3px solid ${C.indigo}`,
+    paddingLeft: 14,
+    marginLeft:  0,
+    color:       C.muted,
+    fontSize:    15,
+    lineHeight:  1.7,
+    marginBottom: 10,
+  },
+  mdHr: { border: "none", borderTop: `1px solid ${C.border}`, margin: "12px 0" },
 
   // ── Error card ────────────────────────────────────────────────────────────────
   errorCard: {
