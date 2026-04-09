@@ -1,0 +1,15 @@
+{
+  "run_id": "01bc2f6b-e23d-44c6-b425-ba866202e477",
+  "user_id": null,
+  "goal": "Echo hello back to me please",
+  "constraints": null,
+  "active_environment": "default",
+  "policy_profile": null,
+  "safety_profile": null,
+  "created_at": "2026-04-09 22:13:43.055819+00:00",
+  "updated_at": "2026-04-09 22:13:46.967893+00:00",
+  "state": "completed",
+  "replan_budget": 3,
+  "current_replan_count": 0,
+  "pending_approval_id": null
+}

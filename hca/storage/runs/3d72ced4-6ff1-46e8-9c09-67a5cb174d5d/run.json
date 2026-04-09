@@ -1,0 +1,15 @@
+{
+  "run_id": "3d72ced4-6ff1-46e8-9c09-67a5cb174d5d",
+  "user_id": null,
+  "goal": "Hello, what can you do?",
+  "constraints": null,
+  "active_environment": "default",
+  "policy_profile": null,
+  "safety_profile": null,
+  "created_at": "2026-04-09 22:15:33.694841+00:00",
+  "updated_at": "2026-04-09 22:15:40.719411+00:00",
+  "state": "completed",
+  "replan_budget": 3,
+  "current_replan_count": 0,
+  "pending_approval_id": null
+}

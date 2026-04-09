@@ -26,6 +26,15 @@ from hca.common.types import (
 from hca.executor.approvals import validate_resume_approval
 from hca.executor.executor import Executor
 from hca.memory.episodic_store import EpisodicStore
+try:
+    import sys as _sys
+    if "/app" not in _sys.path:
+        _sys.path.insert(0, "/app")
+    from memory_service.singleton import get_controller as _get_mem_controller  # type: ignore
+    from memory_service import CandidateMemory as _CandidateMemory, Provenance as _Provenance  # type: ignore
+    _MEMORY_SERVICE_AVAILABLE = True
+except ImportError:
+    _MEMORY_SERVICE_AVAILABLE = False
 from hca.meta.monitor import assess
 from hca.meta.self_model import capability_summary
 from hca.modules import Planner, Critic, TextPerception, ToolReasoner
@@ -130,6 +139,7 @@ class Runtime:
         candidate: ActionCandidate,
         receipt_payload: Dict[str, Any],
     ) -> None:
+        import json as _json
         record = MemoryRecord(
             memory_type=MemoryType.episodic,
             run_id=context.run_id,
@@ -150,6 +160,29 @@ class Runtime:
             ),
         )
         EpisodicStore(context.run_id).append(record)
+
+        # Also ingest into the authoritative memory service (contract boundary)
+        if _MEMORY_SERVICE_AVAILABLE:
+            try:
+                raw_text = (
+                    f"{candidate.kind}: "
+                    + _json.dumps(candidate.arguments, default=str)[:200]
+                    + f" → {receipt_payload.get('status', 'unknown')}"
+                )
+                _get_mem_controller().ingest(
+                    _CandidateMemory(
+                        raw_text=raw_text,
+                        memory_type="episode",
+                        run_id=context.run_id,
+                        confidence=record.confidence,
+                        salience=0.6,
+                        source=_Provenance(source_type="system", trust_weight=0.9),
+                        metadata={"action_id": candidate.action_id},
+                    )
+                )
+            except Exception:
+                pass  # Memory service failure is non-fatal
+
         append_event(
             context,
             EventType.memory_written,

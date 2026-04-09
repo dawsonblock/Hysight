@@ -1,0 +1,15 @@
+{
+  "run_id": "d0bd5565-47f2-4784-9800-976547ba2432",
+  "user_id": null,
+  "goal": "Hello agent!",
+  "constraints": null,
+  "active_environment": "default",
+  "policy_profile": null,
+  "safety_profile": null,
+  "created_at": "2026-04-09 22:12:21.706137+00:00",
+  "updated_at": "2026-04-09 22:12:24.875931+00:00",
+  "state": "completed",
+  "replan_budget": 3,
+  "current_replan_count": 0,
+  "pending_approval_id": null
+}

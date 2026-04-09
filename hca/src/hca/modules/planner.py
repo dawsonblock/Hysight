@@ -1,16 +1,99 @@
-"""Simple planner module for proposing strategies."""
+"""Planner module — LLM-powered strategic planning via Claude Sonnet 4.5.
 
+Falls back to rule-based planning if the LLM call fails.
+"""
 from __future__ import annotations
 
+import asyncio
+import json
+import os
+import uuid
 from typing import List, Union
+
 from hca.common.types import ModuleProposal, WorkspaceItem
+from hca.storage import load_run
+
+_SYSTEM_PROMPT = """\
+You are the Planner module of a Hybrid Cognitive Agent (HCA). Given a user goal and any \
+relevant memory context, produce a structured execution plan.
+
+Available strategies:
+  single_action_dispatch        — one-shot action
+  memory_persistence_strategy   — store information to memory
+  information_retrieval_strategy — retrieve information from memory
+  artifact_authoring_strategy   — write content to a file
+
+Available actions (and their required args):
+  echo           {"text": "<message>"}                          [no approval needed]
+  store_note     {"note": "<text to persist>"}                  [requires user approval]
+  write_artifact {"content": "<file body>", "path": "<name>"}  [requires user approval]
+
+Respond ONLY with valid JSON — no markdown fences, no extra keys:
+{
+  "strategy": "<strategy>",
+  "action": "<action>",
+  "action_args": {"<key>": "<value>"},
+  "confidence": 0.85,
+  "rationale": "<one concise sentence>"
+}"""
+
+
+async def _llm_plan(goal: str, memory_context: str) -> dict:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage  # type: ignore
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"planner-{uuid.uuid4().hex[:8]}",
+        system_message=_SYSTEM_PROMPT,
+    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+
+    prompt = f"Goal: {goal}"
+    if memory_context:
+        prompt += f"\n\nRelevant memory context:\n{memory_context}"
+
+    response = await chat.send_message(UserMessage(text=prompt))
+    text = response.strip()
+    # Strip markdown code fences if model adds them
+    if text.startswith("```"):
+        parts = text.split("```")
+        text = parts[1] if len(parts) > 1 else text
+        if text.startswith("json"):
+            text = text[4:]
+    return json.loads(text.strip())
+
+
+def _rule_based_plan(perceived_intent: str | None, goal: str) -> dict:
+    """Deterministic fallback when LLM is unavailable."""
+    if perceived_intent == "store":
+        return {
+            "strategy": "memory_persistence_strategy",
+            "action": "store_note",
+            "action_args": {"note": goal},
+            "confidence": 0.6,
+            "rationale": "Rule-based: goal contains store/remember intent.",
+        }
+    if perceived_intent == "retrieve":
+        return {
+            "strategy": "information_retrieval_strategy",
+            "action": "echo",
+            "action_args": {"text": f"Searching memory for: {goal}"},
+            "confidence": 0.6,
+            "rationale": "Rule-based: goal contains retrieval intent.",
+        }
+    return {
+        "strategy": "single_action_dispatch",
+        "action": "echo",
+        "action_args": {"text": goal or "Hello from HCA."},
+        "confidence": 0.55,
+        "rationale": "Rule-based fallback: general intent.",
+    }
 
 
 class Planner:
     name = "planner"
 
     def update(self, items: List[WorkspaceItem]) -> None:
-        """Update internal state based on workspace content."""
         pass
 
     def on_broadcast(self, items: List[WorkspaceItem]):
@@ -60,27 +143,15 @@ class Planner:
             action = item.content.get("action")
             if target_action and action == target_action:
                 adjustments.append(
-                    {
-                        "target_item_id": item.item_id,
-                        "delta": 0.12,
-                        "reason": "plan_alignment",
-                    }
+                    {"target_item_id": item.item_id, "delta": 0.12, "reason": "plan_alignment"}
                 )
             elif target_action and action != target_action:
                 adjustments.append(
-                    {
-                        "target_item_id": item.item_id,
-                        "delta": -0.05,
-                        "reason": "plan_misalignment",
-                    }
+                    {"target_item_id": item.item_id, "delta": -0.05, "reason": "plan_misalignment"}
                 )
             if critiques:
                 adjustments.append(
-                    {
-                        "target_item_id": item.item_id,
-                        "delta": -0.04,
-                        "reason": "critic_feedback",
-                    }
+                    {"target_item_id": item.item_id, "delta": -0.04, "reason": "critic_feedback"}
                 )
 
         return {
@@ -89,39 +160,82 @@ class Planner:
             "critique_items": [],
         }
 
-    def propose(
-        self, input_data: Union[str, List[WorkspaceItem]]
-    ) -> ModuleProposal:
-        """Build a small plan from actual intent or broadcast items."""
-
+    def propose(self, input_data: Union[str, List[WorkspaceItem]]) -> ModuleProposal:
+        """Build a plan using Claude Sonnet 4.5, falling back to rule-based on error."""
         current_items = input_data if isinstance(input_data, list) else []
 
+        # Extract existing intent from workspace (if re-planning)
         perceived_intent = None
         for item in current_items:
             if item.kind == "perceived_intent":
                 perceived_intent = item.content.get("intent")
                 break
 
-        strategy = "single_action_dispatch"
-        if perceived_intent == "store":
-            strategy = "memory_persistence_strategy"
-        elif perceived_intent == "retrieve":
-            strategy = "information_retrieval_strategy"
+        goal = ""
+        run_id = None
+        if isinstance(input_data, str):
+            run_id = input_data
+            run = load_run(input_data)
+            goal = run.goal if run else ""
 
-        item = WorkspaceItem(
+        # Pull relevant memory context for grounding
+        memory_context = ""
+        if goal:
+            try:
+                from memory_service.singleton import get_controller  # type: ignore
+                from memory_service import RetrievalQuery  # type: ignore
+
+                hits = get_controller().retrieve(
+                    RetrievalQuery(query_text=goal, top_k=3, run_id=run_id)
+                )
+                if hits:
+                    memory_context = "\n".join(
+                        f"- [{h.memory_type}] {h.text} (score={h.score:.2f})"
+                        for h in hits
+                    )
+            except Exception:
+                pass
+
+        # LLM planning
+        plan = None
+        if goal:
+            try:
+                plan = asyncio.run(_llm_plan(goal, memory_context))
+            except Exception:
+                pass
+
+        if not plan:
+            plan = _rule_based_plan(perceived_intent, goal)
+
+        plan_item = WorkspaceItem(
             source_module=self.name,
             kind="task_plan",
             content={
-                "strategy": strategy,
-                "perceived_intent": perceived_intent,
+                "strategy": plan.get("strategy", "single_action_dispatch"),
+                "action": plan.get("action"),
+                "action_args": plan.get("action_args", {}),
+                "rationale": plan.get("rationale", ""),
+                "llm_planned": True,
+                "memory_context_used": bool(memory_context),
             },
-            salience=0.6,
-            confidence=1.0,
+            salience=0.7,
+            confidence=plan.get("confidence", 0.8),
+        )
+
+        action_item = WorkspaceItem(
+            source_module=self.name,
+            kind="action_suggestion",
+            content={
+                "action": plan.get("action", "echo"),
+                "args": plan.get("action_args", {}),
+            },
+            salience=0.85,
+            confidence=plan.get("confidence", 0.8),
         )
 
         return ModuleProposal(
             source_module=self.name,
-            candidate_items=[item],
-            rationale=f"Plan to dispatch action with strategy: {strategy}.",
-            confidence=1.0,
+            candidate_items=[plan_item, action_item],
+            rationale=plan.get("rationale", "LLM-generated plan."),
+            confidence=plan.get("confidence", 0.8),
         )

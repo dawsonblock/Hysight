@@ -1,0 +1,4 @@
+{"record_type": "request", "approval_id": "83d34e56-4959-4d76-a6d3-90766aef7e0b", "run_id": "d7ccb924-4a22-4707-8cd7-7dd437f054fc", "action_id": "0e21af8f-1f4c-4be9-a0d2-6c421815e32b", "action_class": "medium", "reason": "Action requires approval", "requested_at": "2026-04-09T22:14:09.397488Z", "expires_at": "2026-04-09T22:29:09.397479Z"}
+{"record_type": "decision", "approval_id": "83d34e56-4959-4d76-a6d3-90766aef7e0b", "decision": "granted", "actor": "user", "reason": null, "decided_at": "2026-04-09T22:14:09.572788Z", "expires_at": null}
+{"record_type": "grant", "approval_id": "83d34e56-4959-4d76-a6d3-90766aef7e0b", "token": "f42a4f76-934f-46ec-b7bd-10beb18a7f45", "actor": "user", "granted_at": "2026-04-09T22:14:09.572788Z", "expires_at": null}
+{"record_type": "consumption", "approval_id": "83d34e56-4959-4d76-a6d3-90766aef7e0b", "token": "f42a4f76-934f-46ec-b7bd-10beb18a7f45", "consumed_at": "2026-04-09T22:14:09.573310Z"}

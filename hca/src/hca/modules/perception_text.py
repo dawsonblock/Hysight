@@ -1,57 +1,124 @@
-"""Perception module for textual inputs."""
+"""TextPerception module — LLM-powered intent classification via Gemini 3 Flash.
 
+Falls back to rule-based classification if the LLM call fails.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import uuid
 from typing import List, Union
+
 from hca.common.types import ModuleProposal, WorkspaceItem
 from hca.storage import load_run
+
+_SYSTEM_PROMPT = """\
+You are the TextPerception module of a Hybrid Cognitive Agent. \
+Classify the user's goal into a structured intent.
+
+Intent classes:
+  store_note      — user wants to remember / save / note something
+  retrieve_memory — user wants to find / recall / search something
+  write_artifact  — user wants to create / write a file or document
+  greeting        — simple greeting (hello, hi, hey)
+  general         — anything else
+
+Respond ONLY with valid JSON — no markdown fences:
+{
+  "intent_class": "<class>",
+  "intent": "<store|retrieve|write|general>",
+  "arguments": {"<extracted_key>": "<extracted_value>"},
+  "confidence": 0.9
+}"""
+
+_INTENT_MAP = {
+    "store_note": "store",
+    "retrieve_memory": "retrieve",
+    "write_artifact": "write",
+    "greeting": "general",
+    "general": "general",
+}
+
+
+async def _llm_perceive(goal: str) -> dict:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage  # type: ignore
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"perception-{uuid.uuid4().hex[:8]}",
+        system_message=_SYSTEM_PROMPT,
+    ).with_model("gemini", "gemini-3-flash-preview")
+
+    response = await chat.send_message(UserMessage(text=f"Goal: {goal}"))
+    text = response.strip()
+    if text.startswith("```"):
+        parts = text.split("```")
+        text = parts[1] if len(parts) > 1 else text
+        if text.startswith("json"):
+            text = text[4:]
+    return json.loads(text.strip())
+
+
+def _rule_based_perceive(goal: str) -> dict:
+    goal_lower = goal.lower()
+    if any(k in goal_lower for k in ("note ", "remember ", "save ")):
+        return {"intent_class": "store_note", "intent": "store",
+                "arguments": {"text": goal}, "confidence": 0.6}
+    if any(k in goal_lower for k in ("retrieve ", "find ", "search ", "recall ")):
+        return {"intent_class": "retrieve_memory", "intent": "retrieve",
+                "arguments": {"query": goal}, "confidence": 0.6}
+    if any(k in goal_lower for k in ("write file", "artifact", "create file")):
+        return {"intent_class": "write_artifact", "intent": "write",
+                "arguments": {"content": goal, "path": "output.txt"}, "confidence": 0.6}
+    if any(k in goal_lower for k in ("hello", "hi ", "hey ")):
+        return {"intent_class": "greeting", "intent": "general",
+                "arguments": {"text": "hello"}, "confidence": 0.9}
+    return {"intent_class": "general", "intent": "general",
+            "arguments": {"text": goal}, "confidence": 0.5}
+
 
 class TextPerception:
     name = "perception_text"
 
     def update(self, items: List[WorkspaceItem]) -> None:
-        """Update internal state based on workspace content."""
         pass
+
+    def on_broadcast(self, items: List[WorkspaceItem]):
+        return {"revised_proposals": [], "confidence_adjustments": [], "critique_items": []}
 
     def propose(self, input_data: Union[str, List[WorkspaceItem]]) -> ModuleProposal:
         if isinstance(input_data, list):
-            # Already have intent in workspace?
             for item in input_data:
                 if item.kind == "perceived_intent":
-                    return ModuleProposal(source_module=self.name, candidate_items=[], rationale="Intent already perceived.")
-            return ModuleProposal(source_module=self.name, candidate_items=[], rationale="No new intent to perceive.")
-            
-        # Read real run goal
+                    return ModuleProposal(
+                        source_module=self.name,
+                        candidate_items=[],
+                        rationale="Intent already perceived.",
+                    )
+            return ModuleProposal(
+                source_module=self.name,
+                candidate_items=[],
+                rationale="No new intent to perceive.",
+            )
+
         run = load_run(input_data)
         goal = run.goal if run else ""
-        
-        # Grounded interpretation (simple rule-based)
-        goal_lower = goal.lower()
-        
-        intent_class = "general"
-        intent = "general"
-        args = {}
-        
-        if "note" in goal_lower or "remember" in goal_lower:
-            intent_class = "store_note"
-            intent = "store"
-            # Simple extraction: everything after "note" or "remember"
-            for keyword in ["note ", "remember "]:
-                if keyword in goal_lower:
-                    args["text"] = goal[goal_lower.find(keyword) + len(keyword):].strip()
-                    break
-            if not args.get("text"):
-                args["text"] = goal
-        elif "retrieve" in goal_lower or "find" in goal_lower:
-            intent_class = "retrieve_memory"
-            intent = "retrieve"
-            args["query"] = goal
-        elif "artifact" in goal_lower or "write file" in goal_lower:
-            intent_class = "write_artifact"
-            args["content"] = goal
-            args["path"] = "output.txt"
-        elif "hello" in goal_lower or "hi" in goal_lower:
-            intent_class = "greeting"
-            args["text"] = "hello"
-        
+
+        perception = None
+        if goal:
+            try:
+                perception = asyncio.run(_llm_perceive(goal))
+            except Exception:
+                pass
+
+        if not perception:
+            perception = _rule_based_perceive(goal)
+
+        intent_class = perception.get("intent_class", "general")
+        intent = perception.get("intent") or _INTENT_MAP.get(intent_class, "general")
+
         item = WorkspaceItem(
             source_module=self.name,
             kind="perceived_intent",
@@ -59,15 +126,15 @@ class TextPerception:
                 "raw_goal": goal,
                 "intent_class": intent_class,
                 "intent": intent,
-                "arguments": args
+                "arguments": perception.get("arguments", {}),
             },
             salience=0.8,
-            confidence=1.0
+            confidence=perception.get("confidence", 0.8),
         )
-        
+
         return ModuleProposal(
             source_module=self.name,
             candidate_items=[item],
-            rationale=f"Interpreted goal as {intent_class}",
-            confidence=1.0
+            rationale=f"Gemini classified goal as {intent_class}.",
+            confidence=perception.get("confidence", 0.8),
         )

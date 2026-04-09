@@ -1,0 +1,15 @@
+{
+  "run_id": "b9841ed7-42b6-457e-bc32-24486537ec8b",
+  "user_id": null,
+  "goal": "Remember that the sprint ends on Friday and we need to deploy v2.",
+  "constraints": null,
+  "active_environment": "default",
+  "policy_profile": null,
+  "safety_profile": null,
+  "created_at": "2026-04-09 22:09:32.712123+00:00",
+  "updated_at": "2026-04-09 22:09:35.591678+00:00",
+  "state": "awaiting_approval",
+  "replan_budget": 3,
+  "current_replan_count": 0,
+  "pending_approval_id": "31c4365f-192d-449b-addf-034fda76469e"
+}
