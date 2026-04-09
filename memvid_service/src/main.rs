@@ -341,6 +341,95 @@ async fn maintain_handler(
     Ok(Json(report))
 }
 
+// ── List + delete handlers ────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct ListQuery {
+    memory_type: Option<String>,
+    scope: Option<String>,
+    include_expired: Option<bool>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+struct ListResponse {
+    records: Vec<MemoryListItem>,
+    total: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct MemoryListItem {
+    memory_id: String,
+    memory_type: String,
+    text: String,
+    scope: String,
+    confidence: f64,
+    stored_at: DateTime<Utc>,
+    expired: bool,
+    run_id: Option<String>,
+}
+
+async fn list_handler(
+    State(store): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<ListQuery>,
+) -> Result<Json<ListResponse>, StatusCode> {
+    let guard = store
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let include_expired = q.include_expired.unwrap_or(false);
+    let limit  = q.limit.unwrap_or(50);
+    let offset = q.offset.unwrap_or(0);
+
+    let mut filtered: Vec<&MemoryRecord> = guard
+        .records
+        .iter()
+        .filter(|r| {
+            (include_expired || !r.expired)
+                && q.memory_type.as_deref().map_or(true, |mt| mt == r.memory_type)
+                && q.scope.as_deref().map_or(true, |s| s == r.scope)
+        })
+        .collect();
+
+    // Sort newest first
+    filtered.sort_by(|a, b| b.stored_at.cmp(&a.stored_at));
+    let total = filtered.len();
+
+    let records = filtered
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .map(|r| MemoryListItem {
+            memory_id:   r.memory_id.clone(),
+            memory_type: r.memory_type.clone(),
+            text:        r.raw_text.clone(),
+            scope:       r.scope.clone(),
+            confidence:  r.confidence,
+            stored_at:   r.stored_at,
+            expired:     r.expired,
+            run_id:      r.run_id.clone(),
+        })
+        .collect();
+
+    Ok(Json(ListResponse { records, total }))
+}
+
+async fn delete_handler(
+    State(store): State<AppState>,
+    axum::extract::Path(memory_id): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let mut guard = store
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let before = guard.records.len();
+    guard.records.retain(|r| r.memory_id != memory_id);
+    let deleted = guard.records.len() < before;
+
+    Ok(Json(serde_json::json!({ "deleted": deleted, "memory_id": memory_id })))
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -357,9 +446,11 @@ async fn main() {
     let store: AppState = Arc::new(Mutex::new(MemoryStore::default()));
 
     let app = Router::new()
-        .route("/memory/ingest", post(ingest_handler))
+        .route("/memory/ingest",   post(ingest_handler))
         .route("/memory/retrieve", post(retrieve_handler))
         .route("/memory/maintain", post(maintain_handler))
+        .route("/memory/list",     axum::routing::get(list_handler))
+        .route("/memory/:id",      axum::routing::delete(delete_handler))
         .layer(CorsLayer::permissive())
         .with_state(store);
 

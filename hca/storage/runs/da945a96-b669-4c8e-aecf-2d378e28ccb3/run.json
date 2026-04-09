@@ -1,0 +1,15 @@
+{
+  "run_id": "da945a96-b669-4c8e-aecf-2d378e28ccb3",
+  "user_id": null,
+  "goal": "TEST_memory_delete echo hello",
+  "constraints": null,
+  "active_environment": "default",
+  "policy_profile": null,
+  "safety_profile": null,
+  "created_at": "2026-04-09 23:14:50.491219+00:00",
+  "updated_at": "2026-04-09 23:14:55.675809+00:00",
+  "state": "completed",
+  "replan_budget": 3,
+  "current_replan_count": 0,
+  "pending_approval_id": null
+}

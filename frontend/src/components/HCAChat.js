@@ -44,7 +44,7 @@ const STRATEGY_LABELS = {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function HCAChat() {
+export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState("");
   const [loading, setLoading]   = useState(false);
@@ -211,6 +211,18 @@ export default function HCAChat() {
           <Chip>Claude Sonnet 4.5</Chip>
           <Chip>Gemini Flash</Chip>
           <Chip>MemVid</Chip>
+          <button
+            data-testid="memory-browser-btn"
+            onClick={onToggleMemPanel}
+            style={{
+              ...S.memBtn,
+              background: memPanelOpen ? "#ede9fe" : "#f8fafc",
+              color:      memPanelOpen ? "#6d28d9" : "#64748b",
+              borderColor: memPanelOpen ? "#c4b5fd" : "#e2e8f0",
+            }}
+          >
+            Memory
+          </button>
         </div>
       </header>
 
@@ -639,6 +651,16 @@ const S = {
     color:        C.muted,
     background:   C.bg,
     fontWeight:   500,
+  },
+  memBtn: {
+    fontSize:     13,
+    padding:      "4px 14px",
+    borderRadius: 20,
+    border:       `1px solid ${C.border}`,
+    cursor:       "pointer",
+    fontWeight:   600,
+    transition:   "all 0.15s",
+    letterSpacing: "0.01em",
   },
 
   // ── Feed ────────────────────────────────────────────────────────────────────

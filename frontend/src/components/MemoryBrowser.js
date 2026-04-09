@@ -1,0 +1,426 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+const TYPE_META = {
+  episode:    { color: "#6366f1", bg: "#eef2ff", label: "Episode"   },
+  fact:       { color: "#0891b2", bg: "#ecfeff", label: "Fact"      },
+  trace:      { color: "#94a3b8", bg: "#f8fafc", label: "Trace"     },
+  preference: { color: "#d97706", bg: "#fffbeb", label: "Preference"},
+  goalstate:  { color: "#059669", bg: "#ecfdf5", label: "Goal"      },
+  procedure:  { color: "#7c3aed", bg: "#f5f3ff", label: "Procedure" },
+};
+const DEFAULT_TYPE = { color: "#64748b", bg: "#f1f5f9", label: "?" };
+
+const ALL_TYPES = ["episode", "fact", "trace", "preference", "goalstate", "procedure"];
+
+export default function MemoryBrowser({ open, onClose }) {
+  const [records, setRecords]     = useState([]);
+  const [total, setTotal]         = useState(0);
+  const [loading, setLoading]     = useState(false);
+  const [search, setSearch]       = useState("");
+  const [typeFilter, setTypeFilter] = useState(null);
+  const [page, setPage]           = useState(0);
+  const [deleting, setDeleting]   = useState(null);
+  const searchRef = useRef(null);
+  const PAGE_SIZE = 20;
+
+  const fetchRecords = useCallback(async (q, type, pg) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: PAGE_SIZE, offset: pg * PAGE_SIZE });
+      if (type) params.set("memory_type", type);
+      const res  = await fetch(`${API}/hca/memory/list?${params}`);
+      const data = await res.json();
+      const recs = data.records || [];
+      // client-side text filter
+      const filtered = q.trim()
+        ? recs.filter((r) =>
+            r.text?.toLowerCase().includes(q.toLowerCase()) ||
+            r.memory_type?.toLowerCase().includes(q.toLowerCase())
+          )
+        : recs;
+      setRecords(filtered);
+      setTotal(data.total || 0);
+    } catch {
+      setRecords([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Re-fetch when panel opens or filters change
+  useEffect(() => {
+    if (open) {
+      fetchRecords(search, typeFilter, page);
+    }
+  }, [open, typeFilter, page, fetchRecords]);
+
+  const handleSearch = (e) => {
+    const q = e.target.value;
+    setSearch(q);
+    setPage(0);
+    fetchRecords(q, typeFilter, 0);
+  };
+
+  const handleTypeFilter = (type) => {
+    const next = typeFilter === type ? null : type;
+    setTypeFilter(next);
+    setPage(0);
+    fetchRecords(search, next, 0);
+  };
+
+  const handleDelete = async (memoryId) => {
+    setDeleting(memoryId);
+    try {
+      await fetch(`${API}/hca/memory/${memoryId}`, { method: "DELETE" });
+      setRecords((prev) => prev.filter((r) => r.memory_id !== memoryId));
+      setTotal((prev) => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error("Delete failed", err);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        data-testid="memory-backdrop"
+        style={S.backdrop}
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <aside data-testid="memory-browser" style={S.panel}>
+        {/* Header */}
+        <div style={S.panelHeader}>
+          <div>
+            <div style={S.panelTitle}>Memory Store</div>
+            <div style={S.panelSub}>{total} record{total !== 1 ? "s" : ""} total</div>
+          </div>
+          <button
+            data-testid="close-memory-btn"
+            style={S.closeBtn}
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Search */}
+        <div style={S.searchRow}>
+          <input
+            data-testid="memory-search-input"
+            ref={searchRef}
+            style={S.searchInput}
+            placeholder="Search memories…"
+            value={search}
+            onChange={handleSearch}
+          />
+          {search && (
+            <button
+              style={S.clearBtn}
+              onClick={() => { setSearch(""); fetchRecords("", typeFilter, page); }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Type filters */}
+        <div style={S.filterRow}>
+          {ALL_TYPES.map((type) => {
+            const meta = TYPE_META[type] || DEFAULT_TYPE;
+            const active = typeFilter === type;
+            return (
+              <button
+                key={type}
+                data-testid={`type-filter-${type}`}
+                onClick={() => handleTypeFilter(type)}
+                style={{
+                  ...S.filterChip,
+                  background:  active ? meta.bg  : "#f8fafc",
+                  color:       active ? meta.color : "#94a3b8",
+                  borderColor: active ? meta.color : "#e2e8f0",
+                  fontWeight:  active ? 700 : 400,
+                }}
+              >
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Records list */}
+        <div style={S.list}>
+          {loading && <div style={S.loadingMsg}>Loading…</div>}
+
+          {!loading && records.length === 0 && (
+            <div style={S.emptyMsg}>
+              {search || typeFilter ? "No matching memories." : "No memories stored yet."}
+            </div>
+          )}
+
+          {records.map((rec) => (
+            <MemoryRow
+              key={rec.memory_id}
+              rec={rec}
+              deleting={deleting === rec.memory_id}
+              onDelete={() => handleDelete(rec.memory_id)}
+            />
+          ))}
+        </div>
+
+        {/* Pagination */}
+        {total > PAGE_SIZE && (
+          <div style={S.pagination}>
+            <button
+              style={{ ...S.pageBtn, opacity: page === 0 ? 0.3 : 1 }}
+              disabled={page === 0}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              ← Prev
+            </button>
+            <span style={S.pageInfo}>
+              {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+            </span>
+            <button
+              style={{ ...S.pageBtn, opacity: (page + 1) * PAGE_SIZE >= total ? 0.3 : 1 }}
+              disabled={(page + 1) * PAGE_SIZE >= total}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </aside>
+    </>
+  );
+}
+
+// ── Memory row ────────────────────────────────────────────────────────────────
+
+function MemoryRow({ rec, deleting, onDelete }) {
+  const [expanded, setExpanded] = useState(false);
+  const meta = TYPE_META[rec.memory_type] || DEFAULT_TYPE;
+
+  const storedAt = rec.stored_at
+    ? new Date(rec.stored_at).toLocaleString(undefined, {
+        month: "short", day: "numeric",
+        hour:  "2-digit", minute: "2-digit",
+      })
+    : "—";
+
+  return (
+    <div
+      data-testid="memory-row"
+      style={{ ...S.row, opacity: deleting ? 0.4 : 1 }}
+    >
+      <div style={S.rowTop} onClick={() => setExpanded((v) => !v)}>
+        <div style={S.rowLeft}>
+          <span style={{ ...S.typeBadge, color: meta.color, background: meta.bg }}>
+            {meta.label}
+          </span>
+          <span style={S.rowText}>
+            {expanded ? rec.text : (rec.text?.length > 80 ? rec.text.slice(0, 80) + "…" : rec.text)}
+          </span>
+        </div>
+        <div style={S.rowRight}>
+          <span style={S.rowTime}>{storedAt}</span>
+          <button
+            data-testid="delete-memory-btn"
+            style={S.deleteBtn}
+            disabled={deleting}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            title="Delete"
+          >
+            {deleting ? "…" : "✕"}
+          </button>
+        </div>
+      </div>
+      {expanded && rec.run_id && (
+        <div style={S.rowMeta}>
+          run_id: <span style={S.rowMetaVal}>{rec.run_id}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Styles ─────────────────────────────────────────────────────────────────────
+
+const S = {
+  backdrop: {
+    position:   "fixed",
+    inset:      0,
+    background: "rgba(15,23,42,0.2)",
+    zIndex:     40,
+    backdropFilter: "blur(2px)",
+  },
+  panel: {
+    position:      "fixed",
+    top:           0,
+    right:         0,
+    bottom:        0,
+    width:         420,
+    background:    "#ffffff",
+    borderLeft:    "1px solid #e2e8f0",
+    boxShadow:     "-4px 0 24px rgba(15,23,42,0.1)",
+    zIndex:        50,
+    display:       "flex",
+    flexDirection: "column",
+    overflow:      "hidden",
+    animation:     "slideInRight 0.2s ease",
+  },
+
+  panelHeader: {
+    display:        "flex",
+    alignItems:     "center",
+    justifyContent: "space-between",
+    padding:        "18px 20px",
+    borderBottom:   "1px solid #e2e8f0",
+    flexShrink:     0,
+  },
+  panelTitle: { fontSize: 18, fontWeight: 700, color: "#0f172a" },
+  panelSub:   { fontSize: 13, color: "#64748b", marginTop: 2 },
+  closeBtn: {
+    width:        32,
+    height:       32,
+    border:       "1px solid #e2e8f0",
+    borderRadius: 8,
+    background:   "#f8fafc",
+    color:        "#64748b",
+    cursor:       "pointer",
+    fontSize:     14,
+    display:      "flex",
+    alignItems:   "center",
+    justifyContent: "center",
+  },
+
+  searchRow: {
+    display:   "flex",
+    alignItems: "center",
+    padding:   "12px 16px",
+    gap:       8,
+    borderBottom: "1px solid #f1f5f9",
+    flexShrink: 0,
+  },
+  searchInput: {
+    flex:        1,
+    border:      "1.5px solid #e2e8f0",
+    borderRadius: 8,
+    padding:     "8px 12px",
+    fontSize:    14,
+    color:       "#0f172a",
+    background:  "#f8fafc",
+    outline:     "none",
+    fontFamily:  "inherit",
+  },
+  clearBtn: {
+    border:      "none",
+    background:  "none",
+    color:       "#94a3b8",
+    cursor:      "pointer",
+    fontSize:    14,
+    padding:     "0 4px",
+  },
+
+  filterRow: {
+    display:    "flex",
+    flexWrap:   "wrap",
+    gap:        6,
+    padding:    "10px 16px",
+    borderBottom: "1px solid #f1f5f9",
+    flexShrink: 0,
+  },
+  filterChip: {
+    fontSize:     11,
+    padding:      "3px 10px",
+    borderRadius: 20,
+    border:       "1px solid",
+    cursor:       "pointer",
+    fontFamily:   "inherit",
+    transition:   "all 0.12s",
+  },
+
+  list: {
+    flex:      1,
+    overflowY: "auto",
+    padding:   "8px 0",
+  },
+  loadingMsg: { padding: "24px 20px", textAlign: "center", fontSize: 14, color: "#94a3b8" },
+  emptyMsg:   { padding: "40px 20px", textAlign: "center", fontSize: 15, color: "#94a3b8" },
+
+  row: {
+    borderBottom: "1px solid #f8fafc",
+    padding:      "10px 16px",
+    transition:   "background 0.12s, opacity 0.2s",
+    cursor:       "pointer",
+  },
+  rowTop: {
+    display:        "flex",
+    alignItems:     "flex-start",
+    justifyContent: "space-between",
+    gap:            10,
+  },
+  rowLeft:  { display: "flex", alignItems: "flex-start", gap: 8, flex: 1, minWidth: 0 },
+  rowRight: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
+  typeBadge: {
+    fontSize:     10,
+    fontWeight:   700,
+    letterSpacing: "0.06em",
+    padding:      "2px 7px",
+    borderRadius: 20,
+    flexShrink:   0,
+    marginTop:    2,
+  },
+  rowText: {
+    fontSize:   14,
+    color:      "#334155",
+    lineHeight: 1.5,
+    flex:       1,
+    wordBreak:  "break-word",
+  },
+  rowTime:   { fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap" },
+  deleteBtn: {
+    width:        24,
+    height:       24,
+    border:       "none",
+    background:   "none",
+    color:        "#cbd5e1",
+    cursor:       "pointer",
+    fontSize:     13,
+    borderRadius: 6,
+    display:      "flex",
+    alignItems:   "center",
+    justifyContent: "center",
+    transition:   "color 0.12s, background 0.12s",
+    flexShrink:   0,
+  },
+  rowMeta:    { fontSize: 11, color: "#94a3b8", paddingTop: 4, paddingLeft: 56 },
+  rowMetaVal: { fontFamily: "monospace", color: "#cbd5e1" },
+
+  pagination: {
+    display:        "flex",
+    alignItems:     "center",
+    justifyContent: "space-between",
+    padding:        "10px 16px",
+    borderTop:      "1px solid #e2e8f0",
+    flexShrink:     0,
+  },
+  pageBtn: {
+    fontSize:     13,
+    padding:      "5px 12px",
+    border:       "1px solid #e2e8f0",
+    borderRadius: 6,
+    background:   "#f8fafc",
+    color:        "#374151",
+    cursor:       "pointer",
+    fontFamily:   "inherit",
+  },
+  pageInfo: { fontSize: 13, color: "#94a3b8" },
+};

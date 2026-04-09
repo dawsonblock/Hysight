@@ -459,6 +459,38 @@ async def maintain_memory():
     return report.model_dump()
 
 
+@api_router.get("/hca/memory/list")
+async def list_memory(
+    memory_type: Optional[str] = None,
+    scope: Optional[str] = None,
+    include_expired: bool = False,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List stored memories with optional filtering, newest first."""
+    from memory_service.singleton import get_controller  # type: ignore
+
+    records, total = get_controller().list_records(
+        memory_type=memory_type,
+        scope=scope,
+        include_expired=include_expired,
+        limit=limit,
+        offset=offset,
+    )
+    return {"records": records, "total": total}
+
+
+@api_router.delete("/hca/memory/{memory_id}")
+async def delete_memory(memory_id: str):
+    """Delete a memory record by ID."""
+    from memory_service.singleton import get_controller  # type: ignore
+
+    deleted = get_controller().delete_record(memory_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"deleted": True, "memory_id": memory_id}
+
+
 # ── App assembly ──────────────────────────────────────────────────────────────
 
 app.include_router(api_router)

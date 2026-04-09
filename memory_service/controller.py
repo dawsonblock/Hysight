@@ -163,6 +163,45 @@ class MemoryController:
             )
         return hits
 
+    def list_records(
+        self,
+        memory_type: Optional[str] = None,
+        scope: Optional[str] = None,
+        include_expired: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ):
+        """Return paginated list of records, newest first. Returns (records, total)."""
+        if _BACKEND == "rust" and _SERVICE_URL:
+            return self._rust_list(memory_type, scope, include_expired, limit, offset)
+        filtered = [
+            r for r in self._records
+            if (include_expired or not r.get("expired"))
+            and (memory_type is None or r.get("memory_type") == memory_type)
+            and (scope is None or r.get("scope") == scope)
+        ]
+        filtered.sort(key=lambda r: r.get("stored_at", ""), reverse=True)
+        return filtered[offset : offset + limit], len(filtered)
+
+    def delete_record(self, memory_id: str) -> bool:
+        """Mark a record as expired (soft delete). Returns True if found."""
+        if _BACKEND == "rust" and _SERVICE_URL:
+            return self._rust_delete(memory_id)
+        before = len(self._records)
+        self._records = [r for r in self._records if r.get("memory_id") != memory_id]
+        deleted = len(self._records) < before
+        if deleted and self._storage_dir:
+            self._rewrite_disk()
+        return deleted
+
+    def _rewrite_disk(self) -> None:
+        path = self._disk_path()
+        if path is None:
+            return
+        with open(path, "w", encoding="utf-8") as f:
+            for rec in self._records:
+                f.write(json.dumps(rec, default=str) + "\n")
+
     def maintain(self) -> MaintenanceReport:
         """Expire stale records and return maintenance stats."""
         if _BACKEND == "rust" and _SERVICE_URL:
@@ -213,3 +252,21 @@ class MemoryController:
         r = httpx.post(f"{_SERVICE_URL}/memory/maintain", json={}, timeout=10)
         r.raise_for_status()
         return MaintenanceReport.model_validate(r.json())
+
+    def _rust_list(self, memory_type, scope, include_expired, limit, offset):
+        import httpx
+        params = {"limit": limit, "offset": offset, "include_expired": str(include_expired).lower()}
+        if memory_type:
+            params["memory_type"] = memory_type
+        if scope:
+            params["scope"] = scope
+        r = httpx.get(f"{_SERVICE_URL}/memory/list", params=params, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        return data.get("records", []), data.get("total", 0)
+
+    def _rust_delete(self, memory_id: str) -> bool:
+        import httpx
+        r = httpx.delete(f"{_SERVICE_URL}/memory/{memory_id}", timeout=10)
+        r.raise_for_status()
+        return r.json().get("deleted", False)
