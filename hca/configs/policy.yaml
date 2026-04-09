@@ -1,0 +1,8 @@
+# policy configuration placeholder
+risk_levels:
+  low: 1
+  medium: 2
+  high: 3
+approval_required_for:
+  medium: false
+  high: true

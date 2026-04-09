@@ -1,0 +1,3 @@
+# safety configuration placeholder
+proactive_throttle: true
+proactive_threshold: 0.8

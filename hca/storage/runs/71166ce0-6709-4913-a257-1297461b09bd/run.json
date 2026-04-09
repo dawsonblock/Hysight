@@ -1,0 +1,15 @@
+{
+  "run_id": "71166ce0-6709-4913-a257-1297461b09bd",
+  "user_id": null,
+  "goal": "write file with project summary",
+  "constraints": null,
+  "active_environment": "default",
+  "policy_profile": null,
+  "safety_profile": null,
+  "created_at": "2026-04-06 09:35:32.566496+00:00",
+  "updated_at": "2026-04-06 09:35:32.572185+00:00",
+  "state": "completed",
+  "replan_budget": 3,
+  "current_replan_count": 0,
+  "pending_approval_id": null
+}

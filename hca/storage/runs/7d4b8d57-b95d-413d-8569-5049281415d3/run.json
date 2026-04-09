@@ -1,0 +1,15 @@
+{
+  "run_id": "7d4b8d57-b95d-413d-8569-5049281415d3",
+  "user_id": null,
+  "goal": "test legal",
+  "constraints": null,
+  "active_environment": null,
+  "policy_profile": null,
+  "safety_profile": null,
+  "created_at": "2026-04-06 09:35:28.583909+00:00",
+  "updated_at": "2026-04-06 09:35:28.584185+00:00",
+  "state": "gathering_inputs",
+  "replan_budget": 3,
+  "current_replan_count": 0,
+  "pending_approval_id": null
+}

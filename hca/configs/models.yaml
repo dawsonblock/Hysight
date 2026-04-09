@@ -1,0 +1,4 @@
+# model configurations placeholder
+models:
+  planner_model: null
+  critic_model: null

@@ -1,0 +1,10 @@
+# memory store configuration placeholder
+stores:
+  episodic:
+    path: memory/episodic.jsonl
+  semantic:
+    path: memory/semantic.jsonl
+  procedural:
+    path: memory/procedural.jsonl
+  identity:
+    path: memory/identity.jsonl

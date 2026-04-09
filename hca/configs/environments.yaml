@@ -1,0 +1,5 @@
+# environment configuration placeholder
+environments:
+  default:
+    name: "local"
+    description: "Default environment"

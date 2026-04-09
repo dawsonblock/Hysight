@@ -1,0 +1,21 @@
+runtime:
+  workspace_capacity: 7
+  approval_timeout_seconds: 3600
+policy:
+  default_risk_threshold: low
+memory:
+  retention_policies:
+    episodic: 30d
+    semantic: 365d
+    procedural: 180d
+    identity: 365d
+tools:
+  echo:
+    action_class: low
+    requires_approval: false
+  store_note:
+    action_class: medium
+    requires_approval: true
+  write_artifact:
+    action_class: high
+    requires_approval: true

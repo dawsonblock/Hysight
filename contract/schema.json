@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HCA ↔ MemVid Memory Contract v1",
+  "description": "Authoritative contract between the Python HCA orchestrator and the Rust memvid memory service. Both sides MUST conform. Breaking changes require a version bump.",
+  "definitions": {
+    "Provenance": {
+      "type": "object",
+      "required": ["source_type", "source_id", "trust_weight"],
+      "properties": {
+        "source_type": { "type": "string", "enum": ["chat", "file", "tool", "system", "external"] },
+        "source_id":   { "type": "string" },
+        "source_label":{ "type": ["string", "null"] },
+        "trust_weight":{ "type": "number", "minimum": 0.0, "maximum": 1.0 }
+      }
+    },
+    "CandidateMemory": {
+      "type": "object",
+      "required": ["raw_text", "memory_type"],
+      "properties": {
+        "candidate_id":  { "type": "string" },
+        "raw_text":      { "type": "string" },
+        "memory_type":   { "type": "string", "enum": ["trace","episode","fact","preference","goalstate","procedure"] },
+        "entity":        { "type": "string", "default": "" },
+        "slot":          { "type": "string", "default": "" },
+        "value":         { "type": "string", "default": "" },
+        "confidence":    { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.5 },
+        "salience":      { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.5 },
+        "scope":         { "type": "string", "enum": ["private","task","project","shared"], "default": "private" },
+        "run_id":        { "type": ["string", "null"] },
+        "workflow_key":  { "type": ["string", "null"] },
+        "source":        { "$ref": "#/definitions/Provenance" },
+        "tags":          { "type": "array", "items": { "type": "string" } },
+        "metadata":      { "type": "object" }
+      }
+    },
+    "RetrievalQuery": {
+      "type": "object",
+      "required": ["query_text"],
+      "properties": {
+        "query_text":       { "type": "string" },
+        "top_k":            { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+        "memory_layer":     { "type": ["string", "null"] },
+        "scope":            { "type": ["string", "null"] },
+        "run_id":           { "type": ["string", "null"] },
+        "include_expired":  { "type": "boolean", "default": false },
+        "intent":           { "type": "string", "enum": ["general","historical_fact","episodic_recall","belief_check"], "default": "general" }
+      }
+    },
+    "RetrievalHit": {
+      "type": "object",
+      "required": ["text", "score", "memory_layer", "expired"],
+      "properties": {
+        "memory_id":    { "type": ["string", "null"] },
+        "belief_id":    { "type": ["string", "null"] },
+        "memory_layer": { "type": "string" },
+        "memory_type":  { "type": ["string", "null"] },
+        "entity":       { "type": ["string", "null"] },
+        "slot":         { "type": ["string", "null"] },
+        "value":        { "type": ["string", "null"] },
+        "text":         { "type": "string" },
+        "score":        { "type": "number" },
+        "confidence":   { "type": "number" },
+        "stored_at":    { "type": "string", "format": "date-time" },
+        "expired":      { "type": "boolean" },
+        "metadata":     { "type": "object" }
+      }
+    },
+    "MaintenanceReport": {
+      "type": "object",
+      "required": ["durable_memory_count", "expired_count"],
+      "properties": {
+        "durable_memory_count": { "type": "integer" },
+        "expired_count":        { "type": "integer" },
+        "expired_ids":          { "type": "array", "items": { "type": "string" } },
+        "compaction_supported": { "type": "boolean" },
+        "compactor_status":     { "type": "string" }
+      }
+    }
+  },
+  "endpoints": {
+    "POST /memory/ingest":   { "request": "$ref#/definitions/CandidateMemory",  "response": { "memory_id": "string | null" } },
+    "POST /memory/retrieve": { "request": "$ref#/definitions/RetrievalQuery",   "response": { "hits": "RetrievalHit[]" } },
+    "POST /memory/maintain": { "request": {},                                    "response": "$ref#/definitions/MaintenanceReport" }
+  }
+}

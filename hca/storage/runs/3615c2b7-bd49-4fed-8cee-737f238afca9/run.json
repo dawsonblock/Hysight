@@ -1,0 +1,15 @@
+{
+  "run_id": "3615c2b7-bd49-4fed-8cee-737f238afca9",
+  "user_id": null,
+  "goal": "test budget",
+  "constraints": null,
+  "active_environment": "default",
+  "policy_profile": null,
+  "safety_profile": null,
+  "created_at": "2026-04-06 09:35:28.586533+00:00",
+  "updated_at": "2026-04-06 09:35:28.591230+00:00",
+  "state": "failed",
+  "replan_budget": 3,
+  "current_replan_count": 0,
+  "pending_approval_id": null
+}
