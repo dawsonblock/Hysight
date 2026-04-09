@@ -86,6 +86,16 @@ Three endpoints define the narrow contract:
 - [x] Internal events (`state_transition`, `recurrent_pass_completed`) filtered; only meaningful pipeline steps shown
 - [x] `_renderOutput` helper — formats LLM echo text with proper newlines (no raw JSON)
 
+- [x] Markdown renderer (`react-markdown` + `remark-gfm`) for agent output
+
+### Session 3 (Apr 2025)
+- [x] Installed Rust via rustup; compiled `/app/memvid_service/target/release/memvid-sidecar`
+- [x] Added `GET /memory/list` and `DELETE /memory/:id` endpoints to Rust Axum sidecar
+- [x] `list_records()` and `delete_record()` on Python MemoryController (with Rust delegation)
+- [x] `GET /api/hca/memory/list` and `DELETE /api/hca/memory/{id}` backend API endpoints
+- [x] Migrated 15 JSONL memories to Rust store; swapped `MEMORY_BACKEND=rust`
+- [x] `MemoryBrowser` slide-in panel: search, type-filter chips, paginated list, delete
+
 ---
 
 ## Backlog
