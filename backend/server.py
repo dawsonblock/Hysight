@@ -1,5 +1,7 @@
 import sys
 import os
+import json
+import concurrent.futures
 
 # Add /app to path so memory_service is importable
 sys.path.insert(0, "/app")
@@ -10,12 +12,13 @@ sys.path.insert(0, "/app/hca/src")
 os.chdir("/app/hca")
 
 from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 import uuid
 import asyncio
 import logging
@@ -214,6 +217,159 @@ async def run_hca(body: HCARunRequest):
 
     run_id = await asyncio.to_thread(_execute)
     return _extract_run_summary(run_id)
+
+
+# Readable labels for each HCA event type in the streaming trace
+_STREAM_LABELS: Dict[str, str] = {
+    "run_created":        "Run initialised",
+    "module_proposed":    "Module proposed",
+    "meta_assessed":      "Workspace assessed",
+    "action_scored":      "Actions scored",
+    "action_selected":    "Action selected",
+    "approval_requested": "Approval required",
+    "execution_started":  "Executing action",
+    "execution_finished": "Execution finished",
+    "memory_written":     "Memory written",
+    "run_completed":      "Run completed",
+    "run_failed":         "Run failed",
+    "snapshot_saved":     "Snapshot saved",
+}
+
+
+def _stream_label(ev: Dict[str, Any]) -> str:
+    et = ev.get("event_type", "")
+    actor = ev.get("actor", "")
+    payload = ev.get("payload", {})
+    base = _STREAM_LABELS.get(et, et.replace("_", " "))
+    if et == "module_proposed":
+        src = payload.get("source_module") or actor
+        ci = payload.get("candidate_items", [])
+        kinds = list({c.get("kind", "") for c in ci if c.get("kind")})
+        detail = f"{src}: {', '.join(kinds)}" if kinds else src
+        return f"{base} — {detail}"
+    if et == "action_selected":
+        kind = payload.get("kind", "?")
+        return f"{base}: {kind}"
+    if et == "execution_finished":
+        status = payload.get("status", "?")
+        return f"{base} ({status})"
+    if et == "approval_requested":
+        return f"{base} — action needs your sign-off"
+    return base
+
+
+def _sse(event_type: str, data: Any) -> str:
+    return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+@api_router.post("/hca/run/stream")
+async def stream_hca_run(body: HCARunRequest):
+    """Stream HCA pipeline events as Server-Sent Events (SSE).
+
+    Each event payload has the shape:
+      { "step": <int>, "event_type": <str>, "label": <str>,
+        "actor": <str>, "timestamp": <iso>, "payload": {...} }
+    Final 'done' event contains the full run summary.
+    """
+    result_holder: Dict[str, Any] = {"run_id": None, "done": False, "error": None}
+
+    def _execute():
+        from hca.runtime.runtime import Runtime  # type: ignore
+
+        class _StreamingRuntime(Runtime):
+            """Captures run_id as early as possible via _step_create hook."""
+            def _step_create(self, goal, user_id=None):
+                ctx = super()._step_create(goal, user_id)
+                result_holder["run_id"] = ctx.run_id
+                return ctx
+
+        try:
+            rt = _StreamingRuntime()
+            run_id = rt.run(body.goal, user_id=body.user_id)
+            result_holder["run_id"] = run_id
+        except Exception as exc:
+            result_holder["error"] = str(exc)
+        finally:
+            result_holder["done"] = True
+
+    _executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    async def generate():
+        from hca.storage import iter_events  # type: ignore
+
+        # Kick off the HCA thread
+        loop = asyncio.get_event_loop()
+        future = loop.run_in_executor(_executor, _execute)
+
+        yield _sse("status", {"label": "Connecting to agent…", "step": 0})
+
+        last_event_count = 0
+        run_id: Optional[str] = None
+        step = 1
+
+        # Stream loop — poll every 300 ms until HCA finishes
+        while not result_holder["done"]:
+            await asyncio.sleep(0.3)
+
+            # Pick up run_id as soon as it's available
+            if not run_id and result_holder["run_id"]:
+                run_id = result_holder["run_id"]
+                yield _sse("status", {"label": "Pipeline running…", "step": step, "run_id": run_id})
+                step += 1
+
+            if run_id:
+                events = list(iter_events(run_id))
+                for ev in events[last_event_count:]:
+                    label = _stream_label(ev)
+                    yield _sse("step", {
+                        "step":       step,
+                        "event_type": ev.get("event_type"),
+                        "label":      label,
+                        "actor":      ev.get("actor"),
+                        "timestamp":  ev.get("timestamp"),
+                        "payload":    ev.get("payload", {}),
+                    })
+                    step += 1
+                last_event_count = len(events)
+
+        # Await thread completion (already done, just joins)
+        await asyncio.wait_for(asyncio.wrap_future(future), timeout=5.0)
+
+        if result_holder["error"]:
+            yield _sse("error", {"label": result_holder["error"]})
+            return
+
+        run_id = result_holder["run_id"]
+        if run_id:
+            # Flush any remaining events
+            from hca.storage import iter_events  # type: ignore
+            events = list(iter_events(run_id))
+            for ev in events[last_event_count:]:
+                label = _stream_label(ev)
+                yield _sse("step", {
+                    "step":       step,
+                    "event_type": ev.get("event_type"),
+                    "label":      label,
+                    "actor":      ev.get("actor"),
+                    "timestamp":  ev.get("timestamp"),
+                    "payload":    ev.get("payload", {}),
+                })
+                step += 1
+
+            summary = _extract_run_summary(run_id)
+            yield _sse("done", summary)
+        else:
+            yield _sse("error", {"label": "Run failed to start."})
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection":    "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @api_router.get("/hca/run/{run_id}")

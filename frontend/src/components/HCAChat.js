@@ -1,23 +1,46 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Events worth showing in the live trace (filter out internal plumbing)
+const VISIBLE_EVENTS = new Set([
+  "run_created", "module_proposed", "meta_assessed", "action_selected",
+  "approval_requested", "execution_started", "execution_finished",
+  "memory_written", "run_completed", "run_failed",
+]);
+
+// ── Pipeline step config ──────────────────────────────────────────────────────
+
+const STEP_ICONS = {
+  run_created:        { icon: "◎", color: "#6366f1" },
+  module_proposed:    { icon: "◈", color: "#0ea5e9" },
+  meta_assessed:      { icon: "◇", color: "#8b5cf6" },
+  action_scored:      { icon: "◆", color: "#8b5cf6" },
+  action_selected:    { icon: "▷", color: "#f59e0b" },
+  approval_requested: { icon: "⊛", color: "#ec4899" },
+  execution_started:  { icon: "▶", color: "#f97316" },
+  execution_finished: { icon: "✓", color: "#10b981" },
+  memory_written:     { icon: "⊕", color: "#14b8a6" },
+  run_completed:      { icon: "●", color: "#10b981" },
+  run_failed:         { icon: "✗", color: "#ef4444" },
+  snapshot_saved:     { icon: "◉", color: "#94a3b8" },
+};
+
 const STATE_META = {
-  completed:         { label: "COMPLETED",         color: "#34d399", bg: "rgba(52,211,153,0.12)"  },
-  awaiting_approval: { label: "AWAITING APPROVAL", color: "#a78bfa", bg: "rgba(167,139,250,0.12)" },
-  failed:            { label: "FAILED",             color: "#f87171", bg: "rgba(248,113,113,0.12)" },
-  halted:            { label: "HALTED",             color: "#fb923c", bg: "rgba(251,146,60,0.12)"  },
-  executing:         { label: "EXECUTING",          color: "#22d3ee", bg: "rgba(34,211,238,0.12)"  },
-  proposing:         { label: "PLANNING",           color: "#22d3ee", bg: "rgba(34,211,238,0.12)"  },
+  completed:         { label: "COMPLETED",         color: "#059669", bg: "#ecfdf5", border: "#6ee7b7" },
+  awaiting_approval: { label: "AWAITING APPROVAL", color: "#7c3aed", bg: "#f5f3ff", border: "#c4b5fd" },
+  failed:            { label: "FAILED",             color: "#dc2626", bg: "#fef2f2", border: "#fca5a5" },
+  halted:            { label: "HALTED",             color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
 };
 
 const STRATEGY_LABELS = {
-  single_action_dispatch:        "Direct Dispatch",
-  memory_persistence_strategy:   "Memory Write",
-  information_retrieval_strategy:"Memory Retrieval",
-  artifact_authoring_strategy:   "Artifact Creation",
+  single_action_dispatch:         "Direct Dispatch",
+  memory_persistence_strategy:    "Memory Write",
+  information_retrieval_strategy: "Memory Retrieval",
+  artifact_authoring_strategy:    "Artifact Creation",
 };
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function HCAChat() {
   const [messages, setMessages] = useState([]);
@@ -35,39 +58,112 @@ export default function HCAChat() {
     setInput("");
     setLoading(true);
 
-    const userMsg = { type: "user", content: goal, id: `u-${Date.now()}` };
-    setMessages((prev) => [...prev, userMsg]);
+    // Add user bubble immediately
+    const userId = `u-${Date.now()}`;
+    const agentId = `a-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      { type: "user", content: goal, id: userId },
+      { type: "streaming", steps: [], id: agentId, goal },
+    ]);
 
     try {
-      const { data } = await axios.post(`${API}/hca/run`, { goal });
-      setMessages((prev) => [
-        ...prev,
-        { type: "agent", content: data, id: `a-${Date.now()}` },
-      ]);
+      const response = await fetch(`${API}/hca/run/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goal }),
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === agentId
+              ? { ...m, type: "error", content: `API error: ${err}` }
+              : m
+          )
+        );
+        return;
+      }
+
+      const reader  = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer    = "";
+
+      const parseEvent = (chunk) => {
+        // SSE format: "event: <type>\ndata: <json>\n\n"
+        const eventMatch = chunk.match(/^event:\s*(.+)$/m);
+        const dataMatch  = chunk.match(/^data:\s*(.+)$/m);
+        if (!eventMatch || !dataMatch) return null;
+        try {
+          return { eventType: eventMatch[1].trim(), data: JSON.parse(dataMatch[1].trim()) };
+        } catch {
+          return null;
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() || "";
+
+        for (const chunk of chunks) {
+          if (!chunk.trim()) continue;
+          const parsed = parseEvent(chunk);
+          if (!parsed) continue;
+          const { eventType, data } = parsed;
+
+          if (eventType === "step") {
+            if (!VISIBLE_EVENTS.has(data.event_type)) continue; // filter internals
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === agentId ? { ...m, steps: [...m.steps, data] } : m
+              )
+            );
+          } else if (eventType === "done") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === agentId ? { ...m, type: "agent", summary: data } : m
+              )
+            );
+          } else if (eventType === "error") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === agentId
+                  ? { ...m, type: "error", content: data.label }
+                  : m
+              )
+            );
+          }
+        }
+      }
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "error",
-          content: err?.response?.data?.detail || err.message,
-          id: `e-${Date.now()}`,
-        },
-      ]);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === `a-${userId.slice(2)}`
+            ? { ...m, type: "error", content: err.message }
+            : m
+        )
+      );
     } finally {
       setLoading(false);
     }
   }, [input, loading]);
 
-  const approveAction = useCallback(async (runId, approvalId) => {
+  const approveAction = useCallback(async (runId, approvalId, agentId) => {
     try {
-      const { data } = await axios.post(`${API}/hca/run/${runId}/approve`, {
-        approval_id: approvalId,
+      const res = await fetch(`${API}/hca/run/${runId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approval_id: approvalId }),
       });
+      const data = await res.json();
       setMessages((prev) =>
         prev.map((m) =>
-          m.type === "agent" && m.content?.run_id === runId
-            ? { ...m, content: { ...m.content, ...data, _approved: true } }
-            : m
+          m.id === agentId ? { ...m, summary: data, _approved: true } : m
         )
       );
     } catch (err) {
@@ -75,16 +171,17 @@ export default function HCAChat() {
     }
   }, []);
 
-  const denyAction = useCallback(async (runId, approvalId) => {
+  const denyAction = useCallback(async (runId, approvalId, agentId) => {
     try {
-      const { data } = await axios.post(`${API}/hca/run/${runId}/deny`, {
-        approval_id: approvalId,
+      const res = await fetch(`${API}/hca/run/${runId}/deny`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approval_id: approvalId }),
       });
+      const data = await res.json();
       setMessages((prev) =>
         prev.map((m) =>
-          m.type === "agent" && m.content?.run_id === runId
-            ? { ...m, content: { ...m.content, ...data, _denied: true } }
-            : m
+          m.id === agentId ? { ...m, summary: data, _denied: true } : m
         )
       );
     } catch (err) {
@@ -100,60 +197,74 @@ export default function HCAChat() {
   };
 
   return (
-    <div data-testid="hca-chat" style={styles.container}>
+    <div data-testid="hca-chat" style={S.container}>
       {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <span style={styles.headerDot} />
-          <span style={styles.headerTitle}>HCA</span>
-          <span style={styles.headerSub}>Hybrid Cognitive Agent</span>
+      <header style={S.header}>
+        <div style={S.headerLeft}>
+          <span style={S.pulse} />
+          <span style={S.headerTitle}>HCA</span>
+          <span style={S.headerSub}>Hybrid Cognitive Agent</span>
         </div>
-        <div style={styles.headerRight}>
-          <span style={styles.badge}>Claude Sonnet 4.5</span>
-          <span style={styles.badge}>Gemini Flash</span>
-          <span style={styles.badge}>MemVid</span>
+        <div style={S.headerRight}>
+          <Chip>Claude Sonnet 4.5</Chip>
+          <Chip>Gemini Flash</Chip>
+          <Chip>MemVid</Chip>
         </div>
-      </div>
+      </header>
 
-      {/* Messages */}
-      <div style={styles.messages}>
+      {/* Message feed */}
+      <div style={S.feed}>
         {messages.length === 0 && <WelcomeBanner />}
+
         {messages.map((msg) => {
-          if (msg.type === "user") return <UserBubble key={msg.id} goal={msg.content} />;
-          if (msg.type === "agent")
+          if (msg.type === "user") {
+            return <UserBubble key={msg.id} goal={msg.content} />;
+          }
+          if (msg.type === "streaming") {
+            return <StreamingCard key={msg.id} steps={msg.steps} goal={msg.goal} />;
+          }
+          if (msg.type === "agent") {
             return (
               <AgentCard
                 key={msg.id}
-                data={msg.content}
+                id={msg.id}
+                data={msg.summary}
+                steps={msg.steps || []}
+                approved={msg._approved}
+                denied={msg._denied}
                 onApprove={approveAction}
                 onDeny={denyAction}
               />
             );
-          return <ErrorBubble key={msg.id} message={msg.content} />;
+          }
+          if (msg.type === "error") {
+            return <ErrorCard key={msg.id} message={msg.content} />;
+          }
+          return null;
         })}
-        {loading && <ThinkingIndicator />}
+
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div style={styles.inputArea}>
+      {/* Input bar */}
+      <div style={S.inputBar}>
         <textarea
           data-testid="goal-input"
-          style={styles.textarea}
+          style={S.textarea}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Enter a goal for the agent…  (⏎ to run)"
+          placeholder="Enter a goal for the agent…  (Enter to run)"
           rows={1}
           disabled={loading}
         />
         <button
           data-testid="submit-goal-btn"
-          style={{ ...styles.runBtn, opacity: loading || !input.trim() ? 0.45 : 1 }}
+          style={{ ...S.runBtn, opacity: loading || !input.trim() ? 0.4 : 1 }}
           onClick={submitGoal}
           disabled={loading || !input.trim()}
         >
-          {loading ? "▶" : "RUN"}
+          {loading ? "…" : "RUN"}
         </button>
       </div>
     </div>
@@ -170,150 +281,47 @@ function WelcomeBanner() {
     "Hello, what can you do?",
   ];
   return (
-    <div style={styles.welcome}>
-      <div style={styles.welcomeTitle}>Cognitive Agent Console</div>
-      <div style={styles.welcomeSub}>
-        Give the agent a goal. It will plan, reason, and act — all traces visible below.
-      </div>
-      <div style={styles.examplesLabel}>Try:</div>
-      <div style={styles.examplesList}>
+    <div style={S.welcome}>
+      <div style={S.welcomeIcon}>◎</div>
+      <h1 style={S.welcomeTitle}>Cognitive Agent Console</h1>
+      <p style={S.welcomeSub}>
+        Give the agent a goal. It plans, reasons, and acts — every step of the pipeline visible in real time.
+      </p>
+      <p style={S.tryLabel}>Try one of these:</p>
+      <div style={S.chips}>
         {examples.map((ex) => (
-          <code key={ex} style={styles.exampleChip}>{ex}</code>
+          <code key={ex} style={S.exChip}>{ex}</code>
         ))}
       </div>
     </div>
   );
 }
 
+function Chip({ children }) {
+  return <span style={S.chip}>{children}</span>;
+}
+
 function UserBubble({ goal }) {
   return (
-    <div data-testid="user-bubble" style={styles.userBubbleWrap}>
-      <div style={styles.userBubble}>{goal}</div>
+    <div data-testid="user-bubble" style={S.userRow}>
+      <div style={S.userBubble}>{goal}</div>
     </div>
   );
 }
 
-function AgentCard({ data, onApprove, onDeny }) {
-  const [expanded, setExpanded] = useState(true);
-  const [traceOpen, setTraceOpen] = useState(false);
-  const [memOpen, setMemOpen] = useState(false);
-  const stateMeta = STATE_META[data.state] || { label: data.state, color: "#94a3b8", bg: "rgba(148,163,184,0.1)" };
-  const isAwaiting = data.state === "awaiting_approval" && data.approval_id && !data._approved && !data._denied;
-  const result = data.action_result || {};
-  const plan   = data.plan || {};
-
+function StreamingCard({ steps, goal }) {
   return (
-    <div data-testid="agent-card" style={styles.agentCardWrap}>
-      <div style={styles.agentCard}>
-        {/* Card header */}
-        <div style={styles.agentCardHeader} onClick={() => setExpanded((v) => !v)}>
-          <div style={styles.agentCardHeaderLeft}>
-            <span style={{ ...styles.stateBadge, color: stateMeta.color, background: stateMeta.bg }}>
-              {stateMeta.label}
-            </span>
-            {plan.strategy && (
-              <span style={styles.strategyTag}>
-                {STRATEGY_LABELS[plan.strategy] || plan.strategy}
-              </span>
-            )}
-          </div>
-          <span style={styles.collapseArrow}>{expanded ? "▲" : "▼"}</span>
+    <div data-testid="streaming-card" style={S.agentRow}>
+      <div style={S.streamCard}>
+        <div style={S.streamHeader}>
+          <span style={S.spinner} />
+          <span style={S.streamTitle}>Agent is thinking…</span>
         </div>
-
-        {expanded && (
-          <div style={styles.agentCardBody}>
-            {/* Plan section */}
-            {plan.strategy && (
-              <Section label="PLAN">
-                <Row label="Strategy"  value={STRATEGY_LABELS[plan.strategy] || plan.strategy} />
-                <Row label="Action"    value={plan.action || "—"} mono />
-                {plan.rationale && <Row label="Rationale" value={plan.rationale} />}
-                {plan.memory_context_used && (
-                  <Row label="Memory"  value="Context retrieved from MemVid store" accent />
-                )}
-              </Section>
-            )}
-
-            {/* Action result */}
-            {result.status && (
-              <Section label="EXECUTION">
-                <Row
-                  label="Status"
-                  value={result.status}
-                  color={result.status === "success" ? "#34d399" : "#f87171"}
-                />
-                {result.outputs && (
-                  <Row label="Output" value={JSON.stringify(result.outputs)} mono />
-                )}
-                {result.error && <Row label="Error" value={result.error} color="#f87171" />}
-                {result.artifacts?.length > 0 && (
-                  <Row label="Artifacts" value={result.artifacts.join(", ")} mono />
-                )}
-              </Section>
-            )}
-
-            {/* Approval flow */}
-            {isAwaiting && (
-              <Section label="APPROVAL REQUIRED">
-                <div style={styles.approvalNote}>
-                  The agent wants to execute <strong style={{ color: "#f59e0b" }}>{data.action_taken?.kind}</strong>.
-                  This action requires your approval before it runs.
-                </div>
-                <div style={styles.approvalBtns}>
-                  <button
-                    data-testid="approve-btn"
-                    style={styles.approveBtn}
-                    onClick={() => onApprove(data.run_id, data.approval_id)}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    data-testid="deny-btn"
-                    style={styles.denyBtn}
-                    onClick={() => onDeny(data.run_id, data.approval_id)}
-                  >
-                    Deny
-                  </button>
-                </div>
-              </Section>
-            )}
-
-            {/* Memory hits */}
-            {data.memory_hits?.length > 0 && (
-              <Collapsible
-                label={`MEMORY CONTEXT  (${data.memory_hits.length} hit${data.memory_hits.length > 1 ? "s" : ""})`}
-                open={memOpen}
-                toggle={() => setMemOpen((v) => !v)}
-              >
-                {data.memory_hits.map((h, i) => (
-                  <div key={i} style={styles.memHit}>
-                    <span style={styles.memScore}>{h.score}</span>
-                    <span style={styles.memText}>{h.text}</span>
-                  </div>
-                ))}
-              </Collapsible>
-            )}
-
-            {/* Event trace */}
-            {data.key_events?.length > 0 && (
-              <Collapsible
-                label={`TRACE  (${data.event_count} events)`}
-                open={traceOpen}
-                toggle={() => setTraceOpen((v) => !v)}
-              >
-                {data.key_events.map((ev, i) => (
-                  <div key={i} style={styles.traceRow}>
-                    <span style={styles.traceTime}>
-                      {ev.timestamp ? new Date(ev.timestamp).toISOString().slice(11, 19) : "—"}
-                    </span>
-                    <span style={styles.traceActor}>{ev.actor || "—"}</span>
-                    <span style={styles.traceText}>{ev.summary}</span>
-                  </div>
-                ))}
-              </Collapsible>
-            )}
-
-            <div style={styles.runIdLine}>run_id: <span style={styles.runIdVal}>{data.run_id}</span></div>
+        {steps.length > 0 && (
+          <div style={S.traceList}>
+            {steps.map((step, i) => (
+              <TraceStep key={i} step={step} index={i} />
+            ))}
           </div>
         )}
       </div>
@@ -321,44 +329,179 @@ function AgentCard({ data, onApprove, onDeny }) {
   );
 }
 
-function ErrorBubble({ message }) {
+function TraceStep({ step, index }) {
+  const cfg = STEP_ICONS[step.event_type] || { icon: "·", color: "#94a3b8" };
   return (
-    <div data-testid="error-bubble" style={styles.errorBubble}>
-      {message}
+    <div
+      style={{
+        ...S.traceStep,
+        animation: `fadeSlideIn 0.25s ease both`,
+        animationDelay: `${index * 30}ms`,
+      }}
+    >
+      <span style={{ ...S.traceIcon, color: cfg.color }}>{cfg.icon}</span>
+      <div style={S.traceContent}>
+        <span style={S.traceLabel}>{step.label}</span>
+        {step.timestamp && (
+          <span style={S.traceTime}>
+            {new Date(step.timestamp).toISOString().slice(11, 19)}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
-function ThinkingIndicator() {
+function AgentCard({ id, data, steps, approved, denied, onApprove, onDeny }) {
+  const [traceOpen, setTraceOpen] = useState(false);
+  const [memOpen,   setMemOpen]   = useState(false);
+
+  const state     = data?.state || "completed";
+  const stateMeta = STATE_META[state] || { label: state.toUpperCase(), color: "#374151", bg: "#f9fafb", border: "#d1d5db" };
+  const plan      = data?.plan || {};
+  const result    = data?.action_result || {};
+  const isAwaiting = state === "awaiting_approval" && data?.approval_id && !approved && !denied;
+
   return (
-    <div data-testid="thinking-indicator" style={styles.thinking}>
-      <span style={styles.thinkDot} />
-      <span style={{ ...styles.thinkDot, animationDelay: "0.15s" }} />
-      <span style={{ ...styles.thinkDot, animationDelay: "0.3s" }} />
-      <span style={styles.thinkText}>Agent is planning…</span>
+    <div data-testid="agent-card" style={S.agentRow}>
+      <div style={S.agentCard}>
+        {/* State badge bar */}
+        <div style={{ ...S.stateBar, background: stateMeta.bg, borderBottom: `1px solid ${stateMeta.border}` }}>
+          <span style={{ ...S.stateBadge, color: stateMeta.color }}>
+            {stateMeta.label}
+          </span>
+          {plan.strategy && (
+            <span style={S.strategyLabel}>
+              {STRATEGY_LABELS[plan.strategy] || plan.strategy}
+            </span>
+          )}
+        </div>
+
+        <div style={S.cardBody}>
+          {/* Plan section */}
+          {plan.strategy && (
+            <Section label="PLAN">
+              <DataRow label="Strategy"  value={STRATEGY_LABELS[plan.strategy] || plan.strategy} />
+              <DataRow label="Action"    value={plan.action || "—"} mono />
+              {plan.rationale && <DataRow label="Rationale" value={plan.rationale} />}
+              {plan.memory_context_used && (
+                <DataRow label="Context" value="Retrieved from MemVid memory store" accent />
+              )}
+            </Section>
+          )}
+
+          {/* Execution result */}
+          {result.status && (
+            <Section label="RESULT">
+              <DataRow
+                label="Status"
+                value={result.status}
+                color={result.status === "success" ? "#059669" : "#dc2626"}
+              />
+              {result.outputs && (
+                <DataRow label="Output" value={_renderOutput(result.outputs)} />
+              )}
+              {result.error && <DataRow label="Error" value={result.error} color="#dc2626" />}
+              {result.artifacts?.length > 0 && (
+                <DataRow label="Artifacts" value={result.artifacts.join(", ")} mono />
+              )}
+            </Section>
+          )}
+
+          {/* Approval gate */}
+          {isAwaiting && (
+            <Section label="APPROVAL REQUIRED">
+              <p style={S.approvalNote}>
+                The agent wants to run{" "}
+                <strong style={{ color: "#d97706" }}>{data.action_taken?.kind}</strong>.
+                This action needs your sign-off before it executes.
+              </p>
+              <div style={S.approvalBtns}>
+                <button
+                  data-testid="approve-btn"
+                  style={S.approveBtn}
+                  onClick={() => onApprove(data.run_id, data.approval_id, id)}
+                >
+                  Approve
+                </button>
+                <button
+                  data-testid="deny-btn"
+                  style={S.denyBtn}
+                  onClick={() => onDeny(data.run_id, data.approval_id, id)}
+                >
+                  Deny
+                </button>
+              </div>
+            </Section>
+          )}
+
+          {/* Memory hits */}
+          {data?.memory_hits?.length > 0 && (
+            <Collapsible
+              label={`MEMORY CONTEXT  (${data.memory_hits.length} hit${data.memory_hits.length > 1 ? "s" : ""})`}
+              open={memOpen}
+              toggle={() => setMemOpen((v) => !v)}
+            >
+              {data.memory_hits.map((h, i) => (
+                <div key={i} style={S.memHit}>
+                  <span style={S.memScore}>{h.score}</span>
+                  <span style={S.memText}>{h.text}</span>
+                </div>
+              ))}
+            </Collapsible>
+          )}
+
+          {/* Pipeline trace (completed) */}
+          {steps.length > 0 && (
+            <Collapsible
+              label={`PIPELINE TRACE  (${steps.length} step${steps.length > 1 ? "s" : ""})`}
+              open={traceOpen}
+              toggle={() => setTraceOpen((v) => !v)}
+            >
+              <div style={S.traceList}>
+                {steps.map((step, i) => (
+                  <TraceStep key={i} step={step} index={i} />
+                ))}
+              </div>
+            </Collapsible>
+          )}
+
+          <div style={S.runIdLine}>
+            run_id: <span style={S.runIdVal}>{data?.run_id}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErrorCard({ message }) {
+  return (
+    <div data-testid="error-bubble" style={S.agentRow}>
+      <div style={S.errorCard}>{message}</div>
     </div>
   );
 }
 
 function Section({ label, children }) {
   return (
-    <div style={styles.section}>
-      <div style={styles.sectionLabel}>{label}</div>
+    <div style={S.section}>
+      <div style={S.sectionLabel}>{label}</div>
       {children}
     </div>
   );
 }
 
-function Row({ label, value, mono, color, accent }) {
+function DataRow({ label, value, mono, color, accent }) {
   return (
-    <div style={styles.row}>
-      <span style={styles.rowLabel}>{label}</span>
+    <div style={S.dataRow}>
+      <span style={S.dataLabel}>{label}</span>
       <span
         style={{
-          ...styles.rowValue,
-          ...(mono  ? styles.mono  : {}),
-          ...(color ? { color }    : {}),
-          ...(accent? { color: "#22d3ee" } : {}),
+          ...S.dataValue,
+          ...(mono   ? S.mono   : {}),
+          ...(color  ? { color }             : {}),
+          ...(accent ? { color: "#0891b2" }  : {}),
         }}
       >
         {value}
@@ -369,236 +512,344 @@ function Row({ label, value, mono, color, accent }) {
 
 function Collapsible({ label, open, toggle, children }) {
   return (
-    <div style={styles.section}>
-      <div style={{ ...styles.sectionLabel, cursor: "pointer", userSelect: "none" }} onClick={toggle}>
-        {label}  <span style={{ opacity: 0.5 }}>{open ? "▲" : "▼"}</span>
-      </div>
-      {open && <div>{children}</div>}
+    <div style={S.section}>
+      <button style={S.collapsibleBtn} onClick={toggle}>
+        <span style={S.sectionLabel}>{label}</span>
+        <span style={{ color: "#94a3b8", fontSize: 11 }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && <div style={{ marginTop: 8 }}>{children}</div>}
     </div>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function _renderOutput(outputs) {
+  if (!outputs) return "";
+  if (typeof outputs === "string") return outputs.replace(/\\n/g, "\n");
+  if (typeof outputs === "object") {
+    // If echo action: {"echo": "...text..."} → show text
+    const val = outputs.echo || outputs.text || outputs.result || outputs.output;
+    if (val) return String(val).replace(/\\n/g, "\n");
+    return JSON.stringify(outputs, null, 2);
+  }
+  return String(outputs);
+}
+
+// ── Styles (white theme, bigger text) ────────────────────────────────────────
 
 const C = {
-  bg:       "#080810",
-  surface:  "#0f0f1a",
-  border:   "#1a1a2e",
-  text:     "#e2e8f0",
-  muted:    "#475569",
-  cyan:     "#22d3ee",
-  amber:    "#f59e0b",
-  green:    "#34d399",
-  violet:   "#a78bfa",
-  red:      "#f87171",
+  bg:       "#f8fafc",
+  white:    "#ffffff",
+  border:   "#e2e8f0",
+  text:     "#0f172a",
+  muted:    "#64748b",
+  blue:     "#2563eb",
+  cyan:     "#0891b2",
+  green:    "#059669",
+  amber:    "#d97706",
+  red:      "#dc2626",
+  violet:   "#7c3aed",
+  indigo:   "#6366f1",
+  mono:     "#1e3a5f",
 };
 
-const styles = {
+const S = {
   container: {
-    display: "flex",
+    display:       "flex",
     flexDirection: "column",
-    height: "100vh",
-    background: C.bg,
-    color: C.text,
-    fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
-    overflow: "hidden",
+    height:        "100vh",
+    background:    C.bg,
+    color:         C.text,
+    fontFamily:    "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+    overflow:      "hidden",
   },
 
-  // Header
+  // ── Header ──────────────────────────────────────────────────────────────────
   header: {
-    display: "flex",
-    alignItems: "center",
+    display:        "flex",
+    alignItems:     "center",
     justifyContent: "space-between",
-    padding: "12px 24px",
-    background: C.surface,
-    borderBottom: `1px solid ${C.border}`,
-    flexShrink: 0,
+    padding:        "14px 28px",
+    background:     C.white,
+    borderBottom:   `1px solid ${C.border}`,
+    boxShadow:      "0 1px 3px rgba(0,0,0,0.06)",
+    flexShrink:     0,
   },
   headerLeft: { display: "flex", alignItems: "center", gap: 12 },
-  headerDot: {
-    display: "inline-block", width: 8, height: 8,
-    borderRadius: "50%", background: C.cyan,
-    boxShadow: `0 0 8px ${C.cyan}`,
-    animation: "pulse 2s infinite",
+  pulse: {
+    display:      "inline-block",
+    width:        10,
+    height:       10,
+    borderRadius: "50%",
+    background:   C.indigo,
+    boxShadow:    `0 0 0 3px rgba(99,102,241,0.2)`,
+    animation:    "pulse 2s infinite",
   },
-  headerTitle: { fontSize: 16, fontWeight: 700, letterSpacing: "0.1em", color: C.cyan },
-  headerSub:   { fontSize: 11, color: C.muted, letterSpacing: "0.08em" },
+  headerTitle: {
+    fontSize:      20,
+    fontWeight:    800,
+    color:         C.indigo,
+    letterSpacing: "-0.02em",
+  },
+  headerSub: {
+    fontSize: 14,
+    color:    C.muted,
+  },
   headerRight: { display: "flex", gap: 8 },
-  badge: {
-    fontSize: 10, padding: "2px 8px", borderRadius: 4,
-    border: `1px solid ${C.border}`, color: C.muted, letterSpacing: "0.05em",
+  chip: {
+    fontSize:     12,
+    padding:      "3px 10px",
+    borderRadius: 20,
+    border:       `1px solid ${C.border}`,
+    color:        C.muted,
+    background:   C.bg,
+    fontWeight:   500,
   },
 
-  // Messages
-  messages: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "24px 16px",
-    display: "flex",
+  // ── Feed ────────────────────────────────────────────────────────────────────
+  feed: {
+    flex:          1,
+    overflowY:     "auto",
+    padding:       "32px 20px",
+    display:       "flex",
     flexDirection: "column",
-    gap: 16,
+    gap:           20,
+    maxWidth:      900,
+    width:         "100%",
+    margin:        "0 auto",
+    boxSizing:     "border-box",
   },
 
-  // Welcome
+  // ── Welcome ─────────────────────────────────────────────────────────────────
   welcome: {
-    margin: "40px auto",
-    maxWidth: 600,
-    textAlign: "center",
+    textAlign:  "center",
+    padding:    "60px 20px 40px",
+    maxWidth:   640,
+    margin:     "0 auto",
   },
-  welcomeTitle: { fontSize: 22, fontWeight: 700, color: C.cyan, marginBottom: 8 },
-  welcomeSub:   { fontSize: 13, color: C.muted, marginBottom: 24, lineHeight: 1.6 },
-  examplesLabel:{ fontSize: 11, color: C.muted, marginBottom: 8, letterSpacing: "0.1em" },
-  examplesList: { display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" },
-  exampleChip: {
-    fontSize: 11, padding: "4px 10px",
-    background: "rgba(34,211,238,0.07)",
-    border: `1px solid rgba(34,211,238,0.2)`,
-    borderRadius: 6, color: "#94a3b8", cursor: "default",
-  },
-
-  // User bubble
-  userBubbleWrap: { display: "flex", justifyContent: "flex-end" },
-  userBubble: {
-    maxWidth: "70%",
-    padding: "10px 16px",
-    background: "rgba(245,158,11,0.12)",
-    border: `1px solid rgba(245,158,11,0.3)`,
-    borderRadius: "12px 12px 2px 12px",
-    fontSize: 13,
-    lineHeight: 1.6,
-    color: "#fde68a",
-  },
-
-  // Agent card
-  agentCardWrap: { display: "flex", justifyContent: "flex-start", maxWidth: "92%" },
-  agentCard: {
-    width: "100%",
-    background: C.surface,
-    border: `1px solid ${C.border}`,
+  welcomeIcon:  { fontSize: 40, color: C.indigo, marginBottom: 16 },
+  welcomeTitle: { fontSize: 32, fontWeight: 800, color: C.text, marginBottom: 12, letterSpacing: "-0.03em" },
+  welcomeSub:   { fontSize: 17, color: C.muted, lineHeight: 1.7, marginBottom: 28 },
+  tryLabel:     { fontSize: 13, color: C.muted, marginBottom: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" },
+  chips:        { display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center" },
+  exChip: {
+    fontSize:     13,
+    padding:      "6px 12px",
+    background:   C.white,
+    border:       `1px solid ${C.border}`,
     borderRadius: 8,
-    overflow: "hidden",
+    color:        C.muted,
+    cursor:       "default",
+    boxShadow:    "0 1px 2px rgba(0,0,0,0.04)",
   },
-  agentCardHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "10px 16px",
-    cursor: "pointer",
-    borderBottom: `1px solid ${C.border}`,
-    background: "rgba(255,255,255,0.02)",
-  },
-  agentCardHeaderLeft: { display: "flex", alignItems: "center", gap: 10 },
-  stateBadge: {
-    fontSize: 10, fontWeight: 700, letterSpacing: "0.1em",
-    padding: "2px 8px", borderRadius: 4,
-  },
-  strategyTag: {
-    fontSize: 11, color: C.muted, letterSpacing: "0.05em",
-  },
-  collapseArrow: { fontSize: 10, color: C.muted },
-  agentCardBody: { padding: "12px 16px", display: "flex", flexDirection: "column", gap: 12 },
 
-  // Section
+  // ── User bubble ──────────────────────────────────────────────────────────────
+  userRow:    { display: "flex", justifyContent: "flex-end" },
+  userBubble: {
+    maxWidth:     "72%",
+    padding:      "12px 18px",
+    background:   "#eff6ff",
+    border:       "1px solid #bfdbfe",
+    borderRadius: "16px 16px 4px 16px",
+    fontSize:     16,
+    lineHeight:   1.6,
+    color:        "#1e40af",
+    fontWeight:   500,
+  },
+
+  // ── Agent row wrapper ────────────────────────────────────────────────────────
+  agentRow: { display: "flex", justifyContent: "flex-start" },
+
+  // ── Streaming card ───────────────────────────────────────────────────────────
+  streamCard: {
+    width:        "100%",
+    background:   C.white,
+    border:       `1px solid ${C.border}`,
+    borderRadius: 12,
+    overflow:     "hidden",
+    boxShadow:    "0 1px 4px rgba(0,0,0,0.06)",
+  },
+  streamHeader: {
+    display:       "flex",
+    alignItems:    "center",
+    gap:           10,
+    padding:       "14px 18px",
+    borderBottom:  `1px solid ${C.border}`,
+    background:    "#fafbfc",
+  },
+  spinner: {
+    display:         "inline-block",
+    width:           14,
+    height:          14,
+    borderRadius:    "50%",
+    border:          `2px solid ${C.indigo}`,
+    borderTopColor:  "transparent",
+    animation:       "spin 0.8s linear infinite",
+    flexShrink:      0,
+  },
+  streamTitle: { fontSize: 15, fontWeight: 600, color: C.text },
+
+  // ── Trace list ────────────────────────────────────────────────────────────────
+  traceList: { padding: "10px 18px", display: "flex", flexDirection: "column", gap: 6 },
+  traceStep: {
+    display:    "flex",
+    alignItems: "flex-start",
+    gap:        10,
+    padding:    "4px 0",
+  },
+  traceIcon:    { fontSize: 16, width: 20, textAlign: "center", flexShrink: 0, paddingTop: 1 },
+  traceContent: { display: "flex", alignItems: "baseline", gap: 12, flex: 1 },
+  traceLabel:   { fontSize: 14, color: C.text, fontWeight: 500 },
+  traceTime:    { fontSize: 12, color: C.muted, fontFamily: "'JetBrains Mono', monospace" },
+
+  // ── Agent card ────────────────────────────────────────────────────────────────
+  agentCard: {
+    width:        "100%",
+    background:   C.white,
+    border:       `1px solid ${C.border}`,
+    borderRadius: 12,
+    overflow:     "hidden",
+    boxShadow:    "0 1px 4px rgba(0,0,0,0.06)",
+  },
+  stateBar: {
+    display:    "flex",
+    alignItems: "center",
+    gap:        12,
+    padding:    "10px 18px",
+  },
+  stateBadge: {
+    fontSize:      11,
+    fontWeight:    800,
+    letterSpacing: "0.1em",
+  },
+  strategyLabel: { fontSize: 13, color: C.muted },
+  cardBody: {
+    padding:       "16px 18px",
+    display:       "flex",
+    flexDirection: "column",
+    gap:           14,
+  },
+
+  // ── Section ────────────────────────────────────────────────────────────────────
   section: {
     borderTop: `1px solid ${C.border}`,
-    paddingTop: 10,
+    paddingTop: 12,
   },
   sectionLabel: {
-    fontSize: 10, color: C.muted, letterSpacing: "0.12em",
-    marginBottom: 6, fontWeight: 700,
+    fontSize:      11,
+    color:         C.muted,
+    letterSpacing: "0.1em",
+    fontWeight:    700,
+    textTransform: "uppercase",
+    marginBottom:  8,
+    display:       "block",
   },
 
-  // Row
-  row: { display: "flex", gap: 12, marginBottom: 4, flexWrap: "wrap" },
-  rowLabel: { fontSize: 11, color: C.muted, minWidth: 80, flexShrink: 0 },
-  rowValue: { fontSize: 12, color: C.text, flex: 1 },
-  mono: { fontFamily: "inherit", color: "#86efac" },
+  // ── Data row ─────────────────────────────────────────────────────────────────
+  dataRow:   { display: "flex", gap: 14, marginBottom: 6, flexWrap: "wrap" },
+  dataLabel: { fontSize: 13, color: C.muted, minWidth: 78, flexShrink: 0, paddingTop: 2 },
+  dataValue: { fontSize: 15, color: C.text, flex: 1, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" },
+  mono:      { fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: C.mono },
 
-  // Memory hits
-  memHit: { display: "flex", gap: 10, marginBottom: 4 },
-  memScore: { fontSize: 10, color: C.cyan, minWidth: 36, paddingTop: 1 },
-  memText:  { fontSize: 11, color: "#94a3b8", flex: 1, lineHeight: 1.5 },
+  // ── Memory hits ───────────────────────────────────────────────────────────────
+  memHit:   { display: "flex", gap: 10, marginBottom: 5 },
+  memScore: { fontSize: 12, color: C.cyan, minWidth: 38, paddingTop: 2, fontFamily: "monospace" },
+  memText:  { fontSize: 14, color: C.muted, flex: 1, lineHeight: 1.5 },
 
-  // Trace
-  traceRow: { display: "flex", gap: 10, marginBottom: 3 },
-  traceTime:  { fontSize: 10, color: C.muted, minWidth: 64 },
-  traceActor: { fontSize: 10, color: C.violet, minWidth: 80 },
-  traceText:  { fontSize: 11, color: "#94a3b8", flex: 1 },
-
-  // Approval
-  approvalNote: { fontSize: 12, color: "#cbd5e1", lineHeight: 1.6, marginBottom: 12 },
+  // ── Approval ─────────────────────────────────────────────────────────────────
+  approvalNote: { fontSize: 15, color: C.text, lineHeight: 1.6, marginBottom: 14 },
   approvalBtns: { display: "flex", gap: 10 },
   approveBtn: {
-    padding: "7px 20px", borderRadius: 6, border: "none", cursor: "pointer",
-    background: "rgba(52,211,153,0.15)", color: C.green,
-    fontSize: 12, fontWeight: 700, letterSpacing: "0.06em",
-    transition: "background 0.15s",
+    padding:      "9px 22px",
+    borderRadius: 8,
+    border:       "none",
+    cursor:       "pointer",
+    background:   "#d1fae5",
+    color:        C.green,
+    fontSize:     14,
+    fontWeight:   700,
+    transition:   "background 0.15s",
   },
   denyBtn: {
-    padding: "7px 20px", borderRadius: 6, border: "none", cursor: "pointer",
-    background: "rgba(248,113,113,0.12)", color: C.red,
-    fontSize: 12, fontWeight: 700, letterSpacing: "0.06em",
-    transition: "background 0.15s",
+    padding:      "9px 22px",
+    borderRadius: 8,
+    border:       "none",
+    cursor:       "pointer",
+    background:   "#fee2e2",
+    color:        C.red,
+    fontSize:     14,
+    fontWeight:   700,
+    transition:   "background 0.15s",
   },
 
-  // Run ID
-  runIdLine: { fontSize: 10, color: C.muted, marginTop: 4 },
-  runIdVal:  { color: "#4b5563", letterSpacing: "0.03em" },
-
-  // Error bubble
-  errorBubble: {
-    padding: "8px 14px",
-    background: "rgba(248,113,113,0.1)",
-    border: `1px solid rgba(248,113,113,0.25)`,
-    borderRadius: 6,
-    fontSize: 12, color: C.red,
+  // ── Collapsible button ────────────────────────────────────────────────────────
+  collapsibleBtn: {
+    display:        "flex",
+    alignItems:     "center",
+    justifyContent: "space-between",
+    width:          "100%",
+    background:     "none",
+    border:         "none",
+    cursor:         "pointer",
+    padding:        0,
+    textAlign:      "left",
+    marginBottom:   0,
   },
 
-  // Thinking
-  thinking: {
-    display: "flex", alignItems: "center", gap: 6, padding: "8px 4px",
-  },
-  thinkDot: {
-    display: "inline-block", width: 6, height: 6,
-    borderRadius: "50%", background: C.cyan, opacity: 0.4,
-    animation: "blink 1s infinite",
-  },
-  thinkText: { fontSize: 11, color: C.muted, marginLeft: 4 },
+  // ── Run ID ────────────────────────────────────────────────────────────────────
+  runIdLine: { fontSize: 12, color: "#cbd5e1", marginTop: 4 },
+  runIdVal:  { fontFamily: "monospace", color: "#94a3b8" },
 
-  // Input area
-  inputArea: {
-    display: "flex",
-    gap: 10,
-    padding: "12px 16px",
-    background: C.surface,
-    borderTop: `1px solid ${C.border}`,
-    flexShrink: 0,
+  // ── Error card ────────────────────────────────────────────────────────────────
+  errorCard: {
+    padding:      "12px 16px",
+    background:   "#fef2f2",
+    border:       "1px solid #fca5a5",
+    borderRadius: 10,
+    fontSize:     15,
+    color:        C.red,
+  },
+
+  // ── Input bar ─────────────────────────────────────────────────────────────────
+  inputBar: {
+    display:      "flex",
+    gap:          12,
+    padding:      "14px 20px",
+    background:   C.white,
+    borderTop:    `1px solid ${C.border}`,
+    boxShadow:    "0 -1px 3px rgba(0,0,0,0.04)",
+    flexShrink:   0,
+    maxWidth:     900,
+    width:        "100%",
+    margin:       "0 auto",
+    boxSizing:    "border-box",
   },
   textarea: {
-    flex: 1,
-    resize: "none",
-    background: C.bg,
-    border: `1px solid ${C.border}`,
-    borderRadius: 6,
-    color: C.text,
-    fontSize: 13,
-    padding: "10px 14px",
-    fontFamily: "inherit",
-    outline: "none",
-    lineHeight: 1.5,
-    transition: "border-color 0.15s",
+    flex:        1,
+    resize:      "none",
+    background:  C.bg,
+    border:      `1.5px solid ${C.border}`,
+    borderRadius: 10,
+    color:       C.text,
+    fontSize:    16,
+    padding:     "11px 16px",
+    fontFamily:  "inherit",
+    outline:     "none",
+    lineHeight:  1.5,
+    transition:  "border-color 0.15s",
   },
   runBtn: {
-    padding: "0 20px",
-    background: "rgba(34,211,238,0.1)",
-    border: `1px solid rgba(34,211,238,0.35)`,
-    borderRadius: 6,
-    color: C.cyan,
-    fontSize: 12,
-    fontWeight: 700,
-    letterSpacing: "0.1em",
-    cursor: "pointer",
-    transition: "background 0.15s",
-    flexShrink: 0,
+    padding:      "0 24px",
+    background:   C.indigo,
+    border:       "none",
+    borderRadius: 10,
+    color:        "#fff",
+    fontSize:     14,
+    fontWeight:   700,
+    letterSpacing: "0.06em",
+    cursor:       "pointer",
+    transition:   "opacity 0.15s, background 0.15s",
+    flexShrink:   0,
   },
 };

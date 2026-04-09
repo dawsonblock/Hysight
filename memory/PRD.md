@@ -79,6 +79,13 @@ Three endpoints define the narrow contract:
 - [x] React chat UI ("Cognitive Agent Console") — dark terminal aesthetic
 - [x] Integration tests (7/7 passing)
 
+### Session 2 (Apr 2025)
+- [x] White background theme with larger text (Inter font, 15-32px range)
+- [x] SSE streaming endpoint `POST /api/hca/run/stream` — emits each state-machine step live
+- [x] Frontend consumes SSE with `ReadableStream` — shows live trace before final result
+- [x] Internal events (`state_transition`, `recurrent_pass_completed`) filtered; only meaningful pipeline steps shown
+- [x] `_renderOutput` helper — formats LLM echo text with proper newlines (no raw JSON)
+
 ---
 
 ## Backlog
