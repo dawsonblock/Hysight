@@ -34,11 +34,11 @@ def _probe_sidecar() -> bool:
         return False
 
 
-SIDECAR_REACHABLE = _probe_sidecar()
+SIDECAR_REACHABLE = os.environ.get("RUN_MEMVID_TESTS") == "1" and _probe_sidecar()
 
 pytestmark = pytest.mark.skipif(
     not SIDECAR_REACHABLE,
-    reason="memvid sidecar not running on localhost:3031",
+    reason="set RUN_MEMVID_TESTS=1 and start memvid sidecar on localhost:3031 to run",
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
