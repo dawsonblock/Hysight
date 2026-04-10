@@ -1,0 +1,15 @@
+{
+  "run_id": "6771f685-4075-46d2-8ed1-5ce7a32915d8",
+  "user_id": null,
+  "goal": "Test memory recall",
+  "constraints": null,
+  "active_environment": "default",
+  "policy_profile": null,
+  "safety_profile": null,
+  "created_at": "2026-04-10 00:11:38.142468+00:00",
+  "updated_at": "2026-04-10 00:11:41.749827+00:00",
+  "state": "completed",
+  "replan_budget": 3,
+  "current_replan_count": 0,
+  "pending_approval_id": null
+}
