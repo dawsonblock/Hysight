@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -527,12 +528,31 @@ async def delete_memory(memory_id: str):
 
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    global client, db
+    try:
+        from motor.motor_asyncio import AsyncIOMotorClient
+        settings = _load_settings()
+        client = AsyncIOMotorClient(settings.mongo_url)
+        db = client[settings.db_name]
+    except (BackendConfigurationError, ImportError) as exc:
+        logger.warning(
+            "Database not configured — /status routes will return 503. %s", exc
+        )
+    yield
+    if client is not None:
+        client.close()
+    client = None
+    db = None
+
+
 def create_app() -> FastAPI:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-    application = FastAPI(title="HCA API")
+    application = FastAPI(title="HCA API", lifespan=_lifespan)
     application.include_router(api_router)
     application.add_middleware(
         CORSMiddleware,
@@ -541,29 +561,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    @application.on_event("startup")
-    async def startup_db_client():
-        global client, db
-        try:
-            from motor.motor_asyncio import AsyncIOMotorClient
-            settings = _load_settings()
-            client = AsyncIOMotorClient(settings.mongo_url)
-            db = client[settings.db_name]
-        except (BackendConfigurationError, ImportError) as exc:
-            logger.warning(
-                "Database not configured — /status routes will return 503. %s", exc
-            )
-
-    @application.on_event("shutdown")
-    async def shutdown_db_client():
-        global client, db
-
-        if client is not None:
-            client.close()
-        client = None
-        db = None
-
     return application
 
 

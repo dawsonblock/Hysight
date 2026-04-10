@@ -164,7 +164,7 @@ def delete_memory(memory_id):
 # ── 1. Ingest ─────────────────────────────────────────────────────────────────
 
 class TestIngest:
-    """POST /memory/ingest"""
+    """POST /memory/ingest — mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
 
     def test_ingest_returns_200_and_memory_id(self):
         r = ingest("TEST_ integration test fact for sidecar")
@@ -189,7 +189,7 @@ class TestIngest:
 # ── 2. List ───────────────────────────────────────────────────────────────────
 
 class TestList:
-    """GET /memory/list"""
+    """GET /memory/list — mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
 
     def test_list_returns_records_and_total(self):
         r = list_memories()
@@ -210,7 +210,7 @@ class TestList:
 # ── 3. Retrieve (BM25) ────────────────────────────────────────────────────────
 
 class TestRetrieve:
-    """POST /memory/retrieve - BM25 scored retrieval"""
+    """POST /memory/retrieve — BM25 scored retrieval. Mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
 
     @pytest.fixture(autouse=True, scope="class")
     def seed_memories(self):
@@ -272,7 +272,7 @@ class TestRetrieve:
 # ── 4. Delete ────────────────────────────────────────────────────────────────
 
 class TestDelete:
-    """DELETE /memory/:id"""
+    """DELETE /memory/:id — mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
 
     def test_delete_removes_memory(self):
         # ingest a fresh memory
@@ -346,7 +346,7 @@ class TestPersistence:
 # ── 6. Maintain (TTL) ─────────────────────────────────────────────────────────
 
 class TestMaintain:
-    """POST /memory/maintain"""
+    """POST /memory/maintain — mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
 
     def test_maintain_returns_200(self):
         r = requests.post(f"{SIDECAR_URL}/memory/maintain", timeout=10)
