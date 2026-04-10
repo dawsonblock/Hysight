@@ -7,6 +7,7 @@ from typing import Iterator, List
 
 from hca.common.types import MemoryRecord
 from hca.common.enums import MemoryType
+from hca.paths import run_storage_path
 
 
 class MemoryStore:
@@ -16,7 +17,7 @@ class MemoryStore:
         self.run_id = run_id
         self.memory_type = memory_type
         # ensure directory exists
-        self.path = Path(f"storage/runs/{run_id}/{path}")
+        self.path = run_storage_path(run_id, path)
         os.makedirs(self.path.parent, exist_ok=True)
 
     def append(self, record: MemoryRecord) -> None:

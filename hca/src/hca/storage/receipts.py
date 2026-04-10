@@ -4,10 +4,12 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Iterator, Optional, Any
+
 from hca.common.types import ExecutionReceipt
+from hca.paths import run_storage_path
 
 def _receipts_path(run_id: str) -> Path:
-    return Path(f"storage/runs/{run_id}/receipts.jsonl")
+    return run_storage_path(run_id, "receipts.jsonl")
 
 def append_receipt(run_id: str, receipt: Any) -> None:
     """Append an execution receipt to the run's receipts log."""

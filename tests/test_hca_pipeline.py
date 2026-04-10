@@ -1,20 +1,21 @@
 """
 Integration test for the full HCA pipeline.
 
-Run from /app with:
+Run from the repository root with:
     python -m pytest tests/test_hca_pipeline.py -v
     # or directly:
     python tests/test_hca_pipeline.py
 """
-import sys
 import os
+import sys
+from pathlib import Path
 
-# Ensure /app and /app/hca/src are on the path
-sys.path.insert(0, "/app")
-sys.path.insert(0, "/app/hca/src")
+ROOT = Path(__file__).resolve().parents[1]
+HCA_SRC = ROOT / "hca" / "src"
 
-# Run from the HCA base dir so storage paths resolve
-os.chdir("/app/hca")
+for path in (str(ROOT), str(HCA_SRC)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 import pytest
 from memory_service import CandidateMemory, RetrievalQuery, Provenance

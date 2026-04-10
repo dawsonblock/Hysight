@@ -15,6 +15,7 @@ from hca.common.types import (
 )
 from hca.common.enums import ApprovalDecision
 from hca.common.time import parse_iso, utc_now
+from hca.paths import run_storage_path
 
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def _path(run_id: str) -> Path:
     """Unified path for approval records."""
-    return Path(f"storage/runs/{run_id}/approvals.jsonl")
+    return run_storage_path(run_id, "approvals.jsonl")
 
 
 def _append_record(

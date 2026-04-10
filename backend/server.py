@@ -1,38 +1,71 @@
-import sys
-import os
-import json
-import concurrent.futures
-
-# Add /app to path so memory_service is importable
-sys.path.insert(0, "/app")
-# Add hca source so `import hca.*` works from the backend
-sys.path.insert(0, "/app/hca/src")
-
-# Set HCA working dir so relative storage paths resolve correctly
-os.chdir("/app/hca")
-
-from fastapi import FastAPI, APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Any, Dict, Generator, List, Optional
-import uuid
 import asyncio
+import concurrent.futures
+import json
 import logging
+import os
+import sys
+import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Generator, List, Optional
 
-ROOT_DIR = Path(__file__).parent
+from dotenv import load_dotenv
+from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.middleware.cors import CORSMiddleware
+
+
+ROOT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = ROOT_DIR.parent
+HCA_SRC_DIR = REPO_ROOT / "hca" / "src"
+
+for path in (str(REPO_ROOT), str(HCA_SRC_DIR)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
 load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+logger = logging.getLogger(__name__)
+client: Any = None
+db: Any = None
 
-app = FastAPI(title="HCA API")
+
+class BackendConfigurationError(RuntimeError):
+    """Raised when required backend configuration is missing."""
+
+
+@dataclass(frozen=True)
+class BackendSettings:
+    mongo_url: str
+    db_name: str
+
+
+def _load_settings() -> BackendSettings:
+    missing = [
+        name for name in ("MONGO_URL", "DB_NAME") if not os.environ.get(name)
+    ]
+    if missing:
+        joined = ", ".join(missing)
+        raise BackendConfigurationError(
+            f"Missing required backend settings: {joined}"
+        )
+    return BackendSettings(
+        mongo_url=os.environ["MONGO_URL"],
+        db_name=os.environ["DB_NAME"],
+    )
+
+
+def _require_db() -> Any:
+    if db is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Database is not initialized",
+        )
+    return db
+
+
 api_router = APIRouter(prefix="/api")
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -72,16 +105,18 @@ async def root():
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
+    database = _require_db()
     status_obj = StatusCheck(**input.model_dump())
     doc = status_obj.model_dump()
     doc["timestamp"] = doc["timestamp"].isoformat()
-    await db.status_checks.insert_one(doc)
+    await database.status_checks.insert_one(doc)
     return status_obj
 
 
 @api_router.get("/status", response_model=List[StatusCheck])
 async def get_status_checks():
-    checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
+    database = _require_db()
+    checks = await database.status_checks.find({}, {"_id": 0}).to_list(1000)
     for c in checks:
         if isinstance(c.get("timestamp"), str):
             c["timestamp"] = datetime.fromisoformat(c["timestamp"])
@@ -491,25 +526,42 @@ async def delete_memory(memory_id: str):
     return {"deleted": True, "memory_id": memory_id}
 
 
-# ── App assembly ──────────────────────────────────────────────────────────────
-
-app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-logger = logging.getLogger(__name__)
 
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+def create_app() -> FastAPI:
+    application = FastAPI(title="HCA API")
+    application.include_router(api_router)
+    application.add_middleware(
+        CORSMiddleware,
+        allow_credentials=True,
+        allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @application.on_event("startup")
+    async def startup_db_client():
+        global client, db
+        from motor.motor_asyncio import AsyncIOMotorClient
+
+        settings = _load_settings()
+        client = AsyncIOMotorClient(settings.mongo_url)
+        db = client[settings.db_name]
+
+    @application.on_event("shutdown")
+    async def shutdown_db_client():
+        global client, db
+
+        if client is not None:
+            client.close()
+        client = None
+        db = None
+
+    return application
+
+
+app = create_app()

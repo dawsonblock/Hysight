@@ -16,7 +16,12 @@ import os
 import threading
 from typing import Any, Dict, List, Optional, Union
 
-from hca.common.types import ModuleProposal, WorkspaceItem
+from hca.common.types import (
+    ConflictRecord,
+    MissingInfoResult,
+    ModuleProposal,
+    WorkspaceItem,
+)
 from hca.meta.conflict_detector import detect_conflicts
 from hca.meta.missing_info import detect_missing_information
 from hca.storage import load_run
@@ -77,6 +82,42 @@ async def _llm_evaluate(goal: str, action: str, rationale: str) -> Dict[str, Any
     return json.loads(raw)
 
 
+def _format_conflict_issue(conflict: ConflictRecord) -> str:
+    """Render a stable, human-readable issue from a structured conflict."""
+    details = conflict.details or {}
+
+    if conflict.reason_code == "different_action_kind":
+        actions = [str(action) for action in details.get("actions", []) if action]
+        if actions:
+            return f"Conflicting actions proposed: {' vs '.join(actions)}"
+        return "Conflicting actions proposed"
+
+    if conflict.reason_code == "different_action_args":
+        action = details.get("action")
+        if action:
+            return f"Action {action} has conflicting arguments"
+        return "Action has conflicting arguments"
+
+    if conflict.reason_code == "memory_contradiction":
+        return "Workspace contains contradiction-linked items"
+
+    item_ids = ", ".join(conflict.item_ids)
+    reason = conflict.reason_code.replace("_", " ")
+    if item_ids:
+        return f"{reason} (items: {item_ids})"
+    return reason
+
+
+def _format_missing_info_issue(result: MissingInfoResult) -> str:
+    """Render a stable, human-readable issue from a structured gap."""
+    if result.missing_fields:
+        fields = ", ".join(result.missing_fields)
+        return (
+            f"Action {result.action_kind} is missing required fields: {fields}"
+        )
+    return f"Action {result.action_kind} is missing required information"
+
+
 def _rule_based_critique(
     items: List[WorkspaceItem],
 ) -> Dict[str, Any]:
@@ -84,7 +125,10 @@ def _rule_based_critique(
     conflicts = detect_conflicts(items)
     missing = detect_missing_information(items)
 
-    issues = [c.description for c in conflicts] + [m.description for m in missing]
+    issues = [
+        *(_format_conflict_issue(conflict) for conflict in conflicts),
+        *(_format_missing_info_issue(result) for result in missing),
+    ]
     delta = -0.05 * len(conflicts) - 0.02 * len(missing)
     verdict = "revise" if issues else "approve"
 
@@ -96,6 +140,7 @@ def _rule_based_critique(
         "issues": issues,
         "confidence_delta": max(delta, -0.3),
         "rationale": f"Rule-based: {len(conflicts)} conflict(s), {len(missing)} gap(s).",
+        "llm_powered": False,
     }
 
 
@@ -145,6 +190,7 @@ class Critic:
         if goal and action:
             try:
                 critique = asyncio.run(_llm_evaluate(goal, action, rationale))
+                critique.setdefault("llm_powered", True)
             except Exception as exc:
                 import logging
                 logging.getLogger(__name__).warning(
@@ -179,7 +225,7 @@ class Critic:
                 "issues":           critique.get("issues", []),
                 "confidence_delta": delta,
                 "rationale":        critique.get("rationale", ""),
-                "llm_powered":      bool(goal and action and "rule" not in critique.get("rationale", "").lower()),
+                "llm_powered":      bool(critique.get("llm_powered", False)),
             },
             salience=0.6,
             confidence=1.0,

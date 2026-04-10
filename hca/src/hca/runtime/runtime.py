@@ -26,10 +26,11 @@ from hca.common.types import (
 from hca.executor.approvals import validate_resume_approval
 from hca.executor.executor import Executor
 from hca.memory.episodic_store import EpisodicStore
+from hca.paths import ensure_repo_root_on_sys_path
+
+ensure_repo_root_on_sys_path()
+
 try:
-    import sys as _sys
-    if "/app" not in _sys.path:
-        _sys.path.insert(0, "/app")
     from memory_service.singleton import get_controller as _get_mem_controller  # type: ignore
     from memory_service import CandidateMemory as _CandidateMemory, Provenance as _Provenance  # type: ignore
     _MEMORY_SERVICE_AVAILABLE = True

@@ -5,9 +5,11 @@ import os
 from pathlib import Path
 from typing import Iterator, Dict, Any
 
+from hca.paths import run_storage_path
+
 
 def _path(run_id: str) -> Path:
-    return Path(f"storage/runs/{run_id}/artifacts.jsonl")
+    return run_storage_path(run_id, "artifacts.jsonl")
 
 
 def append_artifact(run_id: str, record: Dict[str, Any]) -> None:
