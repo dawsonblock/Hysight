@@ -625,7 +625,15 @@ async fn delete_handler(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .delete(&memory_id);
 
-    Ok(Json(serde_json::json!({ "deleted": deleted, "memory_id": memory_id })))
+    if deleted {
+        Ok(Json(serde_json::json!({ "deleted": true, "memory_id": memory_id })))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn health_handler() -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "status": "ok", "engine": "tantivy-bm25" }))
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -662,6 +670,7 @@ async fn main() {
         .route("/memory/maintain", post(maintain_handler))
         .route("/memory/list",     axum::routing::get(list_handler))
         .route("/memory/:id",      axum::routing::delete(delete_handler))
+        .route("/health",          axum::routing::get(health_handler))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

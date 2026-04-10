@@ -2,13 +2,13 @@
 
 ## Original Problem Statement
 User uploaded `Hybrid-ai.zip` containing two isolated systems:
-1. `Conscious-hybrid--main-2` (Python HCA Runtime): State machine orchestrator, core reasoning modules were hardcoded stubs.
-2. `memvid-Human--main-main-2` (Rust Memory Engine): Production-quality memory storage kernel (BM25, WAL, embeddings) but lacks HTTP API.
+1. `Conscious-hybrid--main-2` (Python HCA Runtime): State machine orchestrator with hardcoded stubs.
+2. `memvid-Human--main-main-2` (Rust Memory Engine): Production memory kernel (BM25, WAL) lacking HTTP API.
 
 **User direction**: Keep HCA orchestrator in Python. Turn memvid into the authoritative memory service in Rust. Add a narrow contract between them.
 
 **LLM choices**: Claude Sonnet 4.5 (Planner), Gemini 3 Flash (TextPerception)
-**Frontend**: Minimal chat UI with dark terminal aesthetic
+**Frontend**: Minimal chat UI with white theme
 
 ---
 
@@ -24,43 +24,50 @@ User uploaded `Hybrid-ai.zip` containing two isolated systems:
 │       ├── modules/planner.py   LLM-powered (Claude Sonnet 4.5)
 │       ├── modules/perception_text.py  LLM-powered (Gemini 3 Flash)
 │       └── storage/             Run events, receipts, approvals (JSONL)
-├── memory_service/              Python MemoryController (contract mock)
-│   ├── __init__.py
-│   ├── controller.py            BM25-lite ingest/retrieve/maintain
-│   ├── singleton.py             Process-level singleton
-│   └── types.py                 Pydantic contract types
-├── memvid_service/              Rust Axum HTTP sidecar (ready to compile)
-│   ├── Cargo.toml
-│   └── src/main.rs              Axum server for /memory/ingest|retrieve|maintain
+├── memory_service/              Python MemoryController (contract fallback)
+├── memvid/                      memvid-core Rust library (Tantivy BM25 + WAL)
+├── memvid_service/              Rust Axum HTTP sidecar (production memory layer)
+│   ├── Cargo.toml               (depends on memvid-core, features = ["lex"])
+│   ├── src/main.rs              PersistentMemoryStore + Axum routes
+│   └── data/
+│       ├── memory.mv2           WAL + Tantivy BM25 index (persistent)
+│       └── deleted_ids.txt      Append-only deletion log (persistent)
 ├── contract/
 │   └── schema.json              Authoritative cross-boundary schema
 └── tests/
-    └── test_hca_pipeline.py     Integration test suite (7 tests, all pass)
+    └── test_hca_pipeline.py     Integration test suite
 ```
 
 ---
 
 ## Contract Boundary (schema.json)
 
-Three endpoints define the narrow contract:
-- `POST /memory/ingest`    ← `CandidateMemory` in → `{memory_id}` out
-- `POST /memory/retrieve`  ← `RetrievalQuery` in → `[RetrievalHit]` out
-- `POST /memory/maintain`  ← empty in → `MaintenanceReport` out
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /memory/ingest | CandidateMemory → {memory_id} |
+| POST | /memory/retrieve | RetrievalQuery → [RetrievalHit] (Tantivy BM25 scored) |
+| POST | /memory/maintain | TTL expiry → MaintenanceReport |
+| GET | /memory/list | Paginated record list |
+| DELETE | /memory/:id | Hard delete (persisted in deleted_ids.txt) |
+| GET | /health | Liveness check → {"status":"ok","engine":"tantivy-bm25"} |
 
-**Swap to Rust**: Set `MEMORY_BACKEND=rust` + `MEMORY_SERVICE_URL=http://localhost:3031` to forward all calls to the Rust Axum sidecar.
+**Backend switch**: `MEMORY_BACKEND=rust` + `MEMORY_SERVICE_URL=http://localhost:3031`
 
 ---
 
-## API Endpoints
+## Python API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | /api/hca/run | Submit goal → run HCA pipeline |
+| POST | /api/hca/run | Submit goal → HCA pipeline result |
 | GET | /api/hca/run/{run_id} | Fetch run state + trace |
 | POST | /api/hca/run/{run_id}/approve | Approve pending action |
 | POST | /api/hca/run/{run_id}/deny | Deny pending action |
-| POST | /api/hca/memory/retrieve | Search memory (BM25) |
-| POST | /api/hca/memory/maintain | TTL expiry + stats |
+| POST | /api/hca/run/stream | SSE streaming pipeline trace |
+| POST | /api/hca/memory/retrieve | BM25 search |
+| POST | /api/hca/memory/maintain | TTL expiry |
+| GET | /api/hca/memory/list | List memories |
+| DELETE | /api/hca/memory/{id} | Delete memory |
 
 ---
 
@@ -70,9 +77,7 @@ Three endpoints define the narrow contract:
 - [x] Extracted and analyzed Hybrid-ai.zip
 - [x] Designed narrow contract schema (`contract/schema.json`)
 - [x] Created Python MemoryController with BM25 scoring (`memory_service/`)
-- [x] Created process-level singleton (`memory_service/singleton.py`)
-- [x] LLM-powered Planner (Claude Sonnet 4.5) with memory context + rule-based fallback
-- [x] LLM-powered TextPerception (Gemini 3 Flash) with rule-based fallback
+- [x] LLM-powered Planner (Claude Sonnet 4.5) + TextPerception (Gemini 3 Flash)
 - [x] Wired MemoryController into HCA runtime `_record_execution_memory`
 - [x] FastAPI backend with full HCA endpoint surface
 - [x] Rust Axum HTTP sidecar (compilable, ready to deploy)
@@ -80,41 +85,41 @@ Three endpoints define the narrow contract:
 - [x] Integration tests (7/7 passing)
 
 ### Session 2 (Apr 2025)
-- [x] White background theme with larger text (Inter font, 15-32px range)
-- [x] SSE streaming endpoint `POST /api/hca/run/stream` — emits each state-machine step live
-- [x] Frontend consumes SSE with `ReadableStream` — shows live trace before final result
-- [x] Internal events (`state_transition`, `recurrent_pass_completed`) filtered; only meaningful pipeline steps shown
-- [x] `_renderOutput` helper — formats LLM echo text with proper newlines (no raw JSON)
-
-- [x] Markdown renderer (`react-markdown` + `remark-gfm`) for agent output
+- [x] White background theme with larger text
+- [x] SSE streaming endpoint `POST /api/hca/run/stream`
+- [x] Frontend live-streaming trace via ReadableStream
+- [x] Markdown renderer (`react-markdown` + `remark-gfm`)
 
 ### Session 3 (Apr 2025)
-- [x] Installed Rust via rustup; compiled `/app/memvid_service/target/release/memvid-sidecar`
-- [x] Added `GET /memory/list` and `DELETE /memory/:id` endpoints to Rust Axum sidecar
-- [x] `list_records()` and `delete_record()` on Python MemoryController (with Rust delegation)
-- [x] `GET /api/hca/memory/list` and `DELETE /api/hca/memory/{id}` backend API endpoints
-- [x] Migrated 15 JSONL memories to Rust store; swapped `MEMORY_BACKEND=rust`
-- [x] `MemoryBrowser` slide-in panel: search, type-filter chips, paginated list, delete
+- [x] Installed Rust; compiled Axum sidecar
+- [x] Added `GET /memory/list` and `DELETE /memory/:id`
+- [x] Migrated 15 JSONL memories to Rust store; swapped to `MEMORY_BACKEND=rust`
+- [x] MemoryBrowser panel in frontend
+
+### Session 4 (Apr 2025)
+- [x] **Connected memvid-core crate** (Tantivy BM25 + WAL) to the Axum sidecar
+  - Dependency: `memvid-core = { path = "../memvid", default-features = false, features = ["lex"] }`
+  - Replaced handcrafted BM25 with real Tantivy search engine
+- [x] **Full WAL persistence**: memories stored in `data/memory.mv2` survive sidecar restarts
+- [x] **Deletion persistence**: deleted IDs written to `data/deleted_ids.txt`
+- [x] Startup frame scan: rebuilds in-memory HashMap from `.mv2` frames on boot
+- [x] Added `/health` endpoint for liveness checks
+- [x] Fixed DELETE 404 for non-existent IDs
+- [x] Added supervisor config (`supervisord_sidecar.conf`) for auto-restart
+- [x] 14/15 backend tests pass (iteration_3.json)
 
 ---
 
 ## Backlog
 
-### P0
-- [ ] Wire memory context into Planner's LLM prompt from persisted storage (currently uses in-process singleton, resets on restart — needs disk load at singleton init)
-- [ ] Add WebSocket streaming for real-time pipeline trace (currently blocking HTTP)
-
 ### P1
-- [ ] Compile and run the Rust Axum sidecar (`cd /app/memvid_service && cargo run --release`)
-- [ ] Connect the Rust sidecar to the actual `memvid` crate (Tantivy BM25, HNSW embeddings)
-- [ ] Session-based memory scoping (per-user memory isolation)
+- [ ] Add Critic module LLM integration (currently rule-based in Python HCA)
+- [ ] Session/user-scoped memory isolation (per-user memory partition)
 
 ### P2
-- [ ] Batch-commit optimization in Rust MemvidStore (`begin_batch()` / `commit_batch()`)
-- [ ] Add Critic module LLM integration (currently rule-based)
-- [ ] Add a Semantic memory store (separate from episodic)
-- [ ] Frontend: real-time streaming of agent trace steps
-- [ ] Frontend: memory browser panel (visualize stored memories)
+- [ ] Semantic memory store using HNSW (separate from episodic traces)
+- [ ] Batch-commit optimization in Rust sidecar
+- [ ] Frontend: MemoryBrowser to show real-time Tantivy search scores
 
 ---
 
@@ -122,12 +127,25 @@ Three endpoints define the narrow contract:
 
 ```bash
 # /app/backend/.env
-MONGO_URL=...
-DB_NAME=...
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=test_database
 EMERGENT_LLM_KEY=sk-emergent-b688eDdA08a2e28Ea8
-MEMORY_STORAGE_DIR=storage/memory   # relative to /app/hca cwd
-
-# To swap memory backend to Rust:
 MEMORY_BACKEND=rust
 MEMORY_SERVICE_URL=http://localhost:3031
+MEMORY_STORAGE_DIR=storage/memory
+
+# /app/memvid_service (via supervisor env)
+MEMORY_SERVICE_PORT=3031
+MEMORY_DATA_DIR=/app/memvid_service/data
+RUST_LOG=info
 ```
+
+---
+
+## Rust Sidecar Notes
+
+- Binary: `/app/memvid_service/target/release/memvid-sidecar`
+- Managed by: `sudo supervisorctl restart memvid-sidecar`
+- Logs: `/var/log/supervisor/memvid-sidecar.{out,err}.log`
+- Rebuild: `cd /app/memvid_service && ~/.cargo/bin/cargo build --release`
+- Data: `/app/memvid_service/data/memory.mv2` (WAL + Tantivy index)
