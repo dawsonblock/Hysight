@@ -77,9 +77,14 @@
       }
     }
   },
+  "_notes": {
+    "sidecar_only_fields": "user_id, embedding (CandidateMemory/RetrievalQuery), and mode (RetrievalQuery) are Rust-sidecar-only extensions. The Python MemoryController ignores these fields entirely."
+  },
   "endpoints": {
-    "POST /memory/ingest":   { "request": "$ref#/definitions/CandidateMemory",  "response": { "memory_id": "string | null" } },
-    "POST /memory/retrieve": { "request": "$ref#/definitions/RetrievalQuery",   "response": { "hits": "RetrievalHit[]" } },
-    "POST /memory/maintain": { "request": {},                                    "response": "$ref#/definitions/MaintenanceReport" }
+    "POST /memory/ingest":        { "request": "$ref#/definitions/CandidateMemory",  "response": { "memory_id": "string | null" } },
+    "POST /memory/retrieve":      { "request": "$ref#/definitions/RetrievalQuery",   "response": { "hits": "RetrievalHit[]" } },
+    "POST /memory/maintain":      { "request": {},                                    "response": "$ref#/definitions/MaintenanceReport" },
+    "GET /memory/list":           { "request": { "memory_type": "string?", "scope": "string?", "include_expired": "boolean", "limit": "integer", "offset": "integer" }, "response": { "records": "object[]", "total": "integer" } },
+    "DELETE /memory/{memory_id}": { "request": {},                                    "response": { "deleted": "boolean", "memory_id": "string" } }
   }
 }

@@ -1,12 +1,47 @@
 """
-Tests for memvid Rust sidecar (port 3031) and Python backend integration.
-Tests: ingest, retrieve (BM25), list, delete, persistence, TTL maintain
+External integration tests for the memvid Rust sidecar (port 3031) and
+Python backend integration.
+
+These tests are SKIPPED automatically when the sidecar is not reachable on
+localhost:3031. They are NOT fakes — they require the real Rust service to be
+running. To run them locally:
+
+    MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3031 pytest \
+        backend/tests/test_memvid_sidecar.py -v
+
+TestPersistence additionally requires supervisorctl and is only valid in a
+managed deployment environment.
+
+Tests covered: ingest, retrieve (BM25), list, delete, persistence, TTL maintain.
 """
+import shutil
+import socket
+import subprocess
+import time
+
 import pytest
 import requests
-import time
-import subprocess
 import os
+
+
+# ── Sidecar availability probe ────────────────────────────────────────────────
+
+def _probe_sidecar() -> bool:
+    try:
+        with socket.create_connection(("localhost", 3031), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+SIDECAR_REACHABLE = _probe_sidecar()
+
+pytestmark = pytest.mark.skipif(
+    not SIDECAR_REACHABLE,
+    reason="memvid sidecar not running on localhost:3031",
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 SIDECAR_URL = "http://localhost:3031"
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
@@ -179,6 +214,10 @@ class TestDelete:
 
 # ── 5. Persistence ────────────────────────────────────────────────────────────
 
+@pytest.mark.skipif(
+    not shutil.which("supervisorctl"),
+    reason="requires supervisorctl in PATH",
+)
 class TestPersistence:
     """Ingest → restart sidecar → list (records must survive)"""
 

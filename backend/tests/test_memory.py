@@ -1,84 +1,100 @@
-"""Memory API tests - list, filter, pagination, delete, 404"""
+"""Memory API tests — list, filter, pagination, delete, 404.
+
+All tests are self-contained: data is seeded directly via the MemoryController
+singleton (which is isolated to a tmp directory by the app_client fixture in
+conftest.py). No external service or pre-existing state is required.
+"""
+import sys
+from pathlib import Path
+
 import pytest
-import requests
-import os
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
-
-class TestMemoryList:
-    def test_list_returns_records(self):
-        r = requests.get(f"{BASE_URL}/api/hca/memory/list")
-        assert r.status_code == 200
-        data = r.json()
-        assert "records" in data
-        assert "total" in data
-        assert data["total"] > 0
-        assert len(data["records"]) > 0
-        print(f"Total records: {data['total']}")
-
-    def test_list_filter_by_type_episode(self):
-        r = requests.get(f"{BASE_URL}/api/hca/memory/list?memory_type=episode")
-        assert r.status_code == 200
-        data = r.json()
-        assert len(data["records"]) > 0
-        for rec in data["records"]:
-            assert rec["memory_type"] == "episode"
-        print(f"Episode records: {len(data['records'])}")
-
-    def test_list_pagination(self):
-        r = requests.get(f"{BASE_URL}/api/hca/memory/list?limit=2&offset=0")
-        assert r.status_code == 200
-        data = r.json()
-        assert len(data["records"]) == 2
-        print(f"Paginated: got {len(data['records'])} records")
-
-    def test_record_fields(self):
-        r = requests.get(f"{BASE_URL}/api/hca/memory/list?limit=1")
-        assert r.status_code == 200
-        rec = r.json()["records"][0]
-        assert "memory_id" in rec
-        assert "memory_type" in rec
-        assert "text" in rec
-        print(f"Record fields OK: {list(rec.keys())}")
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
-class TestMemoryDelete:
-    def test_delete_nonexistent_returns_404(self):
-        r = requests.delete(f"{BASE_URL}/api/hca/memory/nonexistent-id")
-        assert r.status_code == 404
-        print("404 for nonexistent id: OK")
+def _seed(text, memory_type="fact", scope="shared"):
+    from memory_service.singleton import get_controller
+    from memory_service import CandidateMemory
 
-    def test_create_via_run_then_delete(self):
-        # Get initial total
-        r0 = requests.get(f"{BASE_URL}/api/hca/memory/list")
-        initial_total = r0.json()["total"]
+    return get_controller().ingest(
+        CandidateMemory(raw_text=text, memory_type=memory_type, scope=scope)
+    )
 
-        # POST a run to create a memory
-        run_r = requests.post(f"{BASE_URL}/api/hca/run", json={"goal": "TEST_memory_delete echo hello"})
-        assert run_r.status_code == 200, f"Run failed: {run_r.text}"
-        print(f"Run created: {run_r.json().get('run_id')}")
 
-        # Wait a bit and check total increased
-        import time; time.sleep(2)
-        r1 = requests.get(f"{BASE_URL}/api/hca/memory/list")
-        new_total = r1.json()["total"]
-        print(f"Total after run: {new_total} (was {initial_total})")
-        # total should increase (or stay same if run didn't create memory)
+# ── List ───────────────────────────────────────────────────────────────────────
 
-        # Find a memory to delete
-        records = r1.json()["records"]
-        assert len(records) > 0
-        mem_id = records[0]["memory_id"]
+def test_list_returns_records(app_client):
+    _seed("alpha record")
+    _seed("beta record")
+    r = app_client.get("/api/hca/memory/list")
+    assert r.status_code == 200
+    data = r.json()
+    assert "records" in data
+    assert "total" in data
+    assert data["total"] == 2
+    assert len(data["records"]) == 2
 
-        # Delete it
-        del_r = requests.delete(f"{BASE_URL}/api/hca/memory/{mem_id}")
-        assert del_r.status_code == 200
-        data = del_r.json()
-        assert data.get("deleted") == True
-        print(f"Deleted memory {mem_id}: OK")
 
-        # Verify total decreased
-        r2 = requests.get(f"{BASE_URL}/api/hca/memory/list")
-        after_delete = r2.json()["total"]
-        assert after_delete == new_total - 1
-        print(f"Total after delete: {after_delete}: OK")
+def test_list_filter_by_type_episode(app_client):
+    _seed("some episode", memory_type="episode")
+    _seed("some fact", memory_type="fact")
+    r = app_client.get("/api/hca/memory/list?memory_type=episode")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["records"]) == 1
+    assert data["records"][0]["memory_type"] == "episode"
+
+
+def test_list_pagination(app_client):
+    for i in range(3):
+        _seed(f"record {i}")
+    r = app_client.get("/api/hca/memory/list?limit=2&offset=0")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["records"]) == 2
+    assert data["total"] == 3
+
+
+def test_record_fields(app_client):
+    _seed("field check record")
+    r = app_client.get("/api/hca/memory/list?limit=1")
+    assert r.status_code == 200
+    rec = r.json()["records"][0]
+    assert isinstance(rec["memory_id"], str)
+    assert isinstance(rec["memory_type"], str)
+    assert isinstance(rec["raw_text"], str)
+    assert "scope" in rec
+    assert "stored_at" in rec
+    assert "expired" in rec
+    assert rec["expired"] is False
+
+
+# ── Delete ────────────────────────────────────────────────────────────────────
+
+def test_delete_nonexistent_returns_404(app_client):
+    r = app_client.delete("/api/hca/memory/nonexistent-id")
+    assert r.status_code == 404
+
+
+def test_delete_removes_record(app_client):
+    _seed("to be deleted")
+
+    # Confirm it's there
+    list_r = app_client.get("/api/hca/memory/list")
+    assert list_r.status_code == 200
+    records = list_r.json()["records"]
+    assert len(records) == 1
+    mem_id = records[0]["memory_id"]
+
+    # Delete
+    del_r = app_client.delete(f"/api/hca/memory/{mem_id}")
+    assert del_r.status_code == 200
+    data = del_r.json()
+    assert data.get("deleted") is True
+    assert data.get("memory_id") == mem_id
+
+    # Verify gone
+    r2 = app_client.get("/api/hca/memory/list")
+    assert r2.json()["total"] == 0

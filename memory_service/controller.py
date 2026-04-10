@@ -19,9 +19,17 @@ from typing import Any, Dict, List, Optional
 
 from .types import CandidateMemory, MaintenanceReport, RetrievalHit, RetrievalQuery
 
-_BACKEND = os.environ.get("MEMORY_BACKEND", "python")
-_SERVICE_URL = os.environ.get("MEMORY_SERVICE_URL", "")
 _log = logging.getLogger(__name__)
+
+
+def _get_backend() -> str:
+    """Read MEMORY_BACKEND at call time so monkeypatch works in tests."""
+    return os.environ.get("MEMORY_BACKEND", "python")
+
+
+def _get_service_url() -> str:
+    """Read MEMORY_SERVICE_URL at call time so monkeypatch works in tests."""
+    return os.environ.get("MEMORY_SERVICE_URL", "")
 
 # ── Lazy-loaded fastembed model ───────────────────────────────────────────────
 
@@ -114,7 +122,7 @@ class MemoryController:
 
     def ingest(self, candidate: CandidateMemory) -> Optional[str]:
         """Store a candidate memory. Returns assigned memory_id."""
-        if _BACKEND == "rust" and _SERVICE_URL:
+        if _get_backend() == "rust" and _get_service_url():
             return self._rust_ingest(candidate)
         memory_id = str(uuid.uuid4())
         record: Dict[str, Any] = {
@@ -142,7 +150,7 @@ class MemoryController:
 
     def retrieve(self, query: RetrievalQuery) -> List[RetrievalHit]:
         """Retrieve memories matching query using BM25 scoring."""
-        if _BACKEND == "rust" and _SERVICE_URL:
+        if _get_backend() == "rust" and _get_service_url():
             return self._rust_retrieve(query)
         candidates = [
             r for r in self._records
@@ -192,7 +200,7 @@ class MemoryController:
         offset: int = 0,
     ):
         """Return paginated list of records, newest first. Returns (records, total)."""
-        if _BACKEND == "rust" and _SERVICE_URL:
+        if _get_backend() == "rust" and _get_service_url():
             return self._rust_list(memory_type, scope, include_expired, limit, offset)
         filtered = [
             r for r in self._records
@@ -205,7 +213,7 @@ class MemoryController:
 
     def delete_record(self, memory_id: str) -> bool:
         """Mark a record as expired (soft delete). Returns True if found."""
-        if _BACKEND == "rust" and _SERVICE_URL:
+        if _get_backend() == "rust" and _get_service_url():
             return self._rust_delete(memory_id)
         before = len(self._records)
         self._records = [r for r in self._records if r.get("memory_id") != memory_id]
@@ -224,7 +232,7 @@ class MemoryController:
 
     def maintain(self) -> MaintenanceReport:
         """Expire stale records and return maintenance stats."""
-        if _BACKEND == "rust" and _SERVICE_URL:
+        if _get_backend() == "rust" and _get_service_url():
             return self._rust_maintain()
         now = datetime.now(timezone.utc)
         expired_ids: List[str] = []
@@ -257,19 +265,19 @@ class MemoryController:
 
     def _rust_ingest(self, candidate: CandidateMemory) -> Optional[str]:
         import httpx
-        r = httpx.post(f"{_SERVICE_URL}/memory/ingest", json=candidate.model_dump(mode="json"), timeout=10)
+        r = httpx.post(f"{_get_service_url()}/memory/ingest", json=candidate.model_dump(mode="json"), timeout=10)
         r.raise_for_status()
         return r.json().get("memory_id")
 
     def _rust_retrieve(self, query: RetrievalQuery) -> List[RetrievalHit]:
         import httpx
-        r = httpx.post(f"{_SERVICE_URL}/memory/retrieve", json=query.model_dump(mode="json"), timeout=10)
+        r = httpx.post(f"{_get_service_url()}/memory/retrieve", json=query.model_dump(mode="json"), timeout=10)
         r.raise_for_status()
         return [RetrievalHit.model_validate(h) for h in r.json().get("hits", [])]
 
     def _rust_maintain(self) -> MaintenanceReport:
         import httpx
-        r = httpx.post(f"{_SERVICE_URL}/memory/maintain", json={}, timeout=10)
+        r = httpx.post(f"{_get_service_url()}/memory/maintain", json={}, timeout=10)
         r.raise_for_status()
         return MaintenanceReport.model_validate(r.json())
 
@@ -280,13 +288,13 @@ class MemoryController:
             params["memory_type"] = memory_type
         if scope:
             params["scope"] = scope
-        r = httpx.get(f"{_SERVICE_URL}/memory/list", params=params, timeout=10)
+        r = httpx.get(f"{_get_service_url()}/memory/list", params=params, timeout=10)
         r.raise_for_status()
         data = r.json()
         return data.get("records", []), data.get("total", 0)
 
     def _rust_delete(self, memory_id: str) -> bool:
         import httpx
-        r = httpx.delete(f"{_SERVICE_URL}/memory/{memory_id}", timeout=10)
+        r = httpx.delete(f"{_get_service_url()}/memory/{memory_id}", timeout=10)
         r.raise_for_status()
         return r.json().get("deleted", False)
