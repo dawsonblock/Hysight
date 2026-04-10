@@ -19,7 +19,6 @@ from pydantic import ValidationError
 
 from .config import (
     MemorySettings,
-    load_memory_settings,
     probe_memory_service,
     validate_memory_backend_startup,
 )
