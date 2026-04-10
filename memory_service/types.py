@@ -7,9 +7,29 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+MemoryType = Literal[
+    "trace",
+    "episode",
+    "fact",
+    "preference",
+    "goalstate",
+    "procedure",
+]
+ScopeType = Literal["private", "task", "project", "shared"]
+IntentType = Literal[
+    "general",
+    "historical_fact",
+    "episodic_recall",
+    "belief_check",
+]
+
+
+class ContractModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 def _utc_now() -> datetime:
@@ -22,71 +42,87 @@ def _new_id() -> str:
 
 # ─── inbound ──────────────────────────────────────────────────────────────────
 
-class Provenance(BaseModel):
+class Provenance(ContractModel):
     source_type: str = "chat"          # chat | file | tool | system | external
-    source_id:   str = Field(default_factory=_new_id)
+    source_id: str = Field(default_factory=_new_id)
     source_label: Optional[str] = None
-    trust_weight: float = 0.5
+    trust_weight: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
-class CandidateMemory(BaseModel):
+class CandidateMemory(ContractModel):
     candidate_id: str = Field(default_factory=_new_id)
-    raw_text:    str
-    memory_type: str = "trace"         # trace | episode | fact | preference | goalstate | procedure
-    entity:      str = ""
-    slot:        str = ""
-    value:       str = ""
-    confidence:  float = 0.5
-    salience:    float = 0.5
-    scope:       str = "private"       # private | task | project | shared
-    run_id:      Optional[str] = None
+    raw_text: str = Field(min_length=1)
+    memory_type: MemoryType = "trace"
+    entity: str = ""
+    slot: str = ""
+    value: str = ""
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    salience: float = Field(default=0.5, ge=0.0, le=1.0)
+    scope: ScopeType = "private"
+    run_id: Optional[str] = None
     workflow_key: Optional[str] = None
-    source:      Provenance = Field(default_factory=Provenance)
-    tags:        List[str] = Field(default_factory=list)
-    metadata:    Dict[str, Any] = Field(default_factory=dict)
-    # Rust-sidecar-only: session isolation. Python MemoryController ignores this field.
-    user_id:     str = "default"
-    # Rust-sidecar-only: pre-computed embedding. Python path uses BM25 regardless.
-    embedding:   Optional[List[float]] = None
+    source: Provenance = Field(default_factory=Provenance)
+    tags: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-class RetrievalQuery(BaseModel):
-    query_text:      str
-    top_k:           int = 10
-    memory_layer:    Optional[str] = None
-    scope:           Optional[str] = None
-    run_id:          Optional[str] = None
+class RetrievalQuery(ContractModel):
+    query_text: str = Field(min_length=1)
+    top_k: int = Field(default=10, ge=1, le=100)
+    memory_layer: Optional[str] = None
+    scope: Optional[ScopeType] = None
+    run_id: Optional[str] = None
     include_expired: bool = False
-    intent:          str = "general"   # general | historical_fact | episodic_recall | belief_check
-    # Rust-sidecar-only: session isolation. Python MemoryController ignores this field.
-    user_id:         str = "default"
-    # Rust-sidecar-only: pre-computed query embedding for semantic/hybrid search.
-    embedding:       Optional[List[float]] = None
-    # Rust-sidecar-only: "bm25" | "semantic" | "hybrid". Python path always uses BM25.
-    mode:            str = "bm25"
+    intent: IntentType = "general"
 
 
 # ─── outbound ─────────────────────────────────────────────────────────────────
 
-class RetrievalHit(BaseModel):
-    memory_id:    Optional[str] = None
-    belief_id:    Optional[str] = None
+class RetrievalHit(ContractModel):
+    memory_id: Optional[str] = None
+    belief_id: Optional[str] = None
     memory_layer: str = "trace"
-    memory_type:  Optional[str] = None
-    entity:       Optional[str] = None
-    slot:         Optional[str] = None
-    value:        Optional[str] = None
-    text:         str
-    score:        float = 0.0
-    confidence:   float = 0.5
-    stored_at:    datetime = Field(default_factory=_utc_now)
-    expired:      bool = False
-    metadata:     Dict[str, Any] = Field(default_factory=dict)
+    memory_type: Optional[MemoryType] = None
+    entity: Optional[str] = None
+    slot: Optional[str] = None
+    value: Optional[str] = None
+    text: str
+    score: float = 0.0
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    stored_at: datetime = Field(default_factory=_utc_now)
+    expired: bool = False
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-class MaintenanceReport(BaseModel):
+class RetrievalResponse(ContractModel):
+    hits: List[RetrievalHit] = Field(default_factory=list)
+
+
+class MemoryListItem(ContractModel):
+    memory_id: str
+    memory_layer: str = "trace"
+    memory_type: MemoryType
+    text: str
+    scope: ScopeType = "private"
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    stored_at: datetime = Field(default_factory=_utc_now)
+    expired: bool = False
+    run_id: Optional[str] = None
+
+
+class MemoryListResponse(ContractModel):
+    records: List[MemoryListItem] = Field(default_factory=list)
+    total: int = Field(default=0, ge=0)
+
+
+class DeleteMemoryResponse(ContractModel):
+    deleted: bool
+    memory_id: str
+
+
+class MaintenanceReport(ContractModel):
     durable_memory_count: int = 0
-    expired_count:        int = 0
-    expired_ids:          List[str] = Field(default_factory=list)
+    expired_count: int = 0
+    expired_ids: List[str] = Field(default_factory=list)
     compaction_supported: bool = False
-    compactor_status:     str = "unsupported"
+    compactor_status: str = "unsupported"

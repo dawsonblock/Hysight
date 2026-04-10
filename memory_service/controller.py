@@ -9,45 +9,84 @@ from __future__ import annotations
 
 import json
 import logging
-import math
-import os
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .types import CandidateMemory, MaintenanceReport, RetrievalHit, RetrievalQuery
+from pydantic import ValidationError
+
+from .config import (
+    MemorySettings,
+    load_memory_settings,
+    probe_memory_service,
+    validate_memory_backend_startup,
+)
+from .types import (
+    CandidateMemory,
+    MaintenanceReport,
+    MemoryListItem,
+    MemoryListResponse,
+    RetrievalHit,
+    RetrievalQuery,
+    RetrievalResponse,
+)
 
 _log = logging.getLogger(__name__)
 
 
-def _get_backend() -> str:
-    """Read MEMORY_BACKEND at call time so monkeypatch works in tests."""
-    return os.environ.get("MEMORY_BACKEND", "python")
+class MemoryBackendError(RuntimeError):
+    """Raised when the configured memory backend cannot serve a request."""
 
 
-def _get_service_url() -> str:
-    """Read MEMORY_SERVICE_URL at call time so monkeypatch works in tests."""
-    return os.environ.get("MEMORY_SERVICE_URL", "")
 
-# ── Lazy-loaded fastembed model ───────────────────────────────────────────────
+def _coerce_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        normalized = value.replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized)
+    return datetime.now(timezone.utc)
 
-_embedding_model = None
 
-
-def _embed(text: str) -> Optional[List[float]]:
-    """Return a 384-dim embedding vector, or None if fastembed is unavailable."""
-    global _embedding_model
+def _safe_parse_stored_at(record: Dict[str, Any]) -> datetime:
     try:
-        if _embedding_model is None:
-            from fastembed import TextEmbedding  # type: ignore
-            _embedding_model = TextEmbedding("BAAI/bge-small-en-v1.5")
-        vecs = list(_embedding_model.embed([text]))
-        return vecs[0].tolist()
-    except Exception as exc:
-        _log.debug("Embedding skipped: %s", exc)
-        return None
+        return _coerce_datetime(record.get("stored_at"))
+    except (TypeError, ValueError):
+        return datetime.now(timezone.utc)
+
+
+def _normalize_list_item(record: Dict[str, Any]) -> MemoryListItem:
+    return MemoryListItem(
+        memory_id=str(record.get("memory_id", "")),
+        memory_layer=str(record.get("memory_layer") or "trace"),
+        memory_type=record.get("memory_type", "trace"),
+        text=record.get("text") or record.get("raw_text") or "",
+        scope=record.get("scope", "private"),
+        confidence=record.get("confidence", 0.5),
+        stored_at=_safe_parse_stored_at(record),
+        expired=bool(record.get("expired", False)),
+        run_id=record.get("run_id"),
+    )
+
+
+def _normalize_hit(record: Dict[str, Any], score: float) -> RetrievalHit:
+    return RetrievalHit(
+        memory_id=record.get("memory_id"),
+        belief_id=record.get("belief_id"),
+        memory_layer=record.get("memory_layer", "trace"),
+        memory_type=record.get("memory_type"),
+        entity=record.get("entity"),
+        slot=record.get("slot"),
+        value=record.get("value"),
+        text=record.get("text") or record.get("raw_text") or "",
+        score=score,
+        confidence=record.get("confidence", 0.5),
+        stored_at=_safe_parse_stored_at(record),
+        expired=bool(record.get("expired", False)),
+        metadata=record.get("metadata", {}),
+    )
 
 
 class MemoryController:
@@ -63,11 +102,24 @@ class MemoryController:
     forwarded to the Rust memvid HTTP sidecar instead (transparent swap).
     """
 
-    def __init__(self, storage_dir: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        storage_dir: Optional[str] = None,
+        settings: Optional[MemorySettings] = None,
+    ) -> None:
+        self._settings = settings or validate_memory_backend_startup()
+        if storage_dir is not None:
+            self._settings = MemorySettings(
+                backend=self._settings.backend,
+                storage_dir=Path(storage_dir),
+                service_url=self._settings.service_url,
+            )
+        if self._settings.uses_sidecar:
+            probe_memory_service(self._settings)
         self._records: List[Dict[str, Any]] = []
-        self._storage_dir = storage_dir
-        if storage_dir:
-            Path(storage_dir).mkdir(parents=True, exist_ok=True)
+        self._storage_dir = str(self._settings.storage_dir)
+        if not self._settings.uses_sidecar:
+            self._settings.storage_dir.mkdir(parents=True, exist_ok=True)
             self._load_from_disk()
 
     # ── persistence helpers ───────────────────────────────────────────────────
@@ -122,7 +174,7 @@ class MemoryController:
 
     def ingest(self, candidate: CandidateMemory) -> Optional[str]:
         """Store a candidate memory. Returns assigned memory_id."""
-        if _get_backend() == "rust" and _get_service_url():
+        if self._settings.uses_sidecar:
             return self._rust_ingest(candidate)
         memory_id = str(uuid.uuid4())
         record: Dict[str, Any] = {
@@ -150,7 +202,7 @@ class MemoryController:
 
     def retrieve(self, query: RetrievalQuery) -> List[RetrievalHit]:
         """Retrieve memories matching query using BM25 scoring."""
-        if _get_backend() == "rust" and _get_service_url():
+        if self._settings.uses_sidecar:
             return self._rust_retrieve(query)
         candidates = [
             r for r in self._records
@@ -165,30 +217,9 @@ class MemoryController:
         ]
         scored = [(s, r) for s, r in scored if s > 0.0]
         scored.sort(key=lambda x: x[0], reverse=True)
-        hits = []
+        hits: List[RetrievalHit] = []
         for score, rec in scored[: query.top_k]:
-            stored_raw = rec.get("stored_at", datetime.now(timezone.utc).isoformat())
-            stored_at = (
-                datetime.fromisoformat(stored_raw)
-                if isinstance(stored_raw, str)
-                else stored_raw
-            )
-            hits.append(
-                RetrievalHit(
-                    memory_id=rec.get("memory_id"),
-                    memory_layer=rec.get("memory_layer", "trace"),
-                    memory_type=rec.get("memory_type"),
-                    entity=rec.get("entity"),
-                    slot=rec.get("slot"),
-                    value=rec.get("value"),
-                    text=rec.get("raw_text", ""),
-                    score=score,
-                    confidence=rec.get("confidence", 0.5),
-                    stored_at=stored_at,
-                    expired=rec.get("expired", False),
-                    metadata=rec.get("metadata", {}),
-                )
-            )
+            hits.append(_normalize_hit(rec, score))
         return hits
 
     def list_records(
@@ -200,7 +231,7 @@ class MemoryController:
         offset: int = 0,
     ):
         """Return paginated list of records, newest first. Returns (records, total)."""
-        if _get_backend() == "rust" and _get_service_url():
+        if self._settings.uses_sidecar:
             return self._rust_list(memory_type, scope, include_expired, limit, offset)
         filtered = [
             r for r in self._records
@@ -209,11 +240,15 @@ class MemoryController:
             and (scope is None or r.get("scope") == scope)
         ]
         filtered.sort(key=lambda r: r.get("stored_at", ""), reverse=True)
-        return filtered[offset : offset + limit], len(filtered)
+        records = [
+            _normalize_list_item(r)
+            for r in filtered[offset : offset + limit]
+        ]
+        return records, len(filtered)
 
     def delete_record(self, memory_id: str) -> bool:
-        """Mark a record as expired (soft delete). Returns True if found."""
-        if _get_backend() == "rust" and _get_service_url():
+        """Delete a record by ID. Returns True if found."""
+        if self._settings.uses_sidecar:
             return self._rust_delete(memory_id)
         before = len(self._records)
         self._records = [r for r in self._records if r.get("memory_id") != memory_id]
@@ -232,7 +267,7 @@ class MemoryController:
 
     def maintain(self) -> MaintenanceReport:
         """Expire stale records and return maintenance stats."""
-        if _get_backend() == "rust" and _get_service_url():
+        if self._settings.uses_sidecar:
             return self._rust_maintain()
         now = datetime.now(timezone.utc)
         expired_ids: List[str] = []
@@ -249,7 +284,7 @@ class MemoryController:
                         rec["expired"] = True
                         expired_ids.append(rec["memory_id"])
                         continue
-                except Exception:
+                except (TypeError, ValueError):
                     pass
             if rec.get("memory_type") in {"fact", "episode", "preference", "goalstate", "procedure"}:
                 durable += 1
@@ -263,38 +298,92 @@ class MemoryController:
 
     # ── Rust HTTP delegation ──────────────────────────────────────────────────
 
+    def _request(self, method: str, path: str, **kwargs: Any):
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - dependency validation
+            raise MemoryBackendError(
+                "httpx must be installed when MEMORY_BACKEND=rust"
+            ) from exc
+
+        try:
+            response = httpx.request(
+                method,
+                self._settings.endpoint(path),
+                timeout=10,
+                **kwargs,
+            )
+            response.raise_for_status()
+            return response
+        except httpx.HTTPError as exc:
+            raise MemoryBackendError(f"Rust memory backend request failed: {exc}") from exc
+
+    @staticmethod
+    def _parse_json_response(response) -> Dict[str, Any]:
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise MemoryBackendError("Rust memory backend returned invalid JSON") from exc
+
     def _rust_ingest(self, candidate: CandidateMemory) -> Optional[str]:
-        import httpx
-        r = httpx.post(f"{_get_service_url()}/memory/ingest", json=candidate.model_dump(mode="json"), timeout=10)
-        r.raise_for_status()
-        return r.json().get("memory_id")
+        response = self._request(
+            "POST",
+            "/memory/ingest",
+            json=candidate.model_dump(mode="json"),
+        )
+        return self._parse_json_response(response).get("memory_id")
 
     def _rust_retrieve(self, query: RetrievalQuery) -> List[RetrievalHit]:
-        import httpx
-        r = httpx.post(f"{_get_service_url()}/memory/retrieve", json=query.model_dump(mode="json"), timeout=10)
-        r.raise_for_status()
-        return [RetrievalHit.model_validate(h) for h in r.json().get("hits", [])]
+        response = self._request(
+            "POST",
+            "/memory/retrieve",
+            json=query.model_dump(mode="json"),
+        )
+        payload = self._parse_json_response(response)
+        try:
+            return RetrievalResponse.model_validate(payload).hits
+        except ValidationError as exc:
+            raise MemoryBackendError(
+                "Rust memory backend returned an invalid retrieve payload"
+            ) from exc
 
     def _rust_maintain(self) -> MaintenanceReport:
-        import httpx
-        r = httpx.post(f"{_get_service_url()}/memory/maintain", json={}, timeout=10)
-        r.raise_for_status()
-        return MaintenanceReport.model_validate(r.json())
+        response = self._request("POST", "/memory/maintain", json={})
+        try:
+            return MaintenanceReport.model_validate(self._parse_json_response(response))
+        except ValidationError as exc:
+            raise MemoryBackendError(
+                "Rust memory backend returned an invalid maintenance payload"
+            ) from exc
 
     def _rust_list(self, memory_type, scope, include_expired, limit, offset):
-        import httpx
-        params = {"limit": limit, "offset": offset, "include_expired": str(include_expired).lower()}
+        params = {
+            "limit": limit,
+            "offset": offset,
+            "include_expired": str(include_expired).lower(),
+        }
         if memory_type:
             params["memory_type"] = memory_type
         if scope:
             params["scope"] = scope
-        r = httpx.get(f"{_get_service_url()}/memory/list", params=params, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        return data.get("records", []), data.get("total", 0)
+        response = self._request("GET", "/memory/list", params=params)
+        payload = self._parse_json_response(response)
+        try:
+            list_response = MemoryListResponse.model_validate(
+                {
+                    "records": [
+                        _normalize_list_item(record).model_dump(mode="json")
+                        for record in payload.get("records", [])
+                    ],
+                    "total": payload.get("total", 0),
+                }
+            )
+        except ValidationError as exc:
+            raise MemoryBackendError(
+                "Rust memory backend returned an invalid list payload"
+            ) from exc
+        return list_response.records, list_response.total
 
     def _rust_delete(self, memory_id: str) -> bool:
-        import httpx
-        r = httpx.delete(f"{_get_service_url()}/memory/{memory_id}", timeout=10)
-        r.raise_for_status()
-        return r.json().get("deleted", False)
+        response = self._request("DELETE", f"/memory/{memory_id}")
+        return bool(self._parse_json_response(response).get("deleted", False))

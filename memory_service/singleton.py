@@ -6,9 +6,9 @@ Import pattern:
 """
 from __future__ import annotations
 
-import os
 from typing import Optional
 
+from .config import validate_memory_backend_startup
 from .controller import MemoryController
 
 _controller: Optional[MemoryController] = None
@@ -18,6 +18,6 @@ def get_controller() -> MemoryController:
     """Return (or lazily create) the shared MemoryController instance."""
     global _controller
     if _controller is None:
-        storage_dir = os.environ.get("MEMORY_STORAGE_DIR", "storage/memory")
-        _controller = MemoryController(storage_dir=storage_dir)
+        settings = validate_memory_backend_startup()
+        _controller = MemoryController(settings=settings)
     return _controller

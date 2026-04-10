@@ -73,12 +73,32 @@ class _FakeSidecar:
     def ingest(self, request, context):
         data = request.json()
         mid = str(uuid.uuid4())
-        record = {**data, "memory_id": mid, "stored_at": "2026-01-01T00:00:00Z", "expired": False}
+        record = {
+            **data,
+            "memory_id": mid,
+            "memory_layer": "trace",
+            "stored_at": "2026-01-01T00:00:00Z",
+            "expired": False,
+            "metadata": data.get("metadata", {}),
+        }
         self._store[mid] = record
         return {"memory_id": mid}
 
     def list(self, request, context):
-        records = list(self._store.values())
+        records = [
+            {
+                "memory_id": record["memory_id"],
+                "memory_layer": record.get("memory_layer", "trace"),
+                "memory_type": record.get("memory_type", "fact"),
+                "text": record.get("raw_text", ""),
+                "scope": record.get("scope", "private"),
+                "confidence": record.get("confidence", 0.5),
+                "stored_at": record["stored_at"],
+                "expired": record.get("expired", False),
+                "run_id": record.get("run_id"),
+            }
+            for record in self._store.values()
+        ]
         return {"records": records, "total": len(records)}
 
     def retrieve(self, request, context):
@@ -93,11 +113,18 @@ class _FakeSidecar:
         return {
             "hits": [
                 {
+                    "memory_layer": m.get("memory_layer", "trace"),
                     "text": m["raw_text"],
                     "score": float(max(1, _overlap(m))),
                     "memory_type": m.get("memory_type", "fact"),
                     "memory_id": m["memory_id"],
+                    "entity": m.get("entity"),
+                    "slot": m.get("slot"),
+                    "value": m.get("value"),
+                    "confidence": m.get("confidence", 0.5),
                     "stored_at": m["stored_at"],
+                    "expired": m.get("expired", False),
+                    "metadata": m.get("metadata", {}),
                 }
                 for m in ranked
             ]
@@ -107,7 +134,7 @@ class _FakeSidecar:
         mid = request.path.rsplit("/", 1)[-1]
         if mid in self._store:
             del self._store[mid]
-            return {}
+            return {"deleted": True, "memory_id": mid}
         context.status_code = 404
         return {"error": "not found"}
 
@@ -118,6 +145,13 @@ class _FakeSidecar:
             "expired_ids": [],
             "compaction_supported": False,
             "compactor_status": "ok",
+        }
+
+    def health(self, request, context):
+        return {
+            "status": "ok",
+            "engine": "mock-bm25",
+            "user_stores": 1,
         }
 
 
@@ -141,6 +175,7 @@ def sidecar():
         m.get(f"{SIDECAR_URL}/memory/list", json=fake.list)
         m.post(f"{SIDECAR_URL}/memory/retrieve", json=fake.retrieve)
         m.post(f"{SIDECAR_URL}/memory/maintain", json=fake.maintain)
+        m.get(f"{SIDECAR_URL}/health", json=fake.health)
         m.delete(
             re.compile(rf"{re.escape(SIDECAR_URL)}/memory/.+"),
             json=fake.delete,
@@ -166,6 +201,10 @@ def ingest(text, memory_type="fact", scope="shared", tags=None, slot=None):
 
 def list_memories():
     return requests.get(f"{SIDECAR_URL}/memory/list", timeout=10)
+
+
+def health():
+    return requests.get(f"{SIDECAR_URL}/health", timeout=10)
 
 
 def retrieve(query, top_k=5):
@@ -218,6 +257,10 @@ class TestList:
         assert "total" in data
         assert isinstance(data["records"], list)
         assert data["total"] == len(data["records"])
+        if data["records"]:
+            record = data["records"][0]
+            assert "text" in record
+            assert "raw_text" not in record
 
     def test_list_count_increases_after_ingest(self):
         before = list_memories().json()["total"]
@@ -262,6 +305,11 @@ class TestRetrieve:
         data = r.json()
         assert "hits" in data, f"No 'hits' key: {data}"
         assert len(data["hits"]) > 0
+        hit = data["hits"][0]
+        assert hit["memory_layer"] == "trace"
+        assert isinstance(hit["confidence"], float)
+        assert isinstance(hit["metadata"], dict)
+        assert "raw_text" not in hit
 
     def test_retrieve_scores_are_positive(self):
         r = retrieve("dark mode UI preference")
@@ -303,6 +351,8 @@ class TestDelete:
         # delete it
         dr = delete_memory(mid)
         assert dr.status_code in (200, 204), f"Delete failed: {dr.status_code} {dr.text}"
+        if dr.status_code == 200:
+            assert dr.json() == {"deleted": True, "memory_id": mid}
 
         # verify it's gone from list
         records = list_memories().json()["records"]
@@ -371,3 +421,13 @@ class TestMaintain:
     def test_maintain_returns_200(self):
         r = requests.post(f"{SIDECAR_URL}/memory/maintain", timeout=10)
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+
+
+class TestHealth:
+    """GET /health — sidecar liveness contract."""
+
+    def test_health_returns_ok(self):
+        r = health()
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["status"] == "ok"

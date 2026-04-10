@@ -5,6 +5,7 @@
   "definitions": {
     "Provenance": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["source_type", "source_id", "trust_weight"],
       "properties": {
         "source_type": { "type": "string", "enum": ["chat", "file", "tool", "system", "external"] },
@@ -15,10 +16,11 @@
     },
     "CandidateMemory": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["raw_text", "memory_type"],
       "properties": {
         "candidate_id":  { "type": "string" },
-        "raw_text":      { "type": "string" },
+        "raw_text":      { "type": "string", "minLength": 1 },
         "memory_type":   { "type": "string", "enum": ["trace","episode","fact","preference","goalstate","procedure"] },
         "entity":        { "type": "string", "default": "" },
         "slot":          { "type": "string", "default": "" },
@@ -35,12 +37,13 @@
     },
     "RetrievalQuery": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["query_text"],
       "properties": {
-        "query_text":       { "type": "string" },
+        "query_text":       { "type": "string", "minLength": 1 },
         "top_k":            { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
         "memory_layer":     { "type": ["string", "null"] },
-        "scope":            { "type": ["string", "null"] },
+        "scope":            { "type": ["string", "null"], "enum": ["private", "task", "project", "shared", null] },
         "run_id":           { "type": ["string", "null"] },
         "include_expired":  { "type": "boolean", "default": false },
         "intent":           { "type": "string", "enum": ["general","historical_fact","episodic_recall","belief_check"], "default": "general" }
@@ -48,25 +51,75 @@
     },
     "RetrievalHit": {
       "type": "object",
-      "required": ["text", "score", "memory_layer", "expired"],
+      "additionalProperties": false,
+      "required": ["text", "score", "memory_layer", "stored_at", "expired"],
       "properties": {
         "memory_id":    { "type": ["string", "null"] },
         "belief_id":    { "type": ["string", "null"] },
         "memory_layer": { "type": "string" },
-        "memory_type":  { "type": ["string", "null"] },
+        "memory_type":  { "type": ["string", "null"], "enum": ["trace","episode","fact","preference","goalstate","procedure", null] },
         "entity":       { "type": ["string", "null"] },
         "slot":         { "type": ["string", "null"] },
         "value":        { "type": ["string", "null"] },
         "text":         { "type": "string" },
         "score":        { "type": "number" },
-        "confidence":   { "type": "number" },
+        "confidence":   { "type": "number", "minimum": 0.0, "maximum": 1.0 },
         "stored_at":    { "type": "string", "format": "date-time" },
         "expired":      { "type": "boolean" },
         "metadata":     { "type": "object" }
       }
     },
+    "RetrievalResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hits"],
+      "properties": {
+        "hits": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RetrievalHit" }
+        }
+      }
+    },
+    "MemoryListItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory_id", "memory_layer", "memory_type", "text", "scope", "confidence", "stored_at", "expired"],
+      "properties": {
+        "memory_id":    { "type": "string" },
+        "memory_layer": { "type": "string" },
+        "memory_type":  { "type": "string", "enum": ["trace","episode","fact","preference","goalstate","procedure"] },
+        "text":         { "type": "string" },
+        "scope":        { "type": "string", "enum": ["private", "task", "project", "shared"] },
+        "confidence":   { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "stored_at":    { "type": "string", "format": "date-time" },
+        "expired":      { "type": "boolean" },
+        "run_id":       { "type": ["string", "null"] }
+      }
+    },
+    "MemoryListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "total"],
+      "properties": {
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/MemoryListItem" }
+        },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "DeleteMemoryResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deleted", "memory_id"],
+      "properties": {
+        "deleted":   { "type": "boolean" },
+        "memory_id": { "type": "string" }
+      }
+    },
     "MaintenanceReport": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["durable_memory_count", "expired_count"],
       "properties": {
         "durable_memory_count": { "type": "integer" },
@@ -77,14 +130,11 @@
       }
     }
   },
-  "_notes": {
-    "sidecar_only_fields": "user_id, embedding (CandidateMemory/RetrievalQuery), and mode (RetrievalQuery) are Rust-sidecar-only extensions. The Python MemoryController ignores these fields entirely."
-  },
   "endpoints": {
     "POST /memory/ingest":        { "request": "$ref#/definitions/CandidateMemory",  "response": { "memory_id": "string | null" } },
-    "POST /memory/retrieve":      { "request": "$ref#/definitions/RetrievalQuery",   "response": { "hits": "RetrievalHit[]" } },
+    "POST /memory/retrieve":      { "request": "$ref#/definitions/RetrievalQuery",   "response": "$ref#/definitions/RetrievalResponse" },
     "POST /memory/maintain":      { "request": {},                                    "response": "$ref#/definitions/MaintenanceReport" },
-    "GET /memory/list":           { "request": { "memory_type": "string?", "scope": "string?", "include_expired": "boolean", "limit": "integer", "offset": "integer" }, "response": { "records": "object[]", "total": "integer" } },
-    "DELETE /memory/{memory_id}": { "request": {},                                    "response": { "deleted": "boolean", "memory_id": "string" } }
+    "GET /memory/list":           { "request": { "memory_type": "string?", "scope": "string?", "include_expired": "boolean", "limit": "integer", "offset": "integer" }, "response": "$ref#/definitions/MemoryListResponse" },
+    "DELETE /memory/{memory_id}": { "request": {},                                    "response": "$ref#/definitions/DeleteMemoryResponse" }
   }
 }

@@ -27,11 +27,27 @@ def test_get_run_not_found(app_client):
 # ── Memory retrieve: empty store returns empty hits ───────────────────────────
 
 def test_memory_retrieve_returns_hits_array(app_client):
-    r = app_client.post("/api/hca/memory/retrieve", json={"query": "hello", "top_k": 5})
+    r = app_client.post(
+        "/api/hca/memory/retrieve",
+        json={"query_text": "hello", "top_k": 5},
+    )
     assert r.status_code == 200
     data = r.json()
     assert "hits" in data
     assert isinstance(data["hits"], list)
+
+
+def test_memory_retrieve_rejects_legacy_query_wrapper(app_client):
+    r = app_client.post("/api/hca/memory/retrieve", json={"query": "hello"})
+    assert r.status_code == 422
+
+
+def test_memory_retrieve_rejects_blank_query_text(app_client):
+    r = app_client.post(
+        "/api/hca/memory/retrieve",
+        json={"query_text": "", "top_k": 5},
+    )
+    assert r.status_code == 422
 
 
 def test_memory_retrieve_hit_shape(app_client):
@@ -44,18 +60,39 @@ def test_memory_retrieve_hit_shape(app_client):
     )
     r = app_client.post(
         "/api/hca/memory/retrieve",
-        json={"query": "sky blue", "top_k": 5},
+        json={"query_text": "sky blue", "top_k": 5},
     )
     assert r.status_code == 200
     hits = r.json()["hits"]
     assert len(hits) >= 1
     hit = hits[0]
+    expected_keys = {
+        "memory_id",
+        "belief_id",
+        "memory_layer",
+        "memory_type",
+        "entity",
+        "slot",
+        "value",
+        "text",
+        "score",
+        "confidence",
+        "stored_at",
+        "expired",
+        "metadata",
+    }
+    assert expected_keys.issubset(hit.keys())
     assert isinstance(hit["text"], str)
     assert isinstance(hit["score"], float)
     assert hit["score"] > 0
     assert isinstance(hit["memory_type"], str)
     assert isinstance(hit["memory_id"], str)
+    assert hit["memory_layer"] == "trace"
+    assert isinstance(hit["confidence"], float)
     assert hit["stored_at"] is not None
+    assert hit["expired"] is False
+    assert isinstance(hit["metadata"], dict)
+    assert "raw_text" not in hit
 
 
 def test_memory_maintain_envelope(app_client):

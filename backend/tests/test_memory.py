@@ -35,6 +35,7 @@ def test_list_returns_records(app_client):
     assert "total" in data
     assert data["total"] == 2
     assert len(data["records"]) == 2
+    assert isinstance(data["records"][0]["text"], str)
 
 
 def test_list_filter_by_type_episode(app_client):
@@ -62,13 +63,37 @@ def test_record_fields(app_client):
     r = app_client.get("/api/hca/memory/list?limit=1")
     assert r.status_code == 200
     rec = r.json()["records"][0]
+    expected_keys = {
+        "memory_id",
+        "memory_layer",
+        "memory_type",
+        "text",
+        "scope",
+        "confidence",
+        "stored_at",
+        "expired",
+        "run_id",
+    }
+    assert expected_keys.issubset(rec.keys())
     assert isinstance(rec["memory_id"], str)
     assert isinstance(rec["memory_type"], str)
-    assert isinstance(rec["raw_text"], str)
+    assert isinstance(rec["text"], str)
+    assert rec["memory_layer"] == "trace"
     assert "scope" in rec
+    assert "raw_text" not in rec
     assert "stored_at" in rec
     assert "expired" in rec
     assert rec["expired"] is False
+
+
+def test_list_invalid_limit_returns_422(app_client):
+    r = app_client.get("/api/hca/memory/list?limit=0")
+    assert r.status_code == 422
+
+
+def test_list_invalid_scope_returns_422(app_client):
+    r = app_client.get("/api/hca/memory/list?scope=invalid")
+    assert r.status_code == 422
 
 
 # ── Delete ────────────────────────────────────────────────────────────────────
@@ -92,8 +117,7 @@ def test_delete_removes_record(app_client):
     del_r = app_client.delete(f"/api/hca/memory/{mem_id}")
     assert del_r.status_code == 200
     data = del_r.json()
-    assert data.get("deleted") is True
-    assert data.get("memory_id") == mem_id
+    assert data == {"deleted": True, "memory_id": mem_id}
 
     # Verify gone
     r2 = app_client.get("/api/hca/memory/list")

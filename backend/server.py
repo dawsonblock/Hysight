@@ -9,13 +9,26 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.middleware.cors import CORSMiddleware
+
+from memory_service import (
+    DeleteMemoryResponse,
+    MaintenanceReport,
+    MemoryConfigurationError,
+    MemoryListResponse,
+    RetrievalQuery,
+    RetrievalResponse,
+)
+from memory_service.config import validate_memory_backend_startup
+from memory_service.controller import MemoryBackendError
+from memory_service.types import MemoryType, ScopeType
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -39,23 +52,92 @@ class BackendConfigurationError(RuntimeError):
 
 @dataclass(frozen=True)
 class BackendSettings:
-    mongo_url: str
-    db_name: str
+    mongo_url: Optional[str] = None
+    db_name: Optional[str] = None
+
+    @property
+    def database_enabled(self) -> bool:
+        return bool(self.mongo_url and self.db_name)
 
 
 def _load_settings() -> BackendSettings:
-    missing = [
-        name for name in ("MONGO_URL", "DB_NAME") if not os.environ.get(name)
-    ]
+    mongo_url = os.environ.get("MONGO_URL", "").strip()
+    db_name = os.environ.get("DB_NAME", "").strip()
+    if not mongo_url and not db_name:
+        return BackendSettings()
+
+    missing = []
+    if not mongo_url:
+        missing.append("MONGO_URL")
+    if not db_name:
+        missing.append("DB_NAME")
     if missing:
         joined = ", ".join(missing)
         raise BackendConfigurationError(
-            f"Missing required backend settings: {joined}"
+            f"Mongo configuration is partial; missing required backend settings: {joined}"
         )
-    return BackendSettings(
-        mongo_url=os.environ["MONGO_URL"],
-        db_name=os.environ["DB_NAME"],
-    )
+
+    return BackendSettings(mongo_url=mongo_url, db_name=db_name)
+
+
+def _load_cors_origins() -> List[str]:
+    raw_origins = os.environ.get("CORS_ORIGINS", "").strip()
+    if not raw_origins:
+        return []
+
+    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    if not origins:
+        return []
+    if "*" in origins:
+        raise BackendConfigurationError(
+            "CORS_ORIGINS cannot contain '*' when credentials are enabled"
+        )
+
+    invalid = []
+    for origin in origins:
+        parsed = urlparse(origin)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            invalid.append(origin)
+    if invalid:
+        joined = ", ".join(invalid)
+        raise BackendConfigurationError(
+            f"CORS_ORIGINS must contain absolute http(s) origins: {joined}"
+        )
+
+    return origins
+
+
+async def _initialize_database(settings: BackendSettings) -> None:
+    global client, db
+    if not settings.database_enabled:
+        logger.info("Database integration disabled — /status routes will return 503.")
+        client = None
+        db = None
+        return
+
+    try:
+        from motor.motor_asyncio import AsyncIOMotorClient
+    except ImportError as exc:
+        raise BackendConfigurationError(
+            "motor must be installed when MongoDB settings are configured"
+        ) from exc
+
+    try:
+        client = AsyncIOMotorClient(
+            settings.mongo_url,
+            serverSelectionTimeoutMS=2000,
+        )
+        await client.admin.command("ping")
+    except Exception as exc:  # pragma: no cover - exercised via monkeypatch in tests
+        if client is not None:
+            client.close()
+        client = None
+        db = None
+        raise BackendConfigurationError(
+            "Configured MongoDB connection could not be established"
+        ) from exc
+
+    db = client[settings.db_name]
 
 
 def _require_db() -> Any:
@@ -89,12 +171,6 @@ class HCARunRequest(BaseModel):
 
 class HCAApproveRequest(BaseModel):
     approval_id: str
-
-
-class MemoryQueryRequest(BaseModel):
-    query: str
-    top_k: int = 10
-    run_id: Optional[str] = None
 
 
 # ── Status endpoints ──────────────────────────────────────────────────────────
@@ -195,7 +271,6 @@ def _extract_run_summary(run_id: str) -> Dict[str, Any]:
     memory_hits: List[Dict[str, Any]] = []
     try:
         from memory_service.singleton import get_controller  # type: ignore
-        from memory_service import RetrievalQuery  # type: ignore
 
         hits = get_controller().retrieve(
             RetrievalQuery(query_text=context.goal, top_k=5, run_id=run_id)
@@ -209,8 +284,8 @@ def _extract_run_summary(run_id: str) -> Dict[str, Any]:
             }
             for h in hits
         ]
-    except Exception:
-        pass
+    except (MemoryBackendError, MemoryConfigurationError) as exc:
+        logger.warning("Memory summary unavailable for run %s: %s", run_id, exc)
 
     return {
         "run_id": run_id,
@@ -464,82 +539,73 @@ async def deny_hca_action(run_id: str, body: HCAApproveRequest):
 
 
 @api_router.post("/hca/memory/retrieve")
-async def retrieve_memory(body: MemoryQueryRequest):
+@api_router.post("/hca/memory/retrieve", response_model=RetrievalResponse)
+async def retrieve_memory(body: RetrievalQuery):
     """Retrieve memories matching a natural-language query."""
     from memory_service.singleton import get_controller  # type: ignore
-    from memory_service import RetrievalQuery  # type: ignore
 
-    hits = get_controller().retrieve(
-        RetrievalQuery(query_text=body.query, top_k=body.top_k, run_id=body.run_id)
-    )
-    return {
-        "hits": [
-            {
-                "text": h.text,
-                "score": round(h.score, 3),
-                "memory_type": h.memory_type,
-                "stored_at": h.stored_at.isoformat() if h.stored_at else None,
-                "memory_id": h.memory_id,
-            }
-            for h in hits
-        ]
-    }
+    try:
+        return RetrievalResponse(hits=get_controller().retrieve(body))
+    except (MemoryBackendError, MemoryConfigurationError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@api_router.post("/hca/memory/maintain")
+@api_router.post("/hca/memory/maintain", response_model=MaintenanceReport)
 async def maintain_memory():
     """Run memory maintenance (TTL expiry)."""
     from memory_service.singleton import get_controller  # type: ignore
 
-    report = get_controller().maintain()
-    return report.model_dump()
+    try:
+        return get_controller().maintain()
+    except (MemoryBackendError, MemoryConfigurationError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@api_router.get("/hca/memory/list")
+@api_router.get("/hca/memory/list", response_model=MemoryListResponse)
 async def list_memory(
-    memory_type: Optional[str] = None,
-    scope: Optional[str] = None,
+    memory_type: Optional[MemoryType] = None,
+    scope: Optional[ScopeType] = None,
     include_expired: bool = False,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ):
     """List stored memories with optional filtering, newest first."""
     from memory_service.singleton import get_controller  # type: ignore
 
-    records, total = get_controller().list_records(
-        memory_type=memory_type,
-        scope=scope,
-        include_expired=include_expired,
-        limit=limit,
-        offset=offset,
-    )
-    return {"records": records, "total": total}
+    try:
+        records, total = get_controller().list_records(
+            memory_type=memory_type,
+            scope=scope,
+            include_expired=include_expired,
+            limit=limit,
+            offset=offset,
+        )
+    except (MemoryBackendError, MemoryConfigurationError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return MemoryListResponse(records=records, total=total)
 
 
-@api_router.delete("/hca/memory/{memory_id}")
+@api_router.delete("/hca/memory/{memory_id}", response_model=DeleteMemoryResponse)
 async def delete_memory(memory_id: str):
     """Delete a memory record by ID."""
     from memory_service.singleton import get_controller  # type: ignore
 
-    deleted = get_controller().delete_record(memory_id)
+    try:
+        deleted = get_controller().delete_record(memory_id)
+    except (MemoryBackendError, MemoryConfigurationError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Memory not found")
-    return {"deleted": True, "memory_id": memory_id}
+    return DeleteMemoryResponse(deleted=True, memory_id=memory_id)
 
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     global client, db
-    try:
-        from motor.motor_asyncio import AsyncIOMotorClient
-        settings = _load_settings()
-        client = AsyncIOMotorClient(settings.mongo_url)
-        db = client[settings.db_name]
-    except (BackendConfigurationError, ImportError) as exc:
-        logger.warning(
-            "Database not configured — /status routes will return 503. %s", exc
-        )
+    settings = _load_settings()
+    validate_memory_backend_startup()
+    await _initialize_database(settings)
     yield
     if client is not None:
         client.close()
@@ -552,12 +618,13 @@ def create_app() -> FastAPI:
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+    cors_origins = _load_cors_origins()
     application = FastAPI(title="HCA API", lifespan=_lifespan)
     application.include_router(api_router)
     application.add_middleware(
         CORSMiddleware,
         allow_credentials=True,
-        allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+        allow_origins=cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
