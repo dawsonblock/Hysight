@@ -8,6 +8,7 @@ Drop-in replaceable with the Rust HTTP service via env vars:
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import uuid
@@ -20,6 +21,25 @@ from .types import CandidateMemory, MaintenanceReport, RetrievalHit, RetrievalQu
 
 _BACKEND = os.environ.get("MEMORY_BACKEND", "python")
 _SERVICE_URL = os.environ.get("MEMORY_SERVICE_URL", "")
+_log = logging.getLogger(__name__)
+
+# ── Lazy-loaded fastembed model ───────────────────────────────────────────────
+
+_embedding_model = None
+
+
+def _embed(text: str) -> Optional[List[float]]:
+    """Return a 384-dim embedding vector, or None if fastembed is unavailable."""
+    global _embedding_model
+    try:
+        if _embedding_model is None:
+            from fastembed import TextEmbedding  # type: ignore
+            _embedding_model = TextEmbedding("BAAI/bge-small-en-v1.5")
+        vecs = list(_embedding_model.embed([text]))
+        return vecs[0].tolist()
+    except Exception as exc:
+        _log.debug("Embedding skipped: %s", exc)
+        return None
 
 
 class MemoryController:

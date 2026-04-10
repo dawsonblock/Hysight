@@ -44,6 +44,10 @@ class CandidateMemory(BaseModel):
     source:      Provenance = Field(default_factory=Provenance)
     tags:        List[str] = Field(default_factory=list)
     metadata:    Dict[str, Any] = Field(default_factory=dict)
+    # Session isolation — matches sidecar user_id field.
+    user_id:     str = "default"
+    # Pre-computed embedding (384-dim bge-small-en-v1.5), optional.
+    embedding:   Optional[List[float]] = None
 
 
 class RetrievalQuery(BaseModel):
@@ -54,6 +58,12 @@ class RetrievalQuery(BaseModel):
     run_id:          Optional[str] = None
     include_expired: bool = False
     intent:          str = "general"   # general | historical_fact | episodic_recall | belief_check
+    # Session isolation.
+    user_id:         str = "default"
+    # Pre-computed query embedding for semantic/hybrid search.
+    embedding:       Optional[List[float]] = None
+    # "bm25" | "semantic" | "hybrid"
+    mode:            str = "bm25"
 
 
 # ─── outbound ─────────────────────────────────────────────────────────────────
