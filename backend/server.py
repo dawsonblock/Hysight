@@ -526,13 +526,12 @@ async def delete_memory(memory_id: str):
     return {"deleted": True, "memory_id": memory_id}
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-
 
 def create_app() -> FastAPI:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     application = FastAPI(title="HCA API")
     application.include_router(api_router)
     application.add_middleware(
@@ -546,11 +545,15 @@ def create_app() -> FastAPI:
     @application.on_event("startup")
     async def startup_db_client():
         global client, db
-        from motor.motor_asyncio import AsyncIOMotorClient
-
-        settings = _load_settings()
-        client = AsyncIOMotorClient(settings.mongo_url)
-        db = client[settings.db_name]
+        try:
+            from motor.motor_asyncio import AsyncIOMotorClient
+            settings = _load_settings()
+            client = AsyncIOMotorClient(settings.mongo_url)
+            db = client[settings.db_name]
+        except (BackendConfigurationError, ImportError) as exc:
+            logger.warning(
+                "Database not configured — /status routes will return 503. %s", exc
+            )
 
     @application.on_event("shutdown")
     async def shutdown_db_client():
