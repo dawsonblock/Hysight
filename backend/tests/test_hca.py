@@ -77,7 +77,6 @@ def test_basic_run_completed(app_client):
     r = app_client.post(
         "/api/hca/run",
         json={"goal": "Hello, what can you do?"},
-        timeout=60,
     )
     assert r.status_code == 200
     data = r.json()
@@ -92,7 +91,6 @@ def test_get_run_by_id(app_client):
     r = app_client.post(
         "/api/hca/run",
         json={"goal": "Hello, what can you do?"},
-        timeout=60,
     )
     assert r.status_code == 200
     run_id = r.json().get("run_id")
@@ -106,6 +104,28 @@ def test_get_run_by_id(app_client):
     assert "key_events" in data
 
 
+@pytest.mark.slow
+def test_runtime_memory_question_returns_summary(app_client):
+    r = app_client.post(
+        "/api/hca/run",
+        json={"goal": "What facts are stored in memory?"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("run_id")
+    assert "state" in data
+
+
+@pytest.mark.slow
+def test_runtime_memory_recall_response_not_empty(app_client):
+    r = app_client.post(
+        "/api/hca/run",
+        json={"goal": "Test memory recall"},
+    )
+    assert r.status_code == 200
+    assert r.json()
+
+
 # ── HCA approval flow (slow) ──────────────────────────────────────────────────
 
 @pytest.mark.slow
@@ -113,7 +133,6 @@ def test_remember_goal_awaiting_approval(app_client):
     r = app_client.post(
         "/api/hca/run",
         json={"goal": "Please remember that testing was done on Feb 2026"},
-        timeout=60,
     )
     assert r.status_code == 200
     data = r.json()
@@ -126,7 +145,6 @@ def test_approve_action_completes(app_client):
     r = app_client.post(
         "/api/hca/run",
         json={"goal": "Please remember that testing was done on Feb 2026"},
-        timeout=60,
     )
     assert r.status_code == 200
     data = r.json()
@@ -138,7 +156,6 @@ def test_approve_action_completes(app_client):
     r2 = app_client.post(
         f"/api/hca/run/{run_id}/approve",
         json={"approval_id": approval_id},
-        timeout=60,
     )
     assert r2.status_code == 200
     assert r2.json().get("state") == "completed"

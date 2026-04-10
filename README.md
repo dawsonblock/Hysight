@@ -227,6 +227,9 @@ cargo build --release
 cd ..
 ```
 
+This is only required if you want to run the live memvid sidecar path. The
+default backend proof commands do not require a running Rust sidecar.
+
 ---
 
 ## Running the Application
@@ -364,6 +367,12 @@ Each transition is recorded as an event. The Critic module runs during `broadcas
 
 ## Testing
 
+Backend tests assume the backend dependencies are installed first:
+
+```bash
+pip install -r backend/requirements.txt
+```
+
 ```bash
 # All HCA unit tests
 pytest hca/tests/unit/ -q
@@ -374,6 +383,24 @@ pytest hca/tests/integration/ -q
 # Backend bootstrap tests (no running service required)
 pytest backend/tests/test_server_bootstrap.py -q
 
+# Backend local proof path (in-process, no external services required)
+pytest backend/tests/test_hca.py \
+  backend/tests/test_memory.py \
+  backend/tests/test_server_bootstrap.py -q
+
+# Full backend suite
+# Default mode includes mock-backed contract checks for the memvid HTTP
+# boundary. This proves request/response shapes and backend integration without
+# requiring a running Rust sidecar.
+pytest backend/tests -q
+
+# Live memvid sidecar proof
+# This is the opt-in path that proves real sidecar availability, retrieval, and
+# restart semantics. Persistence/restart checks additionally require
+# supervisorctl.
+RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3031 \
+pytest backend/tests/test_memvid_sidecar.py -q
+
 # Top-level pipeline integration test
 pytest tests/test_hca_pipeline.py -q
 
@@ -382,6 +409,13 @@ pytest hca/tests/unit/ hca/tests/integration/ \
        backend/tests/test_server_bootstrap.py \
        tests/test_hca_pipeline.py -q
 ```
+
+In short:
+
+- The backend local proof path validates the FastAPI app, in-process memory
+  routes, and HCA runtime behavior without external services.
+- The default full backend suite adds mock-backed memvid boundary coverage.
+- The live memvid command is the separate proof for the real Rust sidecar.
 
 Test results are written to `test_reports/`.
 

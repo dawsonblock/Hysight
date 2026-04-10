@@ -1,18 +1,18 @@
-"""
-Integration tests for the memvid Rust sidecar (port 3031) and Python backend.
+"""Memvid sidecar boundary tests.
 
-By default these run against an in-memory mock that validates request/response
-shapes without needing the real Rust service.  To run against a live sidecar:
+Default mode runs mock-backed contract checks against an in-memory sidecar via
+requests-mock, so the backend suite can prove request/response shapes without a
+running Rust service. Live-sidecar behavior is opt-in:
 
     RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3031 \
         pytest backend/tests/test_memvid_sidecar.py -v
 
-TestPersistence uses supervisorctl only when RUN_MEMVID_TESTS=1; with the mock
-it validates that the in-memory store survives across logical operations.
-TestPythonBackendIntegration runs via TestClient in-process (marked slow).
-
-Tests covered: ingest, retrieve (BM25), list, delete, persistence, TTL maintain.
+Tests that require real restart semantics skip unless the live sidecar is
+reachable and supervisorctl is available. If requests-mock is missing, the
+default mock-mode tests skip with an explicit dependency message instead of
+failing collection.
 """
+import os
 import re
 import shutil
 import socket
@@ -24,8 +24,11 @@ from pathlib import Path
 
 import pytest
 import requests
-import requests_mock as rm_lib
-import os
+
+try:
+    import requests_mock as rm_lib
+except ModuleNotFoundError:  # pragma: no cover - depends on active test env
+    rm_lib = None
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -44,11 +47,20 @@ def _probe_sidecar() -> bool:
 
 SIDECAR_REACHABLE = os.environ.get("RUN_MEMVID_TESTS") == "1" and _probe_sidecar()
 _USE_REAL_SIDECAR = SIDECAR_REACHABLE
+_MOCK_SIDECAR_REASON = (
+    "requests-mock is not installed; install backend/requirements.txt "
+    "for mock sidecar tests"
+)
+_LIVE_SIDECAR_REASON = (
+    "requires RUN_MEMVID_TESTS=1 with a live memvid sidecar on localhost:3031"
+)
+_RESTART_REASON = (
+    "requires RUN_MEMVID_TESTS=1, a live memvid sidecar, and supervisorctl in PATH"
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 
 SIDECAR_URL = "http://localhost:3031"
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
 # ── In-memory mock sidecar ────────────────────────────────────────────────────
 
@@ -109,12 +121,19 @@ class _FakeSidecar:
         }
 
 
-@pytest.fixture(autouse=True, scope="module")
+@pytest.fixture(autouse=True)
 def sidecar():
-    """Use the real sidecar when RUN_MEMVID_TESTS=1, otherwise an in-memory mock."""
+    """Provide one isolated sidecar backend per test.
+
+    Mock mode gets a fresh in-memory store every test; live mode hits the real
+    service only when explicitly enabled.
+    """
     if _USE_REAL_SIDECAR:
         yield None
         return
+
+    if rm_lib is None:
+        pytest.skip(_MOCK_SIDECAR_REASON)
 
     fake = _FakeSidecar()
     with rm_lib.Mocker() as m:
@@ -212,7 +231,7 @@ class TestList:
 class TestRetrieve:
     """POST /memory/retrieve — BM25 scored retrieval. Mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
 
-    @pytest.fixture(autouse=True, scope="class")
+    @pytest.fixture(autouse=True)
     def seed_memories(self):
         # Ingest distinct memories for relevance tests
         ingest(
@@ -234,7 +253,8 @@ class TestRetrieve:
             scope="private",
             slot="onboarding",
         )
-        time.sleep(0.5)  # give Tantivy time to index
+        if _USE_REAL_SIDECAR:
+            time.sleep(0.5)  # give Tantivy time to index
 
     def test_retrieve_returns_results_with_score(self):
         r = retrieve("dark mode UI preference")
@@ -296,19 +316,19 @@ class TestDelete:
 
 # ── 5. Persistence ────────────────────────────────────────────────────────────
 
+@pytest.mark.skipif(
+    not _USE_REAL_SIDECAR or not shutil.which("supervisorctl"),
+    reason=_RESTART_REASON,
+)
 class TestPersistence:
-    """Ingest → restart sidecar → list (records must survive).
+    """Live-sidecar restart semantics.
 
-    With the real sidecar (RUN_MEMVID_TESTS=1), requires supervisorctl.
-    With the in-memory mock the store persists in-process — no restart needed.
+    These tests only validate persistence when the real sidecar is running and
+    can be restarted via supervisorctl.
     """
 
     def _restart_sidecar(self):
-        """Restart via supervisorctl when using the real sidecar, no-op otherwise."""
-        if not _USE_REAL_SIDECAR:
-            return  # mock state persists in-memory
-        if not shutil.which("supervisorctl"):
-            pytest.skip("requires supervisorctl in PATH")
+        """Restart the live sidecar through supervisorctl."""
         subprocess.run(
             ["sudo", "supervisorctl", "restart", "memvid-sidecar"],
             check=True,
@@ -351,19 +371,3 @@ class TestMaintain:
     def test_maintain_returns_200(self):
         r = requests.post(f"{SIDECAR_URL}/memory/maintain", timeout=10)
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
-
-
-# ── 7. Python backend → sidecar integration ───────────────────────────────────
-
-@pytest.mark.slow
-class TestPythonBackendIntegration:
-    """POST /api/hca/run — end-to-end via TestClient (runs the real HCA agent in-process)."""
-
-    def test_hca_run_returns_200(self, app_client):
-        r = app_client.post("/api/hca/run", json={"goal": "What facts are stored in memory?"})
-        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
-
-    def test_hca_run_response_has_output(self, app_client):
-        r = app_client.post("/api/hca/run", json={"goal": "Test memory recall"})
-        assert r.status_code == 200, r.text
-        assert r.json()  # non-empty response
