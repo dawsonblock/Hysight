@@ -187,8 +187,11 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 # Install the HCA package in editable mode
 pip install -e hca/
 
-# Install backend dependencies
+# Install backend runtime dependencies
 pip install -r backend/requirements.txt
+
+# Install backend test dependencies when you need the proof surface
+pip install -r backend/requirements-test.txt
 ```
 
 ### 3. Configure environment variables
@@ -200,15 +203,27 @@ cp backend/.env.example backend/.env   # if it doesn't exist, create it
 Edit `backend/.env`:
 
 ```dotenv
-# Required — MongoDB connection
+# Optional — MongoDB connection
+# If both values are omitted, the backend starts in local mode and `/api/status`
+# returns 503. If either value is set without the other, startup fails.
 MONGO_URL=mongodb://localhost:27017
 DB_NAME=hysight
 
 # Optional — override where run artifacts are written
 # HCA_STORAGE_ROOT=/path/to/custom/storage
 
+# Optional — enable the Rust memory sidecar.
+# If MEMORY_BACKEND=rust is set, MEMORY_SERVICE_URL must point to a healthy
+# sidecar that responds on /health or startup will fail.
+# MEMORY_BACKEND=rust
+# MEMORY_SERVICE_URL=http://localhost:3031
+
+# Optional — credentialed browser access.
+# CORS is fail-closed by default; use absolute origins only.
+# CORS_ORIGINS=http://localhost:3000
+
 # Optional — LLM API key for the Critic module
-# ANTHROPIC_API_KEY=sk-ant-...
+# EMERGENT_LLM_KEY=...
 ```
 
 ### 4. Install the frontend
@@ -229,6 +244,11 @@ cd ..
 
 This is only required if you want to run the live memvid sidecar path. The
 default backend proof commands do not require a running Rust sidecar.
+
+To enable the Rust-backed memory path in the backend, set both
+`MEMORY_BACKEND=rust` and `MEMORY_SERVICE_URL=http://localhost:3031` before
+starting the FastAPI app. Startup now validates the sidecar via `/health` and
+fails fast if the service is unreachable.
 
 ---
 
@@ -370,7 +390,13 @@ Each transition is recorded as an event. The Critic module runs during `broadcas
 Backend tests assume the backend dependencies are installed first:
 
 ```bash
-pip install -r backend/requirements.txt
+pip install -r backend/requirements-test.txt
+```
+
+For formatter and lint tooling, install:
+
+```bash
+pip install -r backend/requirements-dev.txt
 ```
 
 ```bash
@@ -416,6 +442,10 @@ In short:
   routes, and HCA runtime behavior without external services.
 - The default full backend suite adds mock-backed memvid boundary coverage.
 - The live memvid command is the separate proof for the real Rust sidecar.
+- The backend now rejects the legacy `{"query": ...}` memory retrieve body;
+  use `{"query_text": ...}` everywhere.
+- CORS is disabled by default and must be enabled with explicit absolute
+  origins via `CORS_ORIGINS`.
 
 Test results are written to `test_reports/`.
 
