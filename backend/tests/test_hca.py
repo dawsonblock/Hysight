@@ -144,12 +144,9 @@ def test_approve_action_completes(app_client):
     assert r2.json().get("state") == "completed"
 
 
-# ── Status endpoints (require Mongo) ─────────────────────────────────────────
+# ── Status endpoints (no DB configured → 503) ────────────────────────────────
 
-@pytest.mark.skipif(
-    not os.environ.get("MONGO_URL"),
-    reason="requires MONGO_URL to be set",
-)
-def test_status_route_requires_db(app_client):
+def test_status_route_returns_503_without_db(app_client):
+    """app_client deletes MONGO_URL so the status route must return 503."""
     r = app_client.post("/api/status", json={"client_name": "test"})
-    assert r.status_code == 200
+    assert r.status_code == 503
