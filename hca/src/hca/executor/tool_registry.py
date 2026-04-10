@@ -1,8 +1,11 @@
 """Registry of available tools with metadata and policy constraints."""
 
 from typing import Callable, Dict, Any, Optional
+
 from pydantic import BaseModel, Field
+
 from hca.common.enums import ActionClass
+from hca.paths import relative_run_storage_path, run_storage_path
 
 class ToolMetadata(BaseModel):
     name: str
@@ -21,32 +24,35 @@ def _echo(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
     return {"echo": text}
 
 def _store_note(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    from pathlib import Path
     import uuid
-    
+
     note = args.get("note", "")
     file_id = uuid.uuid4().hex
-    path = f"storage/runs/{run_id}/artifacts/note_{file_id}.txt"
-    full_path = Path(path)
+    path = relative_run_storage_path(run_id, "artifacts", f"note_{file_id}.txt")
+    full_path = run_storage_path(run_id, "artifacts", f"note_{file_id}.txt")
     full_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(full_path, "w", encoding="utf-8") as f:
         f.write(note)
-    
+
     return {"path": str(path), "note": note}
 
 def _write_artifact(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    from pathlib import Path
     import uuid
+
     content = args.get("content", "")
     file_id = uuid.uuid4().hex
-    path = f"storage/runs/{run_id}/artifacts/artifact_{file_id}.txt"
-    full_path = Path(path)
+    path = relative_run_storage_path(
+        run_id,
+        "artifacts",
+        f"artifact_{file_id}.txt",
+    )
+    full_path = run_storage_path(run_id, "artifacts", f"artifact_{file_id}.txt")
     full_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(full_path, "w", encoding="utf-8") as f:
         f.write(content)
-    
+
     return {"path": str(path), "content": content}
 
 _REGISTRY: Dict[str, ToolMetadata] = {

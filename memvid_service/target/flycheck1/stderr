@@ -1,0 +1,5 @@
+    Updating crates.io index
+error: failed to select a version for the requirement `space = "^0.11.1"`
+candidate versions found which didn't match: 0.19.0, 0.18.0, 0.17.0, ...
+location searched: crates.io index
+required by package `memvid-sidecar v0.1.0 (/Users/dawsonblock/Hysight/memvid_service)`

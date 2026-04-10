@@ -8,13 +8,14 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from hca.common.time import to_iso, utc_now
 from hca.common.types import SnapshotRecord
+from hca.paths import run_storage_path
 
 
 logger = logging.getLogger(__name__)
 
 
 def _path(run_id: str) -> Path:
-    return Path(f"storage/runs/{run_id}/snapshots.jsonl")
+    return run_storage_path(run_id, "snapshots.jsonl")
 
 
 def append_snapshot(run_id: str, snapshot_data: Dict[str, Any]) -> None:

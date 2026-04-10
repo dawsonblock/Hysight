@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import Optional
 
 from hca.common.types import RunContext
+from hca.paths import run_storage_path
 
 
 def _run_path(run_id: str) -> Path:
-    return Path(f"storage/runs/{run_id}/run.json")
+    return run_storage_path(run_id, "run.json")
 
 
 def save_run(context: RunContext) -> None:
