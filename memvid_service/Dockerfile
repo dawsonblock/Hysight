@@ -17,21 +17,22 @@ WORKDIR /app
 COPY memvid/rust-toolchain.toml memvid/rust-toolchain.toml
 
 # Copy dependency manifests first for layer-cache efficiency
-COPY memvid/Cargo.toml         memvid/Cargo.toml
-COPY memvid/Cargo.lock         memvid/Cargo.lock
-COPY memvid_service/Cargo.toml memvid_service/Cargo.toml
+COPY memvid/Cargo.toml              memvid/Cargo.toml
+COPY memvid/Cargo.lock              memvid/Cargo.lock
+COPY memvid_service/Cargo.toml      memvid_service/Cargo.toml
+COPY memvid_service/Cargo.lock      memvid_service/Cargo.lock
 
 # Warm the dependency cache with stub sources
 RUN mkdir -p memvid/src memvid_service/src \
  && echo 'pub fn _stub() {}' > memvid/src/lib.rs \
  && echo 'fn main() {}' > memvid_service/src/main.rs \
- && cargo build --release --manifest-path memvid_service/Cargo.toml \
+ && cargo build --locked --release --manifest-path memvid_service/Cargo.toml \
  && rm -rf memvid/src memvid_service/src
 
 # Build the real binary
 COPY memvid/src         memvid/src
 COPY memvid_service/src memvid_service/src
-RUN cargo build --release --manifest-path memvid_service/Cargo.toml
+RUN cargo build --locked --release --manifest-path memvid_service/Cargo.toml
 
 # --- runtime stage ---
 FROM debian:bookworm-slim
