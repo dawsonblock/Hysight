@@ -2,3 +2,4 @@
 markers = [
     "slow: marks tests as slow-running — requires real HCA Runtime (deselect with '-m \"not slow\"')",
 ]
+filterwarnings = ["ignore:.*python_multipart.*:PendingDeprecationWarning"]

@@ -67,8 +67,8 @@ SIDECAR_REACHABLE = (
 )
 _USE_REAL_SIDECAR = SIDECAR_REACHABLE
 _MOCK_SIDECAR_REASON = (
-    "requests-mock is not installed; install backend/requirements.txt "
-    "for mock sidecar tests"
+    "requests-mock is not installed; run `make test-bootstrap` or "
+    "`python -m pip install -e ./hca -r backend/requirements-test.txt`"
 )
 _LIVE_SIDECAR_REASON = (
     "requires RUN_MEMVID_TESTS=1 with a live memvid sidecar on localhost:3031"

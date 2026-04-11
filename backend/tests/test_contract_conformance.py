@@ -53,7 +53,11 @@ def status_app_client(app_client, monkeypatch):
 @pytest.fixture()
 def fake_sidecar():
     if requests_mock_lib is None:
-        pytest.fail("requests-mock must be installed for contract tests")
+        pytest.fail(
+            "requests-mock must be installed for contract tests; run "
+            "`make test-bootstrap` or `python -m pip install -e ./hca "
+            "-r backend/requirements-test.txt`"
+        )
 
     fake = FakeSidecar()
     with requests_mock_lib.Mocker() as mocker:

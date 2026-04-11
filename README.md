@@ -183,18 +183,47 @@ cd Hysight
 ```bash
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-
-# Install the HCA package in editable mode
-pip install -e hca/
-
-# Install backend runtime dependencies
-pip install -r backend/requirements.txt
-
-# Install backend test dependencies when you need the proof surface
-pip install -r backend/requirements-test.txt
 ```
 
-### 3. Configure environment variables
+### 3. Bootstrap the proof surface
+
+The shortest supported setup path is:
+
+```bash
+make test-bootstrap
+```
+
+If you do not want to use `make`, the equivalent command is:
+
+```bash
+python -m pip install -e ./hca -r backend/requirements-test.txt
+```
+
+That single install command covers:
+
+- the editable `hca` package
+- backend runtime dependencies
+- backend test dependencies such as `requests-mock`
+
+If you also want formatter, lint, and type-check tooling, use:
+
+```bash
+make dev-bootstrap
+```
+
+Or, without `make`:
+
+```bash
+python -m pip install -e ./hca -r backend/requirements-dev.txt
+```
+
+If you only need the backend runtime and not the proof surface:
+
+```bash
+python -m pip install -e ./hca -r backend/requirements.txt
+```
+
+### 4. Configure environment variables
 
 ```bash
 cp backend/.env.example backend/.env   # if it doesn't exist, create it
@@ -226,7 +255,7 @@ DB_NAME=hysight
 # EMERGENT_LLM_KEY=...
 ```
 
-### 4. Install the frontend
+### 5. Install the frontend
 
 ```bash
 cd frontend
@@ -238,7 +267,7 @@ If you need the frontend to talk to a non-default backend origin, copy
 `frontend/.env.example` to `frontend/.env.local` and set
 `REACT_APP_BACKEND_URL`. Leave it unset for the standard local workflow.
 
-### 5. (Optional) Build the memvid sidecar
+### 6. (Optional) Build the memvid sidecar
 
 ```bash
 cd memvid_service
@@ -400,13 +429,23 @@ Each transition is recorded as an event. The Critic module runs during `broadcas
 Backend tests assume the backend dependencies are installed first:
 
 ```bash
-pip install -r backend/requirements-test.txt
+make test-bootstrap
 ```
+
+Equivalent portable command:
+
+```bash
+python -m pip install -e ./hca -r backend/requirements-test.txt
+```
+
+If `backend/tests/test_contract_conformance.py` or the mock sidecar tests fail
+because `requests-mock` is missing, the environment was not bootstrapped with
+the repo's declared test dependencies yet.
 
 For formatter and lint tooling, install:
 
 ```bash
-pip install -r backend/requirements-dev.txt
+make dev-bootstrap
 ```
 
 ```bash
