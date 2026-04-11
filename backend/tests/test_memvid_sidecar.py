@@ -10,9 +10,7 @@ running Rust service. Live-sidecar behavior is opt-in:
     pytest backend/tests/test_memvid_sidecar.py -v
 
 Tests that require real restart semantics skip unless the live sidecar is
-reachable and supervisorctl is available. If requests-mock is missing, the
-default mock-mode tests skip with an explicit dependency message instead of
-failing collection.
+reachable and supervisorctl is available.
 
 This suite is also the proof surface for the supported production sidecar mode.
 """
@@ -29,13 +27,9 @@ from urllib.parse import urlparse
 
 import pytest
 import requests
+import requests_mock as rm_lib
 
 from backend.tests.contract_helpers import assert_contract_payload
-
-try:
-    import requests_mock as rm_lib
-except ModuleNotFoundError:  # pragma: no cover - depends on active test env
-    rm_lib = None
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -66,10 +60,6 @@ SIDECAR_REACHABLE = (
     os.environ.get("RUN_MEMVID_TESTS") == "1" and _probe_sidecar()
 )
 _USE_REAL_SIDECAR = SIDECAR_REACHABLE
-_MOCK_SIDECAR_REASON = (
-    "requests-mock is not installed; run `make test-bootstrap` or "
-    "`python -m pip install -e ./hca -r backend/requirements-test.txt`"
-)
 _LIVE_SIDECAR_REASON = (
     "requires RUN_MEMVID_TESTS=1 with a live memvid sidecar on localhost:3031"
 )
@@ -190,9 +180,6 @@ def sidecar():
     if _USE_REAL_SIDECAR:
         yield None
         return
-
-    if rm_lib is None:
-        pytest.skip(_MOCK_SIDECAR_REASON)
 
     fake = _FakeSidecar()
     with rm_lib.Mocker() as m:

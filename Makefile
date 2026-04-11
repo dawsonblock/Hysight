@@ -1,9 +1,46 @@
-.PHONY: test-bootstrap dev-bootstrap
+.PHONY: \
+	test-bootstrap \
+	dev-bootstrap \
+	test \
+	test-pipeline \
+	test-contract \
+	test-backend-local \
+	test-backend \
+	test-sidecar
 
 PYTHON ?= python
+PIP ?= $(PYTHON) -m pip
+PYTEST ?= $(PYTHON) -m pytest
+MEMORY_SERVICE_URL ?= http://localhost:3031
 
 test-bootstrap:
-	$(PYTHON) -m pip install -e ./hca -r backend/requirements-test.txt
+	$(PIP) install -r backend/requirements-test.txt
 
 dev-bootstrap:
-	$(PYTHON) -m pip install -e ./hca -r backend/requirements-dev.txt
+	$(PIP) install -r backend/requirements-dev.txt
+
+test: test-pipeline test-backend
+
+test-pipeline:
+	$(PYTEST) tests/test_hca_pipeline.py -q
+
+test-contract:
+	$(PYTEST) backend/tests/test_contract_conformance.py -q
+
+test-backend-local:
+	$(PYTEST) \
+		backend/tests/test_hca.py \
+		backend/tests/test_memory.py \
+		backend/tests/test_server_bootstrap.py \
+		-q
+
+test-backend:
+	$(PYTEST) backend/tests -q
+
+test-sidecar:
+	@curl --fail --silent "$(MEMORY_SERVICE_URL)/health" >/dev/null || { \
+		echo "test-sidecar requires a healthy memvid sidecar at $(MEMORY_SERVICE_URL)/health. Start the sidecar first, or run make test for the mock-backed proof surface."; \
+		exit 1; \
+	}
+	RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" \
+		$(PYTEST) backend/tests/test_memvid_sidecar.py -q

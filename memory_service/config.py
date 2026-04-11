@@ -11,6 +11,7 @@ from .types import SidecarHealthResponse
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _VALID_MEMORY_BACKENDS = {"python", "rust"}
+_SIDECAR_URL_EXAMPLE = "Example: MEMORY_SERVICE_URL=http://localhost:3031"
 
 
 class MemoryConfigurationError(RuntimeError):
@@ -30,7 +31,8 @@ class MemorySettings:
     def endpoint(self, path: str) -> str:
         if not self.service_url:
             raise MemoryConfigurationError(
-                "MEMORY_SERVICE_URL is required when MEMORY_BACKEND=rust"
+                "MEMORY_SERVICE_URL is required when MEMORY_BACKEND=rust. "
+                f"{_SIDECAR_URL_EXAMPLE}"
             )
         return f"{self.service_url.rstrip('/')}{path}"
 
@@ -52,7 +54,8 @@ def _validate_service_url(service_url: str) -> None:
     parsed = urlparse(service_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise MemoryConfigurationError(
-            "MEMORY_SERVICE_URL must be an absolute http(s) URL"
+            "MEMORY_SERVICE_URL must be an absolute http(s) URL. "
+            f"{_SIDECAR_URL_EXAMPLE}"
         )
 
 
@@ -73,7 +76,8 @@ def load_memory_settings() -> MemorySettings:
     if raw_backend == "rust":
         if not service_url:
             raise MemoryConfigurationError(
-                "MEMORY_SERVICE_URL is required when MEMORY_BACKEND=rust"
+                "MEMORY_SERVICE_URL is required when MEMORY_BACKEND=rust. "
+                f"{_SIDECAR_URL_EXAMPLE}"
             )
         _validate_service_url(service_url)
 
@@ -98,6 +102,8 @@ def probe_memory_service(
     if not settings.uses_sidecar:
         return
 
+    health_url = settings.endpoint("/health")
+
     try:
         import httpx
     except ImportError as exc:  # pragma: no cover - dependency validation
@@ -106,28 +112,34 @@ def probe_memory_service(
         ) from exc
 
     try:
-        response = httpx.get(settings.endpoint("/health"), timeout=timeout)
+        response = httpx.get(health_url, timeout=timeout)
         response.raise_for_status()
     except httpx.HTTPError as exc:
         raise MemoryConfigurationError(
-            f"Rust memory backend health check failed: {exc}"
+            "Rust memory backend health check failed for "
+            f"{health_url}. Verify the sidecar is running and reachable. "
+            f"{_SIDECAR_URL_EXAMPLE} ({exc})"
         ) from exc
 
     try:
         payload = response.json()
     except ValueError as exc:
         raise MemoryConfigurationError(
-            "Rust memory backend /health response was not valid JSON"
+            f"Rust memory backend /health response from {health_url} "
+            "was not valid JSON"
         ) from exc
 
     try:
         health = SidecarHealthResponse.model_validate(payload)
     except Exception as exc:
         raise MemoryConfigurationError(
-            "Rust memory backend /health response did not match the contract"
+            "Rust memory backend /health response did not match the "
+            "contract. Expected JSON with fields: status, engine, "
+            "user_stores"
         ) from exc
 
     if health.status != "ok":
         raise MemoryConfigurationError(
-            "Rust memory backend /health did not report status=ok"
+            "Rust memory backend /health did not report status=ok; "
+            f"received status={health.status!r}"
         )

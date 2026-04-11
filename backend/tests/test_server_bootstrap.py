@@ -40,7 +40,10 @@ def test_load_settings_rejects_partial_backend_env(monkeypatch):
     monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
     monkeypatch.delenv("DB_NAME", raising=False)
 
-    with pytest.raises(BackendConfigurationError, match="partial"):
+    with pytest.raises(
+        BackendConfigurationError,
+        match="set both MONGO_URL and DB_NAME or unset both",
+    ):
         _load_settings()
 
 
@@ -84,7 +87,10 @@ def test_create_app_startup_fails_with_partial_mongo_config(monkeypatch):
     monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
     monkeypatch.delenv("DB_NAME", raising=False)
 
-    with pytest.raises(BackendConfigurationError, match="partial"):
+    with pytest.raises(
+        BackendConfigurationError,
+        match="set both MONGO_URL and DB_NAME or unset both",
+    ):
         with TestClient(create_app()):
             pass
 
@@ -96,7 +102,10 @@ def test_create_app_startup_fails_with_missing_rust_sidecar_url(monkeypatch):
     monkeypatch.setenv("MEMORY_BACKEND", "rust")
     monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
 
-    with pytest.raises(MemoryConfigurationError, match="MEMORY_SERVICE_URL"):
+    with pytest.raises(
+        MemoryConfigurationError,
+        match="Example: MEMORY_SERVICE_URL=http://localhost:3031",
+    ):
         with TestClient(create_app()):
             pass
 
@@ -123,12 +132,18 @@ def test_create_app_startup_fails_when_sidecar_health_check_fails(monkeypatch):
 def test_create_app_rejects_wildcard_cors(monkeypatch):
     monkeypatch.setenv("CORS_ORIGINS", "*")
 
-    with pytest.raises(BackendConfigurationError, match="CORS_ORIGINS"):
+    with pytest.raises(
+        BackendConfigurationError,
+        match="comma-separated allowlist",
+    ):
         create_app()
 
 
 def test_create_app_rejects_invalid_cors_origin(monkeypatch):
     monkeypatch.setenv("CORS_ORIGINS", "localhost:3000")
 
-    with pytest.raises(BackendConfigurationError, match="absolute http"):
+    with pytest.raises(
+        BackendConfigurationError,
+        match="http://localhost:3000",
+    ):
         create_app()

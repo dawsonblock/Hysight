@@ -19,6 +19,31 @@ TestClient = import_module("fastapi.testclient").TestClient
 create_app = import_module("backend.server").create_app
 
 
+_REQUIRED_TEST_DEPENDENCIES = {
+    "jsonschema": "jsonschema",
+    "requests_mock": "requests-mock",
+}
+_TEST_BOOTSTRAP_HINT = (
+    "Run: python -m pip install -r backend/requirements-test.txt"
+)
+
+
+def pytest_sessionstart(session):
+    missing = []
+    for module_name, package_name in _REQUIRED_TEST_DEPENDENCIES.items():
+        try:
+            import_module(module_name)
+        except ModuleNotFoundError:
+            missing.append(package_name)
+
+    if missing:
+        joined = ", ".join(sorted(missing))
+        raise pytest.UsageError(
+            "Backend tests require missing dependencies: "
+            f"{joined}. {_TEST_BOOTSTRAP_HINT}"
+        )
+
+
 @pytest.fixture()
 def isolated_memory(tmp_path, monkeypatch):
     """Give each test a fresh, empty MemoryController in a temp directory.

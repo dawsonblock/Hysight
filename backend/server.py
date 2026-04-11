@@ -74,8 +74,10 @@ def _load_settings() -> BackendSettings:
     if missing:
         joined = ", ".join(missing)
         raise BackendConfigurationError(
-            "Mongo configuration is partial; missing required backend "
-            f"settings: {joined}"
+            "Mongo configuration is partial; set both MONGO_URL and "
+            "DB_NAME or unset both to run without database integration. "
+            f"Missing: {joined}. Example: MONGO_URL=mongodb://localhost:27017 "
+            "DB_NAME=hysight"
         )
 
     return BackendSettings(mongo_url=mongo_url, db_name=db_name)
@@ -93,7 +95,9 @@ def _load_cors_origins() -> List[str]:
         return []
     if "*" in origins:
         raise BackendConfigurationError(
-            "CORS_ORIGINS cannot contain '*' when credentials are enabled"
+            "CORS_ORIGINS cannot contain '*' when credentials are enabled; "
+            "provide a comma-separated allowlist such as "
+            "http://localhost:3000,https://app.example.com"
         )
 
     invalid = []
@@ -104,7 +108,8 @@ def _load_cors_origins() -> List[str]:
     if invalid:
         joined = ", ".join(invalid)
         raise BackendConfigurationError(
-            f"CORS_ORIGINS must contain absolute http(s) origins: {joined}"
+            "CORS_ORIGINS must contain absolute http(s) origins such as "
+            f"http://localhost:3000: {joined}"
         )
 
     return origins
@@ -114,7 +119,8 @@ async def _initialize_database(settings: BackendSettings) -> None:
     global client, db
     if not settings.database_enabled:
         logger.info(
-            "Database integration disabled — /status routes will return 503."
+            "Database integration disabled — /status routes will return 503 "
+            "until both MONGO_URL and DB_NAME are configured."
         )
         client = None
         db = None
@@ -124,7 +130,9 @@ async def _initialize_database(settings: BackendSettings) -> None:
         from motor.motor_asyncio import AsyncIOMotorClient
     except ImportError as exc:
         raise BackendConfigurationError(
-            "motor must be installed when MongoDB settings are configured"
+            "motor must be installed when MONGO_URL and DB_NAME are "
+            "configured. Run: python -m pip install -r "
+            "backend/requirements.txt"
         ) from exc
 
     try:
@@ -139,7 +147,9 @@ async def _initialize_database(settings: BackendSettings) -> None:
         client = None
         db = None
         raise BackendConfigurationError(
-            "Configured MongoDB connection could not be established"
+            "Configured MongoDB connection could not be established. "
+            "Verify MONGO_URL, DB_NAME, network reachability, and "
+            f"credentials. ({exc})"
         ) from exc
 
     db = client[settings.db_name]
