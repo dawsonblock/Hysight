@@ -7,6 +7,8 @@ on:
             - "backend/**"
             - "contract/**"
             - "hca/**"
+            - "memvid/**"
+            - "memvid_service/**"
             - "memory_service/**"
             - "pyproject.toml"
             - "README.md"
@@ -17,6 +19,8 @@ on:
             - "backend/**"
             - "contract/**"
             - "hca/**"
+            - "memvid/**"
+            - "memvid_service/**"
             - "memory_service/**"
             - "pyproject.toml"
             - "README.md"
@@ -50,6 +54,27 @@ jobs:
                   python -m pip install -r backend/requirements-test.txt
             - name: Run HCA smoke proof
               run: python -m pytest tests/test_hca_pipeline.py -q
+
+    contract-conformance:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+                  cache: "pip"
+                  cache-dependency-path: |
+                      backend/requirements.txt
+                      backend/requirements-test.txt
+                      hca/pyproject.toml
+            - name: Install Python dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  python -m pip install -e ./hca
+                  python -m pip install -r backend/requirements-test.txt
+            - name: Run contract conformance proof
+              run: python -m pytest backend/tests/test_contract_conformance.py -q
 
     backend-local:
         runs-on: ubuntu-latest
@@ -99,7 +124,11 @@ jobs:
               run: python -m pytest backend/tests -q
 
     backend-live-sidecar:
-        if: github.event_name == 'workflow_dispatch' && inputs.run_live_sidecar
+        if: >-
+            ${{
+                github.event_name != 'workflow_dispatch' ||
+                inputs.run_live_sidecar
+            }}
         runs-on: ubuntu-latest
         timeout-minutes: 30
         steps:

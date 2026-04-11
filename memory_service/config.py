@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .types import SidecarHealthResponse
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _VALID_MEMORY_BACKENDS = {"python", "rust"}
@@ -118,7 +120,14 @@ def probe_memory_service(
             "Rust memory backend /health response was not valid JSON"
         ) from exc
 
-    if payload.get("status") != "ok":
+    try:
+        health = SidecarHealthResponse.model_validate(payload)
+    except Exception as exc:
+        raise MemoryConfigurationError(
+            "Rust memory backend /health response did not match the contract"
+        ) from exc
+
+    if health.status != "ok":
         raise MemoryConfigurationError(
             "Rust memory backend /health did not report status=ok"
         )

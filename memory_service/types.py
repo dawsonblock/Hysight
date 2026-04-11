@@ -98,6 +98,10 @@ class RetrievalResponse(ContractModel):
     hits: List[RetrievalHit] = Field(default_factory=list)
 
 
+class IngestResponse(ContractModel):
+    memory_id: Optional[str] = None
+
+
 class MemoryListItem(ContractModel):
     memory_id: str
     memory_layer: str = "trace"
@@ -126,3 +130,9 @@ class MaintenanceReport(ContractModel):
     expired_ids: List[str] = Field(default_factory=list)
     compaction_supported: bool = False
     compactor_status: str = "unsupported"
+
+
+class SidecarHealthResponse(ContractModel):
+    status: str
+    engine: str
+    user_stores: int = Field(ge=0)

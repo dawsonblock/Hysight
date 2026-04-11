@@ -160,8 +160,15 @@ api_router = APIRouter(prefix="/api")
 # Pydantic models.
 
 
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+class BackendModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class APIRootResponse(BackendModel):
+    message: str
+
+
+class StatusCheck(BackendModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
     timestamp: datetime = Field(
@@ -169,24 +176,77 @@ class StatusCheck(BaseModel):
     )
 
 
-class StatusCheckCreate(BaseModel):
+class StatusCheckCreate(BackendModel):
     client_name: str
 
 
-class HCARunRequest(BaseModel):
+class HCARunRequest(BackendModel):
     goal: str
     user_id: Optional[str] = None
 
 
-class HCAApproveRequest(BaseModel):
+class HCAApproveRequest(BackendModel):
     approval_id: str
+
+
+class HCARunPlanResponse(BackendModel):
+    strategy: Optional[str] = None
+    action: Optional[str] = None
+    rationale: str = ""
+    confidence: float = 1.0
+    memory_context_used: bool = False
+
+
+class HCARunActionResponse(BackendModel):
+    kind: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    action_id: Optional[str] = None
+    requires_approval: bool = False
+
+
+class HCARunResultResponse(BackendModel):
+    status: Optional[str] = None
+    outputs: Optional[Dict[str, Any]] = None
+    artifacts: List[str] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class HCARunMemoryHitResponse(BackendModel):
+    text: str
+    score: float
+    memory_type: Optional[str] = None
+    stored_at: Optional[datetime] = None
+
+
+class HCARunKeyEventResponse(BackendModel):
+    type: str
+    actor: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    summary: str
+
+
+class HCARunSummaryResponse(BackendModel):
+    run_id: str
+    goal: str
+    state: str
+    plan: HCARunPlanResponse = Field(default_factory=HCARunPlanResponse)
+    action_taken: HCARunActionResponse = Field(
+        default_factory=HCARunActionResponse
+    )
+    action_result: HCARunResultResponse = Field(
+        default_factory=HCARunResultResponse
+    )
+    approval_id: Optional[str] = None
+    memory_hits: List[HCARunMemoryHitResponse] = Field(default_factory=list)
+    key_events: List[HCARunKeyEventResponse] = Field(default_factory=list)
+    event_count: int = 0
 
 
 # Status endpoints.
 
-@api_router.get("/")
+@api_router.get("/", response_model=APIRootResponse)
 async def root():
-    return {"message": "HCA API — Hybrid Cognitive Agent"}
+    return APIRootResponse(message="HCA API — Hybrid Cognitive Agent")
 
 
 @api_router.post("/status", response_model=StatusCheck)
@@ -211,21 +271,21 @@ async def get_status_checks():
 
 # HCA helpers.
 
-def _extract_run_summary(run_id: str) -> Dict[str, Any]:
+def _extract_run_summary(run_id: str) -> HCARunSummaryResponse:
     """Read events for a run and distill a human-readable summary."""
     from hca.storage import iter_events, load_run  # type: ignore
 
     context = load_run(run_id)
     if not context:
-        return {}
+        raise LookupError(f"Run not found: {run_id}")
 
     events = list(iter_events(run_id))
 
-    plan: Dict[str, Any] = {}
-    action_taken: Dict[str, Any] = {}
-    action_result: Dict[str, Any] = {}
+    plan = HCARunPlanResponse()
+    action_taken = HCARunActionResponse()
+    action_result = HCARunResultResponse()
     approval_id: Optional[str] = None
-    key_events: List[Dict[str, Any]] = []
+    key_events: List[HCARunKeyEventResponse] = []
 
     for ev in events:
         et = ev.get("event_type", "")
@@ -235,35 +295,35 @@ def _extract_run_summary(run_id: str) -> Dict[str, Any]:
             for ci in payload.get("candidate_items", []):
                 if ci.get("kind") == "task_plan":
                     c = ci.get("content", {})
-                    plan = {
-                        "strategy": c.get("strategy"),
-                        "action": c.get("action"),
-                        "rationale": c.get("rationale", ""),
-                        "confidence": ci.get("confidence", 1.0),
-                        "memory_context_used": c.get(
+                    plan = HCARunPlanResponse(
+                        strategy=c.get("strategy"),
+                        action=c.get("action"),
+                        rationale=c.get("rationale", ""),
+                        confidence=ci.get("confidence", 1.0),
+                        memory_context_used=c.get(
                             "memory_context_used",
                             False,
                         ),
-                    }
+                    )
 
         if et == "action_selected":
-            action_taken = {
-                "kind": payload.get("kind"),
-                "arguments": payload.get("arguments", {}),
-                "action_id": payload.get("action_id"),
-                "requires_approval": payload.get("requires_approval", False),
-            }
+            action_taken = HCARunActionResponse(
+                kind=payload.get("kind"),
+                arguments=payload.get("arguments", {}),
+                action_id=payload.get("action_id"),
+                requires_approval=payload.get("requires_approval", False),
+            )
 
         if et == "approval_requested":
             approval_id = payload.get("approval_id")
 
         if et == "execution_finished":
-            action_result = {
-                "status": payload.get("status"),
-                "outputs": payload.get("outputs"),
-                "artifacts": payload.get("artifacts") or [],
-                "error": payload.get("error"),
-            }
+            action_result = HCARunResultResponse(
+                status=payload.get("status"),
+                outputs=payload.get("outputs"),
+                artifacts=payload.get("artifacts") or [],
+                error=payload.get("error"),
+            )
 
         # Collect key milestones for the trace
         if et in {
@@ -271,15 +331,17 @@ def _extract_run_summary(run_id: str) -> Dict[str, Any]:
             "approval_requested", "execution_finished",
             "run_completed", "run_failed", "memory_written",
         }:
-            key_events.append({
-                "type": et,
-                "actor": ev.get("actor"),
-                "timestamp": ev.get("timestamp"),
-                "summary": _event_summary(et, payload),
-            })
+            key_events.append(
+                HCARunKeyEventResponse(
+                    type=et,
+                    actor=ev.get("actor"),
+                    timestamp=ev.get("timestamp"),
+                    summary=_event_summary(et, payload),
+                )
+            )
 
     # Memory hits used
-    memory_hits: List[Dict[str, Any]] = []
+    memory_hits: List[HCARunMemoryHitResponse] = []
     try:
         from memory_service.singleton import get_controller  # type: ignore
 
@@ -287,12 +349,12 @@ def _extract_run_summary(run_id: str) -> Dict[str, Any]:
             RetrievalQuery(query_text=context.goal, top_k=5, run_id=run_id)
         )
         memory_hits = [
-            {
-                "text": h.text,
-                "score": round(h.score, 3),
-                "memory_type": h.memory_type,
-                "stored_at": h.stored_at.isoformat() if h.stored_at else None,
-            }
+            HCARunMemoryHitResponse(
+                text=h.text,
+                score=round(h.score, 3),
+                memory_type=h.memory_type,
+                stored_at=h.stored_at,
+            )
             for h in hits
         ]
     except (MemoryBackendError, MemoryConfigurationError) as exc:
@@ -302,18 +364,18 @@ def _extract_run_summary(run_id: str) -> Dict[str, Any]:
             exc,
         )
 
-    return {
-        "run_id": run_id,
-        "goal": context.goal,
-        "state": context.state.value,
-        "plan": plan,
-        "action_taken": action_taken,
-        "action_result": action_result,
-        "approval_id": approval_id,
-        "memory_hits": memory_hits,
-        "key_events": key_events[-12:],  # last 12 for the trace
-        "event_count": len(events),
-    }
+    return HCARunSummaryResponse(
+        run_id=run_id,
+        goal=context.goal,
+        state=context.state.value,
+        plan=plan,
+        action_taken=action_taken,
+        action_result=action_result,
+        approval_id=approval_id,
+        memory_hits=memory_hits,
+        key_events=key_events[-12:],
+        event_count=len(events),
+    )
 
 
 def _event_summary(event_type: str, payload: Dict[str, Any]) -> str:
@@ -340,7 +402,7 @@ def _event_summary(event_type: str, payload: Dict[str, Any]) -> str:
 
 # HCA endpoints.
 
-@api_router.post("/hca/run")
+@api_router.post("/hca/run", response_model=HCARunSummaryResponse)
 async def run_hca(body: HCARunRequest):
     """Submit a goal to the HCA and return the run result."""
     from hca.runtime.runtime import Runtime  # type: ignore
@@ -517,7 +579,7 @@ async def stream_hca_run(body: HCARunRequest):
     )
 
 
-@api_router.get("/hca/run/{run_id}")
+@api_router.get("/hca/run/{run_id}", response_model=HCARunSummaryResponse)
 async def get_hca_run(run_id: str):
     """Fetch current state of an HCA run."""
     from hca.storage import load_run  # type: ignore
@@ -528,7 +590,10 @@ async def get_hca_run(run_id: str):
     return _extract_run_summary(run_id)
 
 
-@api_router.post("/hca/run/{run_id}/approve")
+@api_router.post(
+    "/hca/run/{run_id}/approve",
+    response_model=HCARunSummaryResponse,
+)
 async def approve_hca_action(run_id: str, body: HCAApproveRequest):
     """Grant approval for a pending HCA action and resume execution."""
     from hca.runtime.runtime import Runtime  # type: ignore
@@ -556,7 +621,10 @@ async def approve_hca_action(run_id: str, body: HCAApproveRequest):
     return _extract_run_summary(new_run_id)
 
 
-@api_router.post("/hca/run/{run_id}/deny")
+@api_router.post(
+    "/hca/run/{run_id}/deny",
+    response_model=HCARunSummaryResponse,
+)
 async def deny_hca_action(run_id: str, body: HCAApproveRequest):
     """Deny a pending HCA action."""
     from hca.runtime.runtime import Runtime  # type: ignore
@@ -579,7 +647,6 @@ async def deny_hca_action(run_id: str, body: HCAApproveRequest):
     return _extract_run_summary(new_run_id)
 
 
-@api_router.post("/hca/memory/retrieve")
 @api_router.post("/hca/memory/retrieve", response_model=RetrievalResponse)
 async def retrieve_memory(body: RetrievalQuery):
     """Retrieve memories matching a natural-language query."""

@@ -1,38 +1,91 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "HCA ↔ MemVid Memory Contract v1",
-  "description": "Authoritative contract between the Python HCA orchestrator and the Rust memvid memory service. Both sides MUST conform. Breaking changes require a version bump.",
+  "$id": "https://hysight.local/contract/schema.json",
+  "title": "Hysight Backend and Memory Contract v1",
+  "description": "Authoritative JSON schema for the backend JSON API surface and the Python ↔ Rust memory-service boundary. Both sides MUST conform. Breaking changes require a version bump.",
   "definitions": {
+    "EmptyObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "FlexibleObject": {
+      "type": "object"
+    },
+    "RunState": {
+      "type": "string",
+      "enum": [
+        "created",
+        "initializing",
+        "gathering_inputs",
+        "proposing",
+        "admitting",
+        "broadcasting",
+        "recurrent_update",
+        "action_selection",
+        "awaiting_approval",
+        "executing",
+        "observing",
+        "memory_commit",
+        "reporting",
+        "completed",
+        "failed",
+        "halted"
+      ]
+    },
     "Provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source_type", "source_id", "trust_weight"],
       "properties": {
-        "source_type": { "type": "string", "enum": ["chat", "file", "tool", "system", "external"] },
-        "source_id":   { "type": "string" },
-        "source_label":{ "type": ["string", "null"] },
-        "trust_weight":{ "type": "number", "minimum": 0.0, "maximum": 1.0 }
+        "source_type": {
+          "type": "string",
+          "enum": ["chat", "file", "tool", "system", "external"]
+        },
+        "source_id": { "type": "string" },
+        "source_label": { "type": ["string", "null"] },
+        "trust_weight": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
       }
     },
     "CandidateMemory": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["raw_text", "memory_type"],
+      "required": ["raw_text"],
       "properties": {
-        "candidate_id":  { "type": "string" },
-        "raw_text":      { "type": "string", "minLength": 1 },
-        "memory_type":   { "type": "string", "enum": ["trace","episode","fact","preference","goalstate","procedure"] },
-        "entity":        { "type": "string", "default": "" },
-        "slot":          { "type": "string", "default": "" },
-        "value":         { "type": "string", "default": "" },
-        "confidence":    { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.5 },
-        "salience":      { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.5 },
-        "scope":         { "type": "string", "enum": ["private","task","project","shared"], "default": "private" },
-        "run_id":        { "type": ["string", "null"] },
-        "workflow_key":  { "type": ["string", "null"] },
-        "source":        { "$ref": "#/definitions/Provenance" },
-        "tags":          { "type": "array", "items": { "type": "string" } },
-        "metadata":      { "type": "object" }
+        "candidate_id": { "type": "string" },
+        "raw_text": { "type": "string", "minLength": 1 },
+        "memory_type": {
+          "type": "string",
+          "enum": ["trace", "episode", "fact", "preference", "goalstate", "procedure"]
+        },
+        "entity": { "type": "string" },
+        "slot": { "type": "string" },
+        "value": { "type": "string" },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "salience": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["private", "task", "project", "shared"]
+        },
+        "run_id": { "type": ["string", "null"] },
+        "workflow_key": { "type": ["string", "null"] },
+        "source": { "$ref": "#/definitions/Provenance" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "metadata": { "$ref": "#/definitions/FlexibleObject" }
       }
     },
     "RetrievalQuery": {
@@ -40,33 +93,64 @@
       "additionalProperties": false,
       "required": ["query_text"],
       "properties": {
-        "query_text":       { "type": "string", "minLength": 1 },
-        "top_k":            { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
-        "memory_layer":     { "type": ["string", "null"] },
-        "scope":            { "type": ["string", "null"], "enum": ["private", "task", "project", "shared", null] },
-        "run_id":           { "type": ["string", "null"] },
-        "include_expired":  { "type": "boolean", "default": false },
-        "intent":           { "type": "string", "enum": ["general","historical_fact","episodic_recall","belief_check"], "default": "general" }
+        "query_text": { "type": "string", "minLength": 1 },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "memory_layer": { "type": ["string", "null"] },
+        "scope": {
+          "type": ["string", "null"],
+          "enum": ["private", "task", "project", "shared", null]
+        },
+        "run_id": { "type": ["string", "null"] },
+        "include_expired": { "type": "boolean" },
+        "intent": {
+          "type": "string",
+          "enum": ["general", "historical_fact", "episodic_recall", "belief_check"]
+        }
       }
     },
     "RetrievalHit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["text", "score", "memory_layer", "stored_at", "expired"],
+      "required": [
+        "memory_id",
+        "belief_id",
+        "memory_layer",
+        "memory_type",
+        "entity",
+        "slot",
+        "value",
+        "text",
+        "score",
+        "confidence",
+        "stored_at",
+        "expired",
+        "metadata"
+      ],
       "properties": {
-        "memory_id":    { "type": ["string", "null"] },
-        "belief_id":    { "type": ["string", "null"] },
+        "memory_id": { "type": ["string", "null"] },
+        "belief_id": { "type": ["string", "null"] },
         "memory_layer": { "type": "string" },
-        "memory_type":  { "type": ["string", "null"], "enum": ["trace","episode","fact","preference","goalstate","procedure", null] },
-        "entity":       { "type": ["string", "null"] },
-        "slot":         { "type": ["string", "null"] },
-        "value":        { "type": ["string", "null"] },
-        "text":         { "type": "string" },
-        "score":        { "type": "number" },
-        "confidence":   { "type": "number", "minimum": 0.0, "maximum": 1.0 },
-        "stored_at":    { "type": "string", "format": "date-time" },
-        "expired":      { "type": "boolean" },
-        "metadata":     { "type": "object" }
+        "memory_type": {
+          "type": ["string", "null"],
+          "enum": ["trace", "episode", "fact", "preference", "goalstate", "procedure", null]
+        },
+        "entity": { "type": ["string", "null"] },
+        "slot": { "type": ["string", "null"] },
+        "value": { "type": ["string", "null"] },
+        "text": { "type": "string" },
+        "score": { "type": "number" },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "stored_at": { "type": "string", "format": "date-time" },
+        "expired": { "type": "boolean" },
+        "metadata": { "$ref": "#/definitions/FlexibleObject" }
       }
     },
     "RetrievalResponse": {
@@ -80,20 +164,57 @@
         }
       }
     },
+    "MemoryListQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "memory_type": {
+          "type": ["string", "null"],
+          "enum": ["trace", "episode", "fact", "preference", "goalstate", "procedure", null]
+        },
+        "scope": {
+          "type": ["string", "null"],
+          "enum": ["private", "task", "project", "shared", null]
+        },
+        "include_expired": { "type": "boolean" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
+        "offset": { "type": "integer", "minimum": 0 }
+      }
+    },
     "MemoryListItem": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["memory_id", "memory_layer", "memory_type", "text", "scope", "confidence", "stored_at", "expired"],
+      "required": [
+        "memory_id",
+        "memory_layer",
+        "memory_type",
+        "text",
+        "scope",
+        "confidence",
+        "stored_at",
+        "expired",
+        "run_id"
+      ],
       "properties": {
-        "memory_id":    { "type": "string" },
+        "memory_id": { "type": "string" },
         "memory_layer": { "type": "string" },
-        "memory_type":  { "type": "string", "enum": ["trace","episode","fact","preference","goalstate","procedure"] },
-        "text":         { "type": "string" },
-        "scope":        { "type": "string", "enum": ["private", "task", "project", "shared"] },
-        "confidence":   { "type": "number", "minimum": 0.0, "maximum": 1.0 },
-        "stored_at":    { "type": "string", "format": "date-time" },
-        "expired":      { "type": "boolean" },
-        "run_id":       { "type": ["string", "null"] }
+        "memory_type": {
+          "type": "string",
+          "enum": ["trace", "episode", "fact", "preference", "goalstate", "procedure"]
+        },
+        "text": { "type": "string" },
+        "scope": {
+          "type": "string",
+          "enum": ["private", "task", "project", "shared"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "stored_at": { "type": "string", "format": "date-time" },
+        "expired": { "type": "boolean" },
+        "run_id": { "type": ["string", "null"] }
       }
     },
     "MemoryListResponse": {
@@ -113,28 +234,270 @@
       "additionalProperties": false,
       "required": ["deleted", "memory_id"],
       "properties": {
-        "deleted":   { "type": "boolean" },
+        "deleted": { "type": "boolean" },
         "memory_id": { "type": "string" }
       }
     },
     "MaintenanceReport": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["durable_memory_count", "expired_count"],
+      "required": [
+        "durable_memory_count",
+        "expired_count",
+        "expired_ids",
+        "compaction_supported",
+        "compactor_status"
+      ],
       "properties": {
         "durable_memory_count": { "type": "integer" },
-        "expired_count":        { "type": "integer" },
-        "expired_ids":          { "type": "array", "items": { "type": "string" } },
+        "expired_count": { "type": "integer" },
+        "expired_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "compaction_supported": { "type": "boolean" },
-        "compactor_status":     { "type": "string" }
+        "compactor_status": { "type": "string" }
+      }
+    },
+    "IngestResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory_id"],
+      "properties": {
+        "memory_id": { "type": ["string", "null"] }
+      }
+    },
+    "SidecarHealthResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "engine", "user_stores"],
+      "properties": {
+        "status": { "type": "string", "enum": ["ok"] },
+        "engine": { "type": "string" },
+        "user_stores": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ApiRootResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message"],
+      "properties": {
+        "message": { "type": "string" }
+      }
+    },
+    "StatusCheckCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_name"],
+      "properties": {
+        "client_name": { "type": "string" }
+      }
+    },
+    "StatusCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "client_name", "timestamp"],
+      "properties": {
+        "id": { "type": "string" },
+        "client_name": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "StatusCheckListResponse": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/StatusCheck" }
+    },
+    "HCARunRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal"],
+      "properties": {
+        "goal": { "type": "string" },
+        "user_id": { "type": ["string", "null"] }
+      }
+    },
+    "HCAApproveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval_id"],
+      "properties": {
+        "approval_id": { "type": "string" }
+      }
+    },
+    "RunPlanResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy",
+        "action",
+        "rationale",
+        "confidence",
+        "memory_context_used"
+      ],
+      "properties": {
+        "strategy": { "type": ["string", "null"] },
+        "action": { "type": ["string", "null"] },
+        "rationale": { "type": "string" },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "memory_context_used": { "type": "boolean" }
+      }
+    },
+    "RunActionTakenResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "arguments", "action_id", "requires_approval"],
+      "properties": {
+        "kind": { "type": ["string", "null"] },
+        "arguments": { "$ref": "#/definitions/FlexibleObject" },
+        "action_id": { "type": ["string", "null"] },
+        "requires_approval": { "type": "boolean" }
+      }
+    },
+    "RunActionResultResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "outputs", "artifacts", "error"],
+      "properties": {
+        "status": {
+          "type": ["string", "null"],
+          "enum": ["success", "failure", "pending", null]
+        },
+        "outputs": {
+          "type": ["object", "null"]
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "error": { "type": ["string", "null"] }
+      }
+    },
+    "RunMemoryHitResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "score", "memory_type", "stored_at"],
+      "properties": {
+        "text": { "type": "string" },
+        "score": { "type": "number" },
+        "memory_type": { "type": ["string", "null"] },
+        "stored_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "RunKeyEventResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "actor", "timestamp", "summary"],
+      "properties": {
+        "type": { "type": "string" },
+        "actor": { "type": ["string", "null"] },
+        "timestamp": { "type": ["string", "null"], "format": "date-time" },
+        "summary": { "type": "string" }
+      }
+    },
+    "RunSummaryResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "goal",
+        "state",
+        "plan",
+        "action_taken",
+        "action_result",
+        "approval_id",
+        "memory_hits",
+        "key_events",
+        "event_count"
+      ],
+      "properties": {
+        "run_id": { "type": "string" },
+        "goal": { "type": "string" },
+        "state": { "$ref": "#/definitions/RunState" },
+        "plan": { "$ref": "#/definitions/RunPlanResponse" },
+        "action_taken": { "$ref": "#/definitions/RunActionTakenResponse" },
+        "action_result": { "$ref": "#/definitions/RunActionResultResponse" },
+        "approval_id": { "type": ["string", "null"] },
+        "memory_hits": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RunMemoryHitResponse" }
+        },
+        "key_events": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RunKeyEventResponse" }
+        },
+        "event_count": { "type": "integer", "minimum": 0 }
       }
     }
   },
   "endpoints": {
-    "POST /memory/ingest":        { "request": "$ref#/definitions/CandidateMemory",  "response": { "memory_id": "string | null" } },
-    "POST /memory/retrieve":      { "request": "$ref#/definitions/RetrievalQuery",   "response": "$ref#/definitions/RetrievalResponse" },
-    "POST /memory/maintain":      { "request": {},                                    "response": "$ref#/definitions/MaintenanceReport" },
-    "GET /memory/list":           { "request": { "memory_type": "string?", "scope": "string?", "include_expired": "boolean", "limit": "integer", "offset": "integer" }, "response": "$ref#/definitions/MemoryListResponse" },
-    "DELETE /memory/{memory_id}": { "request": {},                                    "response": "$ref#/definitions/DeleteMemoryResponse" }
+    "POST /memory/ingest": {
+      "request": { "$ref": "#/definitions/CandidateMemory" },
+      "response": { "$ref": "#/definitions/IngestResponse" }
+    },
+    "POST /memory/retrieve": {
+      "request": { "$ref": "#/definitions/RetrievalQuery" },
+      "response": { "$ref": "#/definitions/RetrievalResponse" }
+    },
+    "POST /memory/maintain": {
+      "request": { "$ref": "#/definitions/EmptyObject" },
+      "response": { "$ref": "#/definitions/MaintenanceReport" }
+    },
+    "GET /memory/list": {
+      "request": { "$ref": "#/definitions/MemoryListQuery" },
+      "response": { "$ref": "#/definitions/MemoryListResponse" }
+    },
+    "DELETE /memory/{memory_id}": {
+      "request": { "$ref": "#/definitions/EmptyObject" },
+      "response": { "$ref": "#/definitions/DeleteMemoryResponse" }
+    },
+    "GET /health": {
+      "request": { "$ref": "#/definitions/EmptyObject" },
+      "response": { "$ref": "#/definitions/SidecarHealthResponse" }
+    },
+    "GET /api/": {
+      "response": { "$ref": "#/definitions/ApiRootResponse" }
+    },
+    "POST /api/status": {
+      "request": { "$ref": "#/definitions/StatusCheckCreate" },
+      "response": { "$ref": "#/definitions/StatusCheck" }
+    },
+    "GET /api/status": {
+      "response": { "$ref": "#/definitions/StatusCheckListResponse" }
+    },
+    "POST /api/hca/run": {
+      "request": { "$ref": "#/definitions/HCARunRequest" },
+      "response": { "$ref": "#/definitions/RunSummaryResponse" }
+    },
+    "GET /api/hca/run/{run_id}": {
+      "response": { "$ref": "#/definitions/RunSummaryResponse" }
+    },
+    "POST /api/hca/run/{run_id}/approve": {
+      "request": { "$ref": "#/definitions/HCAApproveRequest" },
+      "response": { "$ref": "#/definitions/RunSummaryResponse" }
+    },
+    "POST /api/hca/run/{run_id}/deny": {
+      "request": { "$ref": "#/definitions/HCAApproveRequest" },
+      "response": { "$ref": "#/definitions/RunSummaryResponse" }
+    },
+    "POST /api/hca/memory/retrieve": {
+      "request": { "$ref": "#/definitions/RetrievalQuery" },
+      "response": { "$ref": "#/definitions/RetrievalResponse" }
+    },
+    "POST /api/hca/memory/maintain": {
+      "request": { "$ref": "#/definitions/EmptyObject" },
+      "response": { "$ref": "#/definitions/MaintenanceReport" }
+    },
+    "GET /api/hca/memory/list": {
+      "request": { "$ref": "#/definitions/MemoryListQuery" },
+      "response": { "$ref": "#/definitions/MemoryListResponse" }
+    },
+    "DELETE /api/hca/memory/{memory_id}": {
+      "request": { "$ref": "#/definitions/EmptyObject" },
+      "response": { "$ref": "#/definitions/DeleteMemoryResponse" }
+    }
   }
 }

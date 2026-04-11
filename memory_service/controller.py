@@ -24,6 +24,8 @@ from .config import (
 )
 from .types import (
     CandidateMemory,
+    DeleteMemoryResponse,
+    IngestResponse,
     MaintenanceReport,
     MemoryListItem,
     MemoryListResponse,
@@ -352,7 +354,13 @@ class MemoryController:
             "/memory/ingest",
             json=candidate.model_dump(mode="json"),
         )
-        return self._parse_json_response(response).get("memory_id")
+        payload = self._parse_json_response(response)
+        try:
+            return IngestResponse.model_validate(payload).memory_id
+        except ValidationError as exc:
+            raise MemoryBackendError(
+                "Rust memory backend returned an invalid ingest payload"
+            ) from exc
 
     def _rust_retrieve(self, query: RetrievalQuery) -> List[RetrievalHit]:
         response = self._request(
@@ -409,4 +417,10 @@ class MemoryController:
 
     def _rust_delete(self, memory_id: str) -> bool:
         response = self._request("DELETE", f"/memory/{memory_id}")
-        return bool(self._parse_json_response(response).get("deleted", False))
+        payload = self._parse_json_response(response)
+        try:
+            return DeleteMemoryResponse.model_validate(payload).deleted
+        except ValidationError as exc:
+            raise MemoryBackendError(
+                "Rust memory backend returned an invalid delete payload"
+            ) from exc

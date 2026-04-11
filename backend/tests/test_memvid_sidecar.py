@@ -13,6 +13,8 @@ Tests that require real restart semantics skip unless the live sidecar is
 reachable and supervisorctl is available. If requests-mock is missing, the
 default mock-mode tests skip with an explicit dependency message instead of
 failing collection.
+
+This suite is also the proof surface for the supported production sidecar mode.
 """
 import os
 import re
@@ -23,9 +25,12 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 import requests
+
+from backend.tests.contract_helpers import assert_contract_payload
 
 try:
     import requests_mock as rm_lib
@@ -40,9 +45,18 @@ if str(ROOT) not in sys.path:
 # Sidecar availability probe.
 
 
+SIDECAR_URL = os.environ.get(
+    "MEMORY_SERVICE_URL",
+    "http://localhost:3031",
+)
+
+
 def _probe_sidecar() -> bool:
+    parsed = urlparse(SIDECAR_URL)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 3031
     try:
-        with socket.create_connection(("localhost", 3031), timeout=1):
+        with socket.create_connection((host, port), timeout=1):
             return True
     except OSError:
         return False
@@ -63,8 +77,6 @@ _RESTART_REASON = (
     "requires RUN_MEMVID_TESTS=1, a live memvid sidecar, "
     "and supervisorctl in PATH"
 )
-
-SIDECAR_URL = "http://localhost:3031"
 
 # In-memory mock sidecar.
 
@@ -130,6 +142,7 @@ class _FakeSidecar:
                     "score": float(max(1, _overlap(m))),
                     "memory_type": m.get("memory_type", "fact"),
                     "memory_id": m["memory_id"],
+                    "belief_id": None,
                     "entity": m.get("entity"),
                     "slot": m.get("slot"),
                     "value": m.get("value"),
@@ -247,6 +260,7 @@ class TestIngest:
             r.status_code == 200
         ), f"Expected 200, got {r.status_code}: {r.text}"
         data = r.json()
+        assert_contract_payload("POST /memory/ingest", data)
         assert "memory_id" in data, f"No memory_id in response: {data}"
         assert data["memory_id"] is not None
         assert isinstance(data["memory_id"], str)
@@ -277,6 +291,7 @@ class TestList:
         r = list_memories()
         assert r.status_code == 200, r.text
         data = r.json()
+        assert_contract_payload("GET /memory/list", data)
         assert "records" in data
         assert "total" in data
         assert isinstance(data["records"], list)
@@ -335,6 +350,7 @@ class TestRetrieve:
         r = retrieve("dark mode UI preference")
         assert r.status_code == 200, r.text
         data = r.json()
+        assert_contract_payload("POST /memory/retrieve", data)
         assert "hits" in data, f"No 'hits' key: {data}"
         assert len(data["hits"]) > 0
         hit = data["hits"][0]
@@ -392,6 +408,7 @@ class TestDelete:
             dr.status_code in (200, 204)
         ), f"Delete failed: {dr.status_code} {dr.text}"
         if dr.status_code == 200:
+            assert_contract_payload("DELETE /memory/{memory_id}", dr.json())
             assert dr.json() == {"deleted": True, "memory_id": mid}
 
         # verify it's gone from list
@@ -471,6 +488,7 @@ class TestMaintain:
         assert (
             r.status_code == 200
         ), f"Expected 200, got {r.status_code}: {r.text}"
+        assert_contract_payload("POST /memory/maintain", r.json())
 
 
 class TestHealth:
@@ -480,4 +498,36 @@ class TestHealth:
         r = health()
         assert r.status_code == 200, r.text
         data = r.json()
+        assert_contract_payload("GET /health", data)
         assert data["status"] == "ok"
+
+
+@pytest.mark.skipif(not _USE_REAL_SIDECAR, reason=_LIVE_SIDECAR_REASON)
+def test_live_sidecar_round_trip_contract_proof():
+    unique_token = f"contract-proof-{uuid.uuid4().hex}"
+
+    ingest_response = ingest(
+        f"TEST_ deterministic sidecar contract proof {unique_token}",
+        memory_type="fact",
+        scope="shared",
+    )
+    assert ingest_response.status_code == 200, ingest_response.text
+    ingest_payload = ingest_response.json()
+    assert_contract_payload("POST /memory/ingest", ingest_payload)
+
+    time.sleep(0.5)
+
+    health_response = health()
+    assert health_response.status_code == 200, health_response.text
+    assert_contract_payload("GET /health", health_response.json())
+
+    retrieve_response = retrieve(unique_token, top_k=1)
+    assert retrieve_response.status_code == 200, retrieve_response.text
+    retrieve_payload = retrieve_response.json()
+    assert_contract_payload("POST /memory/retrieve", retrieve_payload)
+    assert retrieve_payload["hits"], (
+        "Expected at least one sidecar retrieve hit"
+    )
+    top_hit = retrieve_payload["hits"][0]
+    assert top_hit["memory_id"] == ingest_payload["memory_id"]
+    assert unique_token in top_hit["text"]

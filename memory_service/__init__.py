@@ -10,6 +10,7 @@ from .controller import MemoryController
 from .types import (
     CandidateMemory,
     DeleteMemoryResponse,
+    IngestResponse,
     MaintenanceReport,
     MemoryListItem,
     MemoryListResponse,
@@ -17,6 +18,7 @@ from .types import (
     RetrievalHit,
     RetrievalQuery,
     RetrievalResponse,
+    SidecarHealthResponse,
 )
 
 __all__ = [
@@ -27,9 +29,11 @@ __all__ = [
     "MemorySettings",
     "CandidateMemory",
     "DeleteMemoryResponse",
+    "IngestResponse",
     "RetrievalQuery",
     "RetrievalHit",
     "RetrievalResponse",
     "MaintenanceReport",
     "Provenance",
+    "SidecarHealthResponse",
 ]

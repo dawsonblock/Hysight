@@ -20,6 +20,12 @@ MemoryConfigurationError = import_module(
 ).MemoryConfigurationError
 
 
+_ASYNCIO_DEPRECATION_FILTER = (
+    "ignore:The loop argument is deprecated since Python 3.8"
+    ":DeprecationWarning"
+)
+
+
 def test_load_settings_allows_db_disabled_when_env_unset(monkeypatch):
     monkeypatch.delenv("MONGO_URL", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)
@@ -73,6 +79,7 @@ def test_memory_retrieve_route_works_without_db(monkeypatch, tmp_path):
         _ms_singleton._controller = None
 
 
+@pytest.mark.filterwarnings(_ASYNCIO_DEPRECATION_FILTER)
 def test_create_app_startup_fails_with_partial_mongo_config(monkeypatch):
     monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
     monkeypatch.delenv("DB_NAME", raising=False)
@@ -82,6 +89,7 @@ def test_create_app_startup_fails_with_partial_mongo_config(monkeypatch):
             pass
 
 
+@pytest.mark.filterwarnings(_ASYNCIO_DEPRECATION_FILTER)
 def test_create_app_startup_fails_with_missing_rust_sidecar_url(monkeypatch):
     monkeypatch.delenv("MONGO_URL", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)
@@ -93,6 +101,7 @@ def test_create_app_startup_fails_with_missing_rust_sidecar_url(monkeypatch):
             pass
 
 
+@pytest.mark.filterwarnings(_ASYNCIO_DEPRECATION_FILTER)
 def test_create_app_startup_fails_when_sidecar_health_check_fails(monkeypatch):
     monkeypatch.delenv("MONGO_URL", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)
