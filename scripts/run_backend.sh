@@ -58,13 +58,18 @@ fi
 
 # rust sidecar checks
 if [ "$MEMORY_BACKEND" = "rust" ]; then
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "ERROR: curl not found. Install curl and try again." >&2
+    exit 1
+  fi
   if [ -z "${MEMORY_SERVICE_URL:-}" ]; then
     echo "ERROR: MEMORY_BACKEND=rust requires MEMORY_SERVICE_URL to be set." >&2
     echo "       Example: MEMORY_SERVICE_URL=http://localhost:3031" >&2
     exit 1
   fi
   echo "Probing sidecar at $MEMORY_SERVICE_URL/health …"
-  if ! curl --fail --silent "$MEMORY_SERVICE_URL/health" >/dev/null; then
+  if ! curl --fail --silent --connect-timeout 2 --max-time 5 \
+    "$MEMORY_SERVICE_URL/health" >/dev/null; then
     echo "ERROR: memvid sidecar not reachable at $MEMORY_SERVICE_URL/health." >&2
     echo "       Start the sidecar first:" >&2
     echo "         cargo run --manifest-path memvid_service/Cargo.toml --release" >&2
