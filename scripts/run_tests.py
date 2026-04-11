@@ -81,9 +81,17 @@ SIDECAR_STEP = {
 # Dependency / environment checks
 # ---------------------------------------------------------------------------
 
+REQUIRED_TEST_DEPS = (
+    "pytest",
+    "requests_mock",
+    "httpx",
+    "jsonschema",
+)
+
+
 def _check_test_deps() -> bool:
-    """Return True if test dependencies are importable."""
-    for pkg in ("pytest", "requests_mock", "httpx"):
+    """Return True if all required test dependencies are importable."""
+    for pkg in REQUIRED_TEST_DEPS:
         if importlib.util.find_spec(pkg) is None:
             return False
     return True
