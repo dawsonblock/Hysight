@@ -91,20 +91,31 @@ def _check_test_deps() -> bool:
 
 def _check_sidecar_health() -> bool:
     """Return True if the memvid sidecar health endpoint is reachable."""
-    if not (
-        MEMORY_SERVICE_URL.startswith("http://localhost")
-        or MEMORY_SERVICE_URL.startswith("http://127.0.0.1")
-    ):
-        # Only probe loopback addresses to avoid SSRF via env-var injection.
-        return False
     try:
         import urllib.error
+        import urllib.parse
         import urllib.request
-        urllib.request.urlopen(
-            f"{MEMORY_SERVICE_URL}/health", timeout=3
+
+        parsed = urllib.parse.urlparse(MEMORY_SERVICE_URL)
+        if parsed.scheme != "http":
+            return False
+        if parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+            # Only probe loopback addresses to avoid SSRF via env-var injection.
+            return False
+
+        health_url = urllib.parse.urlunparse(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                "/health",
+                "",
+                "",
+                "",
+            )
         )
+        urllib.request.urlopen(health_url, timeout=3)
         return True
-    except (urllib.error.URLError, OSError):
+    except (ValueError, urllib.error.URLError, OSError):
         return False
 
 
