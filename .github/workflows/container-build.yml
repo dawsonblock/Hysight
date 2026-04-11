@@ -32,6 +32,8 @@ jobs:
         name: Build backend container
         runs-on: ubuntu-latest
         timeout-minutes: 20
+        permissions:
+            contents: read
         steps:
             - uses: actions/checkout@v4
             - name: Build backend image
@@ -45,6 +47,8 @@ jobs:
         name: Build sidecar container
         runs-on: ubuntu-latest
         timeout-minutes: 30
+        permissions:
+            contents: read
         steps:
             - uses: actions/checkout@v4
             - name: Build sidecar image

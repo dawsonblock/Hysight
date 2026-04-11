@@ -53,7 +53,8 @@ run:
 	./scripts/run_backend.sh
 
 run-sidecar:
-	MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" ./scripts/run_backend.sh
+	# MEMORY_SERVICE_URL defaults to http://localhost:3031 when unset
+	MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(or $(MEMORY_SERVICE_URL),http://localhost:3031)" ./scripts/run_backend.sh
 
 docker-build:
 	docker build -f backend/Dockerfile -t hysight-backend .
