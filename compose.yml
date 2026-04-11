@@ -1,0 +1,55 @@
+# compose.yml — Hysight local deployment
+#
+# Default mode  (python-backed memory, no sidecar):
+#   docker compose up --build
+#
+# Sidecar mode  (Rust memvid backend):
+#   docker compose -f compose.yml -f compose.sidecar.yml up --build
+#
+# Copy .env.example → .env and fill in your values before starting.
+
+services:
+
+  # ─── backend ──────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Memory backend: "python" (default) or "rust" (see compose.sidecar.yml)
+      MEMORY_BACKEND: ${MEMORY_BACKEND:-python}
+      # Only required when MEMORY_BACKEND=rust; wired by compose.sidecar.yml
+      MEMORY_SERVICE_URL: ${MEMORY_SERVICE_URL:-}
+      # HCA run storage root inside the container
+      HCA_STORAGE_ROOT: /app/storage
+      # Memory storage dir inside the container
+      MEMORY_STORAGE_DIR: /app/storage/memory
+      # MongoDB (optional — omit both to run without database)
+      MONGO_URL: ${MONGO_URL:-}
+      DB_NAME: ${DB_NAME:-}
+      # Comma-separated allowed CORS origins (no wildcards)
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # LLM API key used by HCA runtime modules
+      EMERGENT_LLM_KEY: ${EMERGENT_LLM_KEY:-}
+    volumes:
+      - hca-storage:/app/storage
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/')"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  hca-storage:
+

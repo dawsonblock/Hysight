@@ -1,0 +1,49 @@
+# compose.sidecar.yml — overlay for Rust memvid sidecar mode
+#
+# Usage:
+#   docker compose -f compose.yml -f compose.sidecar.yml up --build
+#
+# This override:
+#   • Adds the memvid-sidecar service
+#   • Wires backend → sidecar (MEMORY_BACKEND=rust, MEMORY_SERVICE_URL)
+#   • Adds a depends_on so the backend waits for the sidecar to be healthy
+
+services:
+
+  backend:
+    environment:
+      MEMORY_BACKEND: rust
+      MEMORY_SERVICE_URL: http://memvid-sidecar:3031
+    depends_on:
+      memvid-sidecar:
+        condition: service_healthy
+
+  memvid-sidecar:
+    build:
+      context: .
+      dockerfile: memvid_service/Dockerfile
+    ports:
+      - "${SIDECAR_PORT:-3031}:3031"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MEMORY_SERVICE_PORT: "3031"
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - sidecar-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - http://localhost:3031/health
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  sidecar-data:

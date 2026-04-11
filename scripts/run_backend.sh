@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# scripts/run_backend.sh — start the Hysight backend locally (no containers)
+#
+# Usage:
+#   ./scripts/run_backend.sh              # python memory backend (default)
+#   MEMORY_BACKEND=rust ./scripts/run_backend.sh   # rust sidecar mode
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKEND_DIR="$REPO_ROOT/backend"
+PORT="${BACKEND_PORT:-8000}"
+
+# ── Load .env if present ──────────────────────────────────────────────────
+if [ -f "$REPO_ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/.env"
+  set +a
+fi
+
+MEMORY_BACKEND="${MEMORY_BACKEND:-python}"
+
+echo ""
+echo "═══════════════════════════════════════════════"
+echo "  Hysight backend"
+echo "  memory backend : $MEMORY_BACKEND"
+echo "  port           : $PORT"
+echo "═══════════════════════════════════════════════"
+echo ""
+
+# ── Validate prerequisites ────────────────────────────────────────────────
+
+# Python
+if ! command -v python &>/dev/null && ! command -v python3 &>/dev/null; then
+  echo "ERROR: python not found. Install Python 3.11+ and try again." >&2
+  exit 1
+fi
+PYTHON="${PYTHON:-$(command -v python3 || command -v python)}"
+
+# uvicorn
+if ! "$PYTHON" -c "import uvicorn" 2>/dev/null; then
+  echo "ERROR: uvicorn not installed." >&2
+  echo "       Run: pip install -r backend/requirements-core.txt" >&2
+  exit 1
+fi
+
+# memory_service importable
+if ! "$PYTHON" -c "import memory_service" 2>/dev/null; then
+  echo "ERROR: memory_service package not found on sys.path." >&2
+  echo "       Run from the repo root, or: pip install -r backend/requirements-test.txt" >&2
+  exit 1
+fi
+
+# rust sidecar checks
+if [ "$MEMORY_BACKEND" = "rust" ]; then
+  if [ -z "${MEMORY_SERVICE_URL:-}" ]; then
+    echo "ERROR: MEMORY_BACKEND=rust requires MEMORY_SERVICE_URL to be set." >&2
+    echo "       Example: MEMORY_SERVICE_URL=http://localhost:3031" >&2
+    exit 1
+  fi
+  echo "Probing sidecar at $MEMORY_SERVICE_URL/health …"
+  if ! curl --fail --silent "$MEMORY_SERVICE_URL/health" >/dev/null; then
+    echo "ERROR: memvid sidecar not reachable at $MEMORY_SERVICE_URL/health." >&2
+    echo "       Start the sidecar first:" >&2
+    echo "         cargo run --manifest-path memvid_service/Cargo.toml --release" >&2
+    echo "       Or use Docker: docker compose -f compose.yml -f compose.sidecar.yml up" >&2
+    exit 1
+  fi
+  echo "Sidecar healthy ✓"
+fi
+
+echo ""
+echo "Starting backend on http://localhost:$PORT …"
+echo "Health check : curl http://localhost:$PORT/api/"
+echo ""
+
+cd "$REPO_ROOT"
+exec "$PYTHON" -m uvicorn backend.server:app \
+  --host 0.0.0.0 \
+  --port "$PORT" \
+  --reload
