@@ -10,6 +10,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
 
+# Change to repo root early so relative imports (memory_service, hca) are
+# resolvable by Python regardless of the caller's working directory.
+cd "$REPO_ROOT"
+
 # ── Load .env files if present ────────────────────────────────────────────
 set -a
 if [ -f "$REPO_ROOT/.env" ]; then
@@ -84,7 +88,6 @@ echo "Starting backend on http://localhost:$PORT …"
 echo "Health check : curl http://localhost:$PORT/api/"
 echo ""
 
-cd "$REPO_ROOT"
 exec "$PYTHON" -m uvicorn backend.server:app \
   --host 0.0.0.0 \
   --port "$PORT" \
