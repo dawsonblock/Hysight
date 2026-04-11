@@ -1,8 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+import {
+  apiFetch,
+  fetchJson,
+  getResponseErrorMessage,
+  toErrorMessage,
+} from "@/lib/api";
 
 // Events worth showing in the live trace (filter out internal plumbing)
 const VISIBLE_EVENTS = new Set([
@@ -54,15 +58,23 @@ export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const updateMessageById = useCallback((messageId, updater) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === messageId ? updater(message) : message
+      )
+    );
+  }, []);
+
   const submitGoal = useCallback(async () => {
     const goal = input.trim();
     if (!goal || loading) return;
     setInput("");
     setLoading(true);
 
-    // Add user bubble immediately
-    const userId = `u-${Date.now()}`;
-    const agentId = `a-${Date.now()}`;
+    const timestamp = Date.now();
+    const userId = `u-${timestamp}`;
+    const agentId = `a-${timestamp}`;
     setMessages((prev) => [
       ...prev,
       { type: "user", content: goal, id: userId },
@@ -70,22 +82,18 @@ export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
     ]);
 
     try {
-      const response = await fetch(`${API}/hca/run/stream`, {
+      const response = await apiFetch("/hca/run/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ goal }),
       });
 
       if (!response.ok) {
-        const err = await response.text();
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === agentId
-              ? { ...m, type: "error", content: `API error: ${err}` }
-              : m
-          )
-        );
-        return;
+        throw new Error(await getResponseErrorMessage(response));
+      }
+
+      if (!response.body) {
+        throw new Error("Streaming response body was unavailable.");
       }
 
       const reader  = response.body.getReader();
@@ -120,76 +128,79 @@ export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
 
           if (eventType === "step") {
             if (!VISIBLE_EVENTS.has(data.event_type)) continue; // filter internals
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === agentId ? { ...m, steps: [...m.steps, data] } : m
-              )
-            );
+            updateMessageById(agentId, (currentMessage) => ({
+              ...currentMessage,
+              steps: [...currentMessage.steps, data],
+            }));
           } else if (eventType === "done") {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === agentId ? { ...m, type: "agent", summary: data } : m
-              )
-            );
+            updateMessageById(agentId, (currentMessage) => ({
+              ...currentMessage,
+              type: "agent",
+              summary: data,
+              _actionPending: null,
+              actionError: "",
+            }));
           } else if (eventType === "error") {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === agentId
-                  ? { ...m, type: "error", content: data.label }
-                  : m
-              )
-            );
+            updateMessageById(agentId, (currentMessage) => ({
+              ...currentMessage,
+              type: "error",
+              content: data.label,
+            }));
           }
         }
       }
-    } catch (err) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === `a-${userId.slice(2)}`
-            ? { ...m, type: "error", content: err.message }
-            : m
-        )
-      );
+    } catch (error) {
+      updateMessageById(agentId, (currentMessage) => ({
+        ...currentMessage,
+        type: "error",
+        content: toErrorMessage(error, "Request failed."),
+      }));
     } finally {
       setLoading(false);
     }
-  }, [input, loading]);
+  }, [input, loading, updateMessageById]);
 
-  const approveAction = useCallback(async (runId, approvalId, agentId) => {
+  const resolveAction = useCallback(async (decision, runId, approvalId, agentId) => {
+    updateMessageById(agentId, (currentMessage) => ({
+      ...currentMessage,
+      _actionPending: decision,
+      actionError: "",
+    }));
+
     try {
-      const res = await fetch(`${API}/hca/run/${runId}/approve`, {
+      const data = await fetchJson(`/hca/run/${runId}/${decision}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approval_id: approvalId }),
       });
-      const data = await res.json();
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === agentId ? { ...m, summary: data, _approved: true } : m
-        )
-      );
-    } catch (err) {
-      console.error("Approval failed", err);
-    }
-  }, []);
 
-  const denyAction = useCallback(async (runId, approvalId, agentId) => {
-    try {
-      const res = await fetch(`${API}/hca/run/${runId}/deny`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approval_id: approvalId }),
-      });
-      const data = await res.json();
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === agentId ? { ...m, summary: data, _denied: true } : m
-        )
-      );
-    } catch (err) {
-      console.error("Deny failed", err);
+      updateMessageById(agentId, (currentMessage) => ({
+        ...currentMessage,
+        summary: data,
+        _actionPending: null,
+        actionError: "",
+        _approved: decision === "approve",
+        _denied: decision === "deny",
+      }));
+    } catch (error) {
+      updateMessageById(agentId, (currentMessage) => ({
+        ...currentMessage,
+        _actionPending: null,
+        actionError: toErrorMessage(
+          error,
+          decision === "approve" ? "Approval failed." : "Deny failed."
+        ),
+      }));
     }
-  }, []);
+  }, [updateMessageById]);
+
+  const approveAction = useCallback((runId, approvalId, agentId) => {
+    return resolveAction("approve", runId, approvalId, agentId);
+  }, [resolveAction]);
+
+  const denyAction = useCallback((runId, approvalId, agentId) => {
+    return resolveAction("deny", runId, approvalId, agentId);
+  }, [resolveAction]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -246,6 +257,8 @@ export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
                 steps={msg.steps || []}
                 approved={msg._approved}
                 denied={msg._denied}
+                pendingAction={msg._actionPending}
+                actionError={msg.actionError}
                 onApprove={approveAction}
                 onDeny={denyAction}
               />
@@ -366,7 +379,17 @@ function TraceStep({ step, index }) {
   );
 }
 
-function AgentCard({ id, data, steps, approved, denied, onApprove, onDeny }) {
+function AgentCard({
+  id,
+  data,
+  steps,
+  approved,
+  denied,
+  pendingAction,
+  actionError,
+  onApprove,
+  onDeny,
+}) {
   const [traceOpen, setTraceOpen] = useState(false);
   const [memOpen,   setMemOpen]   = useState(false);
 
@@ -375,6 +398,7 @@ function AgentCard({ id, data, steps, approved, denied, onApprove, onDeny }) {
   const plan      = data?.plan || {};
   const result    = data?.action_result || {};
   const isAwaiting = state === "awaiting_approval" && data?.approval_id && !approved && !denied;
+  const buttonsDisabled = Boolean(pendingAction);
 
   return (
     <div data-testid="agent-card" style={S.agentRow}>
@@ -436,19 +460,30 @@ function AgentCard({ id, data, steps, approved, denied, onApprove, onDeny }) {
               <div style={S.approvalBtns}>
                 <button
                   data-testid="approve-btn"
-                  style={S.approveBtn}
+                  style={{
+                    ...S.approveBtn,
+                    opacity: buttonsDisabled ? 0.6 : 1,
+                    cursor: buttonsDisabled ? "not-allowed" : "pointer",
+                  }}
                   onClick={() => onApprove(data.run_id, data.approval_id, id)}
+                  disabled={buttonsDisabled}
                 >
-                  Approve
+                  {pendingAction === "approve" ? "Approving..." : "Approve"}
                 </button>
                 <button
                   data-testid="deny-btn"
-                  style={S.denyBtn}
+                  style={{
+                    ...S.denyBtn,
+                    opacity: buttonsDisabled ? 0.6 : 1,
+                    cursor: buttonsDisabled ? "not-allowed" : "pointer",
+                  }}
                   onClick={() => onDeny(data.run_id, data.approval_id, id)}
+                  disabled={buttonsDisabled}
                 >
-                  Deny
+                  {pendingAction === "deny" ? "Denying..." : "Deny"}
                 </button>
               </div>
+              {actionError && <div style={S.approvalError}>{actionError}</div>}
             </Section>
           )}
 
@@ -816,6 +851,7 @@ const S = {
   // ── Approval ─────────────────────────────────────────────────────────────────
   approvalNote: { fontSize: 15, color: C.text, lineHeight: 1.6, marginBottom: 14 },
   approvalBtns: { display: "flex", gap: 10 },
+  approvalError: { marginTop: 10, fontSize: 13, color: C.red, lineHeight: 1.5 },
   approveBtn: {
     padding:      "9px 22px",
     borderRadius: 8,

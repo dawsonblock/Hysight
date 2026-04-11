@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+import { fetchJson, toErrorMessage } from "@/lib/api";
 
 const TYPE_META = {
   episode:    { color: "#6366f1", bg: "#eef2ff", label: "Episode"   },
@@ -13,75 +12,129 @@ const TYPE_META = {
 const DEFAULT_TYPE = { color: "#64748b", bg: "#f1f5f9", label: "?" };
 
 const ALL_TYPES = ["episode", "fact", "trace", "preference", "goalstate", "procedure"];
+const PAGE_SIZE = 20;
+const SEARCH_LIMIT = 200;
 
 export default function MemoryBrowser({ open, onClose }) {
   const [records, setRecords]     = useState([]);
   const [total, setTotal]         = useState(0);
   const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState("");
   const [search, setSearch]       = useState("");
   const [typeFilter, setTypeFilter] = useState(null);
   const [page, setPage]           = useState(0);
   const [deleting, setDeleting]   = useState(null);
+  const [searchLimited, setSearchLimited] = useState(false);
   const searchRef = useRef(null);
-  const PAGE_SIZE = 20;
 
-  const fetchRecords = useCallback(async (q, type, pg) => {
+  const fetchRecords = useCallback(async (queryText, type, currentPage) => {
     setLoading(true);
+    setError("");
+    setSearchLimited(false);
+
     try {
-      const params = new URLSearchParams({ limit: PAGE_SIZE, offset: pg * PAGE_SIZE });
-      if (type) params.set("memory_type", type);
-      const res  = await fetch(`${API}/hca/memory/list?${params}`);
-      const data = await res.json();
-      const recs = data.records || [];
-      // client-side text filter
-      const filtered = q.trim()
-        ? recs.filter((r) =>
-            r.text?.toLowerCase().includes(q.toLowerCase()) ||
-            r.memory_type?.toLowerCase().includes(q.toLowerCase())
-          )
-        : recs;
-      setRecords(filtered);
-      setTotal(data.total || 0);
-    } catch {
+      const isSearchMode = queryText.trim().length > 0;
+      const params = new URLSearchParams();
+
+      if (type) {
+        params.set("memory_type", type);
+      }
+
+      if (isSearchMode) {
+        params.set("limit", String(SEARCH_LIMIT));
+        params.set("offset", "0");
+      } else {
+        params.set("limit", String(PAGE_SIZE));
+        params.set("offset", String(currentPage * PAGE_SIZE));
+      }
+
+      const data = await fetchJson(`/hca/memory/list?${params.toString()}`);
+
+      if (!Array.isArray(data?.records) || typeof data?.total !== "number") {
+        throw new Error("Memory list response was invalid.");
+      }
+
+      if (isSearchMode) {
+        const normalizedQuery = queryText.trim().toLowerCase();
+        const filteredRecords = data.records.filter((record) => {
+          const text = typeof record.text === "string"
+            ? record.text.toLowerCase()
+            : "";
+          const memoryType = typeof record.memory_type === "string"
+            ? record.memory_type.toLowerCase()
+            : "";
+
+          return (
+            text.includes(normalizedQuery) ||
+            memoryType.includes(normalizedQuery)
+          );
+        });
+
+        const start = currentPage * PAGE_SIZE;
+        setRecords(filteredRecords.slice(start, start + PAGE_SIZE));
+        setTotal(filteredRecords.length);
+        setSearchLimited(data.total > SEARCH_LIMIT);
+        return;
+      }
+
+      setRecords(data.records);
+      setTotal(data.total);
+    } catch (error) {
       setRecords([]);
+      setTotal(0);
+      setError(toErrorMessage(error, "Unable to load memories."));
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Re-fetch when panel opens or filters change
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    fetchRecords(search, typeFilter, page);
+  }, [open, search, typeFilter, page, fetchRecords]);
+
   useEffect(() => {
     if (open) {
-      fetchRecords(search, typeFilter, page);
+      searchRef.current?.focus();
     }
-  }, [open, typeFilter, page, fetchRecords]);
+  }, [open]);
 
-  const handleSearch = (e) => {
-    const q = e.target.value;
-    setSearch(q);
+  const handleSearch = (event) => {
+    setSearch(event.target.value);
     setPage(0);
-    fetchRecords(q, typeFilter, 0);
   };
 
   const handleTypeFilter = (type) => {
-    const next = typeFilter === type ? null : type;
-    setTypeFilter(next);
+    setTypeFilter((currentType) => (currentType === type ? null : type));
     setPage(0);
-    fetchRecords(search, next, 0);
   };
 
   const handleDelete = async (memoryId) => {
     setDeleting(memoryId);
     try {
-      await fetch(`${API}/hca/memory/${memoryId}`, { method: "DELETE" });
-      setRecords((prev) => prev.filter((r) => r.memory_id !== memoryId));
-      setTotal((prev) => Math.max(0, prev - 1));
-    } catch (err) {
-      console.error("Delete failed", err);
+      setError("");
+      const data = await fetchJson(`/hca/memory/${memoryId}`, { method: "DELETE" });
+
+      if (!data?.deleted || data.memory_id !== memoryId) {
+        throw new Error("Memory delete did not complete.");
+      }
+
+      if (page > 0 && records.length === 1) {
+        setPage((currentPage) => currentPage - 1);
+      } else {
+        await fetchRecords(search, typeFilter, page);
+      }
+    } catch (error) {
+      setError(toErrorMessage(error, "Delete failed."));
     } finally {
       setDeleting(null);
     }
   };
+
+  const isSearchMode = search.trim().length > 0;
 
   if (!open) return null;
 
@@ -100,7 +153,9 @@ export default function MemoryBrowser({ open, onClose }) {
         <div style={S.panelHeader}>
           <div>
             <div style={S.panelTitle}>Memory Store</div>
-            <div style={S.panelSub}>{total} record{total !== 1 ? "s" : ""} total</div>
+            <div style={S.panelSub}>
+              {total} {isSearchMode ? "matching " : ""}record{total !== 1 ? "s" : ""}{isSearchMode ? "" : " total"}
+            </div>
           </div>
           <button
             data-testid="close-memory-btn"
@@ -124,7 +179,10 @@ export default function MemoryBrowser({ open, onClose }) {
           {search && (
             <button
               style={S.clearBtn}
-              onClick={() => { setSearch(""); fetchRecords("", typeFilter, page); }}
+              onClick={() => {
+                setSearch("");
+                setPage(0);
+              }}
             >
               ✕
             </button>
@@ -155,11 +213,19 @@ export default function MemoryBrowser({ open, onClose }) {
           })}
         </div>
 
+        {isSearchMode && searchLimited && (
+          <div style={S.notice}>
+            Text search scans the newest {SEARCH_LIMIT} memories for the current filter.
+          </div>
+        )}
+
         {/* Records list */}
         <div style={S.list}>
           {loading && <div style={S.loadingMsg}>Loading…</div>}
 
-          {!loading && records.length === 0 && (
+          {!loading && error && <div style={S.errorMsg}>{error}</div>}
+
+          {!loading && !error && records.length === 0 && (
             <div style={S.emptyMsg}>
               {search || typeFilter ? "No matching memories." : "No memories stored yet."}
             </div>
@@ -266,7 +332,7 @@ const S = {
     top:           0,
     right:         0,
     bottom:        0,
-    width:         420,
+    width:         "min(420px, 100vw)",
     background:    "#ffffff",
     borderLeft:    "1px solid #e2e8f0",
     boxShadow:     "-4px 0 24px rgba(15,23,42,0.1)",
@@ -337,6 +403,12 @@ const S = {
     borderBottom: "1px solid #f1f5f9",
     flexShrink: 0,
   },
+  notice: {
+    padding: "10px 16px 0",
+    fontSize: 12,
+    lineHeight: 1.5,
+    color: "#64748b",
+  },
   filterChip: {
     fontSize:     11,
     padding:      "3px 10px",
@@ -351,6 +423,16 @@ const S = {
     flex:      1,
     overflowY: "auto",
     padding:   "8px 0",
+  },
+  errorMsg: {
+    margin: "12px 16px 0",
+    padding: "12px 14px",
+    borderRadius: 8,
+    border: "1px solid #fca5a5",
+    background: "#fef2f2",
+    color: "#b91c1c",
+    fontSize: 14,
+    lineHeight: 1.5,
   },
   loadingMsg: { padding: "24px 20px", textAlign: "center", fontSize: 14, color: "#94a3b8" },
   emptyMsg:   { padding: "40px 20px", textAlign: "center", fontSize: 15, color: "#94a3b8" },

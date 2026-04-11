@@ -230,9 +230,13 @@ DB_NAME=hysight
 
 ```bash
 cd frontend
-npm install
+yarn install
 cd ..
 ```
+
+If you need the frontend to talk to a non-default backend origin, copy
+`frontend/.env.example` to `frontend/.env.local` and set
+`REACT_APP_BACKEND_URL`. Leave it unset for the standard local workflow.
 
 ### 5. (Optional) Build the memvid sidecar
 
@@ -267,10 +271,11 @@ The API will be available at `http://localhost:8000`. Interactive docs at `http:
 
 ```bash
 cd frontend
-npm start
+yarn start
 ```
 
-The UI will open at `http://localhost:3000`.
+The UI will open at `http://localhost:3000`. In local development, `/api`
+requests proxy to the backend at `http://localhost:8000` by default.
 
 ### (Optional) Run the memvid sidecar
 

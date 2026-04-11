@@ -4,28 +4,32 @@ This package is the React frontend for Hysight. It uses the Create React App too
 
 ## Runtime Expectations
 
-- Set `REACT_APP_BACKEND_URL` to the backend origin, for example `http://localhost:8000`.
+- Local development assumes the backend is running on `http://localhost:8000`.
+- The frontend dev server proxies `/api` requests to the backend automatically, so no environment variable is required for the default local workflow.
+- Set `REACT_APP_BACKEND_URL` only when you need to target a different backend origin without relying on the dev proxy.
 - Chat streaming uses `POST /api/hca/run/stream`.
 - The memory browser uses `GET /api/hca/memory/list` and `DELETE /api/hca/memory/{memory_id}`.
 
 ## Install
 
-Examples below use `npm`, but the package also declares a Yarn 1 package manager.
+This package declares Yarn 1 as its package manager.
 
 ```bash
-npm install
+yarn install
 ```
+
+If you need a non-default backend origin, copy `.env.example` to `.env.local` and set `REACT_APP_BACKEND_URL`.
 
 ## Available Scripts
 
-### `npm start`
+### `yarn start`
 
-Runs the CRACO-backed development server.
+Runs the CRACO-backed development server. In local development, `/api` requests proxy to `http://localhost:8000` by default.
 
-### `npm test`
+### `yarn test`
 
 Runs the frontend test command through CRACO.
 
-### `npm run build`
+### `yarn build`
 
 Builds the production bundle into `build/`.
