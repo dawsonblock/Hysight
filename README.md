@@ -214,7 +214,7 @@ make test-bootstrap
 If you do not want to use `make`, the equivalent command is:
 
 ```bash
-python -m pip install -e ./hca -r backend/requirements-test.txt
+python -m pip install -r backend/requirements-test.txt
 ```
 
 That single install command covers:
@@ -232,7 +232,7 @@ make dev-bootstrap
 Or, without `make`:
 
 ```bash
-python -m pip install -e ./hca -r backend/requirements-dev.txt
+python -m pip install -r backend/requirements-dev.txt
 ```
 
 If you only need the backend runtime and not the proof surface:

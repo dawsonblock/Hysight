@@ -21,10 +21,15 @@ Proof modes and their corresponding CI job names:
 import argparse
 import importlib.util
 import os
+import pathlib
+import shlex
 import subprocess
 import sys
 
 MEMORY_SERVICE_URL = os.environ.get("MEMORY_SERVICE_URL", "http://localhost:3031")
+
+# Repo root is two levels up from this file (scripts/run_tests.py → repo root).
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # ---------------------------------------------------------------------------
 # Proof surface definition
@@ -138,13 +143,13 @@ def _run_step(step: dict) -> int:
 
     print(f"\n==> [{step['name']}]")
     display_env = " ".join(f"{k}={v}" for k, v in extra_env.items())
-    display_cmd = " ".join(cmd)
+    display_cmd = shlex.join(cmd)
     if display_env:
         print(f"    {display_env} {display_cmd}")
     else:
         print(f"    {display_cmd}")
 
-    result = subprocess.run(cmd, env=env, check=False)
+    result = subprocess.run(cmd, env=env, cwd=REPO_ROOT, check=False)
     return result.returncode
 
 
