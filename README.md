@@ -87,7 +87,7 @@ The agent runs a structured lifecycle — gathering inputs, proposing actions, a
 | Feature | Description |
 |---|---|
 | **Global Workspace** | Capacity-limited (7 slots) item-ranked workspace inspired by Global Workspace Theory |
-| **LLM Critic** | Claude Sonnet 4.5-powered plan evaluation; degrades gracefully to deterministic rule-based fallback |
+| **Optional LLM Modules** | Planner, Critic, and TextPerception can use external LLMs when configured and fall back to deterministic behavior when unavailable |
 | **Approval Gate** | Risk-tiered authorization — `low` executes automatically, `high` halts and awaits human sign-off |
 | **Immutable Event Log** | Every state transition, proposal, and execution is appended to an append-only JSONL log |
 | **Conflict Detection** | Automatic detection of contradicting action proposals across modules |
@@ -164,7 +164,7 @@ Hysight/
 
 - Python 3.9+
 - Node.js 18+ and npm
-- MongoDB 6+ (running locally or via Atlas/Docker)
+- MongoDB 6+ if you want the optional `/api/status` persistence endpoints
 - Rust toolchain (only required to build the `memvid-sidecar`)
 
 ---
@@ -293,10 +293,10 @@ hca-smoke "summarize the latest quarterly report"
 
 ### CLI — Evaluation
 
-Run the full evaluation harness suite against a dataset:
+Run the full evaluation harness suite:
 
 ```bash
-hca-eval --dataset hca/evaluation/datasets/default.jsonl
+hca-eval all --json
 ```
 
 ### CLI — Replay
@@ -313,13 +313,18 @@ All agent operations are available via the REST API:
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/runs` | Create and start a new agent run |
-| `GET` | `/api/runs/{run_id}` | Fetch current run state |
-| `GET` | `/api/runs/{run_id}/events` | Stream the event log |
-| `POST` | `/api/runs/{run_id}/approve` | Grant approval for a pending action |
-| `POST` | `/api/runs/{run_id}/deny` | Deny a pending action |
-| `GET` | `/api/memory/{run_id}` | Retrieve episodic memory records |
-| `GET` | `/api/eval` | List evaluation results |
+| `GET` | `/api/` | Backend root message |
+| `POST` | `/api/status` | Create a persisted status check when Mongo is configured |
+| `GET` | `/api/status` | List persisted status checks when Mongo is configured |
+| `POST` | `/api/hca/run` | Create and execute a new HCA run |
+| `POST` | `/api/hca/run/stream` | Stream run progress via server-sent events |
+| `GET` | `/api/hca/run/{run_id}` | Fetch run state, trace, and summary |
+| `POST` | `/api/hca/run/{run_id}/approve` | Grant approval for a pending action |
+| `POST` | `/api/hca/run/{run_id}/deny` | Deny a pending action |
+| `POST` | `/api/hca/memory/retrieve` | Retrieve memories using the `query_text` contract |
+| `POST` | `/api/hca/memory/maintain` | Run memory maintenance |
+| `GET` | `/api/hca/memory/list` | List stored memories |
+| `DELETE` | `/api/hca/memory/{memory_id}` | Delete a memory record |
 
 ---
 
@@ -442,12 +447,11 @@ In short:
   routes, and HCA runtime behavior without external services.
 - The default full backend suite adds mock-backed memvid boundary coverage.
 - The live memvid command is the separate proof for the real Rust sidecar.
+- GitHub Actions mirrors those paths in `.github/workflows/backend-proof.yml`.
 - The backend now rejects the legacy `{"query": ...}` memory retrieve body;
   use `{"query_text": ...}` everywhere.
 - CORS is disabled by default and must be enabled with explicit absolute
   origins via `CORS_ORIGINS`.
-
-Test results are written to `test_reports/`.
 
 ---
 

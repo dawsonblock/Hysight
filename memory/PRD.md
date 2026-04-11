@@ -1,9 +1,13 @@
 # HCA — Hybrid Cognitive Agent System
 
+> Historical migration and design notes from Apr 2025.
+> This file is not the current operational source of truth.
+> For current runtime behavior use `README.md`, `backend/.env.example`, `backend/server.py`, and `contract/schema.json`.
+
 ## Original Problem Statement
 User uploaded `Hybrid-ai.zip` containing two isolated systems:
 1. `Conscious-hybrid--main-2` (Python HCA Runtime): State machine orchestrator with hardcoded stubs.
-2. `memvid-Human--main-main-2` (Rust Memory Engine): Production memory kernel (BM25, WAL) lacking HTTP API.
+2. `memvid-Human--main-main-2` (Rust Memory Engine): Rust memory kernel (BM25, WAL) lacking HTTP API.
 
 **User direction**: Keep HCA orchestrator in Python. Turn memvid into the authoritative memory service in Rust. Add a narrow contract between them.
 
@@ -15,7 +19,7 @@ User uploaded `Hybrid-ai.zip` containing two isolated systems:
 ## Architecture
 
 ```
-/app/
+Hysight/
 ├── backend/                     FastAPI server — HCA API surface
 ├── frontend/                    React chat UI ("Cognitive Agent Console")
 ├── hca/                         Python HCA orchestrator (installed package)
@@ -26,7 +30,7 @@ User uploaded `Hybrid-ai.zip` containing two isolated systems:
 │       └── storage/             Run events, receipts, approvals (JSONL)
 ├── memory_service/              Python MemoryController (contract fallback)
 ├── memvid/                      memvid-core Rust library (Tantivy BM25 + WAL)
-├── memvid_service/              Rust Axum HTTP sidecar (production memory layer)
+├── memvid_service/              Optional Rust Axum HTTP sidecar
 │   ├── Cargo.toml               (depends on memvid-core, features = ["lex"])
 │   ├── src/main.rs              PersistentMemoryStore + Axum routes
 │   └── data/
@@ -48,10 +52,10 @@ User uploaded `Hybrid-ai.zip` containing two isolated systems:
 | POST | /memory/retrieve | RetrievalQuery → [RetrievalHit] (Tantivy BM25 scored) |
 | POST | /memory/maintain | TTL expiry → MaintenanceReport |
 | GET | /memory/list | Paginated record list |
-| DELETE | /memory/:id | Hard delete (persisted in deleted_ids.txt) |
-| GET | /health | Liveness check → {"status":"ok","engine":"tantivy-bm25"} |
+| DELETE | /memory/{memory_id} | Hard delete |
+| GET | /health | Liveness check |
 
-**Backend switch**: `MEMORY_BACKEND=rust` + `MEMORY_SERVICE_URL=http://localhost:3031`
+**Current backend switch**: `MEMORY_BACKEND=rust` + `MEMORY_SERVICE_URL=http://localhost:3031`
 
 ---
 
@@ -67,11 +71,13 @@ User uploaded `Hybrid-ai.zip` containing two isolated systems:
 | POST | /api/hca/memory/retrieve | BM25 search |
 | POST | /api/hca/memory/maintain | TTL expiry |
 | GET | /api/hca/memory/list | List memories |
-| DELETE | /api/hca/memory/{id} | Delete memory |
+| DELETE | /api/hca/memory/{memory_id} | Delete memory |
 
 ---
 
 ## What Has Been Implemented
+
+This section is a historical implementation log from the original migration work. It is not a current status dashboard.
 
 ### Session 1 (Apr 2025)
 - [x] Extracted and analyzed Hybrid-ai.zip
@@ -80,9 +86,9 @@ User uploaded `Hybrid-ai.zip` containing two isolated systems:
 - [x] LLM-powered Planner (Claude Sonnet 4.5) + TextPerception (Gemini 3 Flash)
 - [x] Wired MemoryController into HCA runtime `_record_execution_memory`
 - [x] FastAPI backend with full HCA endpoint surface
-- [x] Rust Axum HTTP sidecar (compilable, ready to deploy)
-- [x] React chat UI ("Cognitive Agent Console") — dark terminal aesthetic
-- [x] Integration tests (7/7 passing)
+- [x] Rust Axum HTTP sidecar (compilable at that stage)
+- [x] React chat UI ("Cognitive Agent Console")
+- [x] Integration tests added
 
 ### Session 2 (Apr 2025)
 - [x] White background theme with larger text
@@ -92,7 +98,7 @@ User uploaded `Hybrid-ai.zip` containing two isolated systems:
 
 ### Session 3 (Apr 2025)
 - [x] Installed Rust; compiled Axum sidecar
-- [x] Added `GET /memory/list` and `DELETE /memory/:id`
+- [x] Added `GET /memory/list` and `DELETE /memory/{memory_id}`
 - [x] Migrated 15 JSONL memories to Rust store; swapped to `MEMORY_BACKEND=rust`
 - [x] MemoryBrowser panel in frontend
 
@@ -106,46 +112,40 @@ User uploaded `Hybrid-ai.zip` containing two isolated systems:
 - [x] Added `/health` endpoint for liveness checks
 - [x] Fixed DELETE 404 for non-existent IDs
 - [x] Added supervisor config (`supervisord_sidecar.conf`) for auto-restart
-- [x] 14/15 backend tests pass (iteration_3.json)
+- [x] Expanded backend proof coverage during that phase
 
 ---
 
-## Backlog
+## Historical Backlog Note
 
-### P1
-- [ ] Add Critic module LLM integration (currently rule-based in Python HCA)
-- [ ] Session/user-scoped memory isolation (per-user memory partition)
-
-### P2
-- [ ] Semantic memory store using HNSW (separate from episodic traces)
-- [ ] Batch-commit optimization in Rust sidecar
-- [ ] Frontend: MemoryBrowser to show real-time Tantivy search scores
+The backlog from this migration document is no longer authoritative. Use the current repository state and issue tracker for live planning.
 
 ---
 
 ## Environment Variables
 
 ```bash
-# /app/backend/.env
+# backend/.env
 MONGO_URL=mongodb://localhost:27017
-DB_NAME=test_database
-EMERGENT_LLM_KEY=sk-emergent-b688eDdA08a2e28Ea8
+DB_NAME=hysight
+# EMERGENT_LLM_KEY=...
 MEMORY_BACKEND=rust
 MEMORY_SERVICE_URL=http://localhost:3031
 MEMORY_STORAGE_DIR=storage/memory
 
-# /app/memvid_service (via supervisor env)
+# memvid_service environment
 MEMORY_SERVICE_PORT=3031
-MEMORY_DATA_DIR=/app/memvid_service/data
+MEMORY_DATA_DIR=./data
 RUST_LOG=info
 ```
+
+For current examples, prefer `backend/.env.example` over this historical snapshot.
 
 ---
 
 ## Rust Sidecar Notes
 
-- Binary: `/app/memvid_service/target/release/memvid-sidecar`
-- Managed by: `sudo supervisorctl restart memvid-sidecar`
-- Logs: `/var/log/supervisor/memvid-sidecar.{out,err}.log`
-- Rebuild: `cd /app/memvid_service && ~/.cargo/bin/cargo build --release`
-- Data: `/app/memvid_service/data/memory.mv2` (WAL + Tantivy index)
+- Binary: `memvid_service/target/release/memvid-sidecar`
+- Rebuild: `cd memvid_service && cargo build --release`
+- Optional process management can be done with supervisor or another service manager, but that is deployment-specific.
+- Data directory defaults to `memvid_service/data/` unless overridden with `MEMORY_DATA_DIR`.

@@ -7,6 +7,7 @@ This project implements a small, bounded cognitive agent runtime.  It is inspire
 * **State machine** – every run follows a strict sequence of states; illegal transitions are rejected.  This makes runs easy to reason about and replay.
 * **Global workspace** – a small, capacity‑limited store where competing module proposals are admitted, ranked and broadcast back.  Capacity pressure forces the agent to prioritise.
 * **Meta monitor** – a component that inspects the workspace for contradictions, missing information and other red flags and emits simple control signals such as `proceed` or `ask_user`.
+* **Optional LLM integrations** – Planner, Critic and TextPerception can call external LLM providers when configured, but each path degrades to deterministic fallback logic when the integration is unavailable.
 * **Typed memory stores** – episodic, semantic, procedural and identity records are stored separately with provenance.  Memory writes are durable and retrieval exposes confidence and staleness metadata.
 * **Execution authority** – all external side effects are performed through a single executor which enforces policy and approval requirements.  High‑risk actions require explicit approval.
 * **Logging and replay** – every significant event is appended to a JSONL log.  Runs can be reconstructed from this log and associated artifacts.
@@ -36,4 +37,4 @@ The evaluation CLI exercises coordination, metacognition, memory, proactivity, e
 
 ## Limitations
 
-This codebase is a minimal MVP intended as a foundation for further work.  It does **not** include real language models, complex planners or social reasoning.  The modules provided are deterministic stubs.  The runtime currently persists data to the local filesystem only and does not implement robust recovery after process failure.  It is therefore unsuitable for production use without further hardening.
+This codebase is still a bounded runtime intended as a foundation for further work.  Several modules support optional external LLM integrations, but those paths only activate when the relevant dependencies and credentials are configured.  Persistence is still primarily local-filesystem based unless you pair the package with the surrounding backend and memory sidecar.  The package therefore remains unsuitable as a standalone production deployment without additional operational hardening.
