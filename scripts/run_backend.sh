@@ -9,16 +9,20 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
-PORT="${BACKEND_PORT:-8000}"
 
-# ── Load .env if present ──────────────────────────────────────────────────
+# ── Load .env files if present ────────────────────────────────────────────
+set -a
 if [ -f "$REPO_ROOT/.env" ]; then
-  set -a
   # shellcheck disable=SC1091
   source "$REPO_ROOT/.env"
-  set +a
 fi
+if [ -f "$BACKEND_DIR/.env" ]; then
+  # shellcheck disable=SC1091
+  source "$BACKEND_DIR/.env"
+fi
+set +a
 
+PORT="${BACKEND_PORT:-8000}"
 MEMORY_BACKEND="${MEMORY_BACKEND:-python}"
 
 echo ""
