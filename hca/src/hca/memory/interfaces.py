@@ -2,7 +2,6 @@
 
 import json
 import os
-from pathlib import Path
 from typing import Iterator, List
 
 from hca.common.types import MemoryRecord

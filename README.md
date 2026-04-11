@@ -1,8 +1,6 @@
-<div align="center">
-
 # Hysight — Hybrid Cognitive Agent
 
-**A bounded cognitive runtime that thinks, plans, critiques, and acts — with human approval built in.**
+*A bounded cognitive runtime that thinks, plans, critiques, and acts — with human approval built in.*
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -10,8 +8,6 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-Motor%203.3-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![Rust](https://img.shields.io/badge/Rust-Axum%200.7-CE412B?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-</div>
 
 ---
 
@@ -25,7 +21,7 @@ The agent runs a structured lifecycle — gathering inputs, proposing actions, a
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                      HCA Runtime                        │
 │                                                         │
@@ -85,7 +81,7 @@ The agent runs a structured lifecycle — gathering inputs, proposing actions, a
 ## Key Features
 
 | Feature | Description |
-|---|---|
+| --- | --- |
 | **Global Workspace** | Capacity-limited (7 slots) item-ranked workspace inspired by Global Workspace Theory |
 | **Optional LLM Modules** | Planner, Critic, and TextPerception can use external LLMs when configured and fall back to deterministic behavior when unavailable |
 | **Approval Gate** | Risk-tiered authorization — `low` executes automatically, `high` halts and awaits human sign-off |
@@ -100,7 +96,7 @@ The agent runs a structured lifecycle — gathering inputs, proposing actions, a
 
 ## Repository Structure
 
-```
+```text
 Hysight/
 ├── hca/                        # Core cognitive agent package
 │   ├── src/hca/
@@ -139,22 +135,26 @@ Hysight/
 
 ## Tech Stack
 
-**Backend / Agent**
+### Backend / Agent
+
 - Python 3.9+, FastAPI 0.110, Pydantic v2
 - Motor 3.3 (async MongoDB driver)
 - PyYAML for configuration
 - `python-dotenv` for environment management
 
-**Frontend**
+### Frontend
+
 - React 19, React Router v7
 - shadcn/ui (Radix UI primitives + Tailwind CSS)
 - Recharts for data visualization
 - Axios for HTTP
 
-**Sidecar**
+### Sidecar
+
 - Rust (edition 2021), Axum 0.7, Tokio
 
-**Tooling**
+### Tooling
+
 - pytest, httpx for testing
 - black, isort, flake8, mypy for code quality
 
@@ -163,7 +163,7 @@ Hysight/
 ## Prerequisites
 
 - Python 3.9+
-- Node.js 18+ and npm
+- Node.js 18+ and Yarn 1
 - MongoDB 6+ if you want the optional `/api/status` persistence endpoints
 - Rust toolchain (only required to build the `memvid-sidecar`)
 
@@ -317,7 +317,7 @@ hca-replay --run-id <run-id>
 All agent operations are available via the REST API:
 
 | Method | Path | Description |
-|---|---|---|
+| --- | --- | --- |
 | `GET` | `/api/` | Backend root message |
 | `POST` | `/api/status` | Create a persisted status check when Mongo is configured |
 | `GET` | `/api/status` | List persisted status checks when Mongo is configured |
@@ -338,7 +338,7 @@ All agent operations are available via the REST API:
 All runtime configuration lives in `hca/configs/`:
 
 | File | Purpose |
-|---|---|
+| --- | --- |
 | `base.yaml` | Workspace capacity, approval timeout, tool action classes |
 | `models.yaml` | Planner and Critic model identifiers |
 | `policy.yaml` | Risk level thresholds and approval requirements |
@@ -382,7 +382,7 @@ export HCA_STORAGE_ROOT=/data/hysight/storage
 
 The agent moves through a deterministic state machine on every run:
 
-```
+```text
 created → initializing → gathering_inputs → proposing → admitting
        → broadcasting → recurrent_update → action_selection
        → awaiting_approval?  → executing → observing

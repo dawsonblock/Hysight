@@ -1,4 +1,5 @@
 import sys
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -7,11 +8,16 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import memory_service.config as memory_config
-from backend.server import BackendConfigurationError, _load_settings, create_app
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from memory_service import MemoryConfigurationError
+memory_config = import_module("memory_service.config")
+server_module = import_module("backend.server")
+BackendConfigurationError = server_module.BackendConfigurationError
+_load_settings = server_module._load_settings
+create_app = server_module.create_app
+FastAPI = import_module("fastapi").FastAPI
+TestClient = import_module("fastapi.testclient").TestClient
+MemoryConfigurationError = import_module(
+    "memory_service"
+).MemoryConfigurationError
 
 
 def test_load_settings_allows_db_disabled_when_env_unset(monkeypatch):
@@ -37,7 +43,7 @@ def test_create_app_returns_fastapi_instance():
 
 
 def test_root_route_works_without_db(monkeypatch):
-    """create_app() startup must not raise even when Mongo env vars are absent."""
+    """create_app() startup must not raise without Mongo env vars."""
     monkeypatch.delenv("MONGO_URL", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)
     with TestClient(create_app()) as client:
@@ -94,7 +100,9 @@ def test_create_app_startup_fails_when_sidecar_health_check_fails(monkeypatch):
     monkeypatch.setenv("MEMORY_SERVICE_URL", "http://localhost:3031")
 
     def _fail_probe(*args, **kwargs):
-        raise MemoryConfigurationError("Rust memory backend health check failed")
+        raise MemoryConfigurationError(
+            "Rust memory backend health check failed"
+        )
 
     monkeypatch.setattr(memory_config, "probe_memory_service", _fail_probe)
 

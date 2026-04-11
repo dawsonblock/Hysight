@@ -55,7 +55,10 @@ def _validate_service_url(service_url: str) -> None:
 
 
 def load_memory_settings() -> MemorySettings:
-    raw_backend = os.environ.get("MEMORY_BACKEND", "python").strip().lower() or "python"
+    raw_backend = (
+        os.environ.get("MEMORY_BACKEND", "python").strip().lower()
+        or "python"
+    )
     if raw_backend not in _VALID_MEMORY_BACKENDS:
         allowed = ", ".join(sorted(_VALID_MEMORY_BACKENDS))
         raise MemoryConfigurationError(
@@ -86,7 +89,10 @@ def validate_memory_backend_startup(timeout: float = 2.0) -> MemorySettings:
     return settings
 
 
-def probe_memory_service(settings: MemorySettings, timeout: float = 2.0) -> None:
+def probe_memory_service(
+    settings: MemorySettings,
+    timeout: float = 2.0,
+) -> None:
     if not settings.uses_sidecar:
         return
 

@@ -1,5 +1,4 @@
 """HCA API backend tests — self-contained, no external services required."""
-import os
 import sys
 from pathlib import Path
 
@@ -9,7 +8,9 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# ── Root / health ──────────────────────────────────────────────────────────────
+
+# Root / health.
+
 
 def test_root_message(app_client):
     r = app_client.get("/api/")
@@ -17,14 +18,16 @@ def test_root_message(app_client):
     assert r.json().get("message") == "HCA API — Hybrid Cognitive Agent"
 
 
-# ── HCA Run: not-found ─────────────────────────────────────────────────────────
+# HCA run: not found.
+
 
 def test_get_run_not_found(app_client):
     r = app_client.get("/api/hca/run/nonexistent-run-id")
     assert r.status_code == 404
 
 
-# ── Memory retrieve: empty store returns empty hits ───────────────────────────
+# Memory retrieve: empty store returns empty hits.
+
 
 def test_memory_retrieve_returns_hits_array(app_client):
     r = app_client.post(
@@ -107,7 +110,7 @@ def test_memory_maintain_envelope(app_client):
     assert isinstance(data["compactor_status"], str)
 
 
-# ── Full HCA run (slow — runs real Runtime in-process) ────────────────────────
+# Full HCA run.
 
 @pytest.mark.slow
 def test_basic_run_completed(app_client):
@@ -163,7 +166,7 @@ def test_runtime_memory_recall_response_not_empty(app_client):
     assert r.json()
 
 
-# ── HCA approval flow (slow) ──────────────────────────────────────────────────
+# HCA approval flow.
 
 @pytest.mark.slow
 def test_remember_goal_awaiting_approval(app_client):
@@ -198,7 +201,8 @@ def test_approve_action_completes(app_client):
     assert r2.json().get("state") == "completed"
 
 
-# ── Status endpoints (no DB configured → 503) ────────────────────────────────
+# Status endpoints.
+
 
 def test_status_route_returns_503_without_db(app_client):
     """app_client deletes MONGO_URL so the status route must return 503."""

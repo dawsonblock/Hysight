@@ -39,7 +39,6 @@ class MemoryBackendError(RuntimeError):
     """Raised when the configured memory backend cannot serve a request."""
 
 
-
 def _coerce_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
@@ -121,10 +120,12 @@ class MemoryController:
             self._settings.storage_dir.mkdir(parents=True, exist_ok=True)
             self._load_from_disk()
 
-    # ── persistence helpers ───────────────────────────────────────────────────
+    # Persistence helpers.
 
     def _disk_path(self) -> Optional[Path]:
-        return Path(self._storage_dir) / "memories.jsonl" if self._storage_dir else None
+        if not self._storage_dir:
+            return None
+        return Path(self._storage_dir) / "memories.jsonl"
 
     def _load_from_disk(self) -> None:
         path = self._disk_path()
@@ -146,7 +147,7 @@ class MemoryController:
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, default=str) + "\n")
 
-    # ── BM25-lite scoring ─────────────────────────────────────────────────────
+    # BM25-lite scoring.
 
     @staticmethod
     def _bm25(query: str, text: str) -> float:
@@ -169,7 +170,7 @@ class MemoryController:
             score += numer / denom
         return max(0.0, score)
 
-    # ── public contract methods ───────────────────────────────────────────────
+    # Public contract methods.
 
     def ingest(self, candidate: CandidateMemory) -> Optional[str]:
         """Store a candidate memory. Returns assigned memory_id."""
@@ -206,7 +207,10 @@ class MemoryController:
         candidates = [
             r for r in self._records
             if (not r.get("expired") or query.include_expired)
-            and (query.memory_layer is None or r.get("memory_layer") == query.memory_layer)
+            and (
+                query.memory_layer is None
+                or r.get("memory_layer") == query.memory_layer
+            )
             and (query.scope is None or r.get("scope") == query.scope)
             and (query.run_id is None or r.get("run_id") == query.run_id)
         ]
@@ -229,9 +233,15 @@ class MemoryController:
         limit: int = 50,
         offset: int = 0,
     ):
-        """Return paginated list of records, newest first. Returns (records, total)."""
+        """Return a paginated list of records, newest first."""
         if self._settings.uses_sidecar:
-            return self._rust_list(memory_type, scope, include_expired, limit, offset)
+            return self._rust_list(
+                memory_type,
+                scope,
+                include_expired,
+                limit,
+                offset,
+            )
         filtered = [
             r for r in self._records
             if (include_expired or not r.get("expired"))
@@ -241,7 +251,7 @@ class MemoryController:
         filtered.sort(key=lambda r: r.get("stored_at", ""), reverse=True)
         records = [
             _normalize_list_item(r)
-            for r in filtered[offset : offset + limit]
+            for r in filtered[offset: offset + limit]
         ]
         return records, len(filtered)
 
@@ -250,7 +260,9 @@ class MemoryController:
         if self._settings.uses_sidecar:
             return self._rust_delete(memory_id)
         before = len(self._records)
-        self._records = [r for r in self._records if r.get("memory_id") != memory_id]
+        self._records = [
+            r for r in self._records if r.get("memory_id") != memory_id
+        ]
         deleted = len(self._records) < before
         if deleted and self._storage_dir:
             self._rewrite_disk()
@@ -285,7 +297,13 @@ class MemoryController:
                         continue
                 except (TypeError, ValueError):
                     pass
-            if rec.get("memory_type") in {"fact", "episode", "preference", "goalstate", "procedure"}:
+            if rec.get("memory_type") in {
+                "fact",
+                "episode",
+                "preference",
+                "goalstate",
+                "procedure",
+            }:
                 durable += 1
         return MaintenanceReport(
             durable_memory_count=durable,
@@ -295,7 +313,7 @@ class MemoryController:
             compactor_status="unsupported_python_backend",
         )
 
-    # ── Rust HTTP delegation ──────────────────────────────────────────────────
+    # Rust HTTP delegation.
 
     def _request(self, method: str, path: str, **kwargs: Any):
         try:
@@ -315,14 +333,18 @@ class MemoryController:
             response.raise_for_status()
             return response
         except httpx.HTTPError as exc:
-            raise MemoryBackendError(f"Rust memory backend request failed: {exc}") from exc
+            raise MemoryBackendError(
+                f"Rust memory backend request failed: {exc}"
+            ) from exc
 
     @staticmethod
     def _parse_json_response(response) -> Dict[str, Any]:
         try:
             return response.json()
         except ValueError as exc:
-            raise MemoryBackendError("Rust memory backend returned invalid JSON") from exc
+            raise MemoryBackendError(
+                "Rust memory backend returned invalid JSON"
+            ) from exc
 
     def _rust_ingest(self, candidate: CandidateMemory) -> Optional[str]:
         response = self._request(
@@ -349,7 +371,9 @@ class MemoryController:
     def _rust_maintain(self) -> MaintenanceReport:
         response = self._request("POST", "/memory/maintain", json={})
         try:
-            return MaintenanceReport.model_validate(self._parse_json_response(response))
+            return MaintenanceReport.model_validate(
+                self._parse_json_response(response)
+            )
         except ValidationError as exc:
             raise MemoryBackendError(
                 "Rust memory backend returned an invalid maintenance payload"

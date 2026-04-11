@@ -1,4 +1,6 @@
-"""Critic module — LLM-powered evaluation of proposed plans (Claude Sonnet 4.5).
+"""Critic module.
+
+LLM-powered evaluation of proposed plans using Claude Sonnet 4.5.
 
 The Critic operates in two phases:
   1. ``propose(run_id)``  — stores run_id for later; returns an empty proposal.
@@ -29,9 +31,10 @@ from hca.storage import load_run
 # Thread-local storage so concurrent requests each carry their own run_id.
 _tl = threading.local()
 
-# ── LLM critique ──────────────────────────────────────────────────────────────
+# LLM critique.
 
-_CRITIC_SYSTEM = """You are the Critic module of a Hybrid Cognitive Agent (HCA).
+_CRITIC_SYSTEM = """
+You are the Critic module of a Hybrid Cognitive Agent (HCA).
 Your role is to evaluate the proposed plan produced by the Planner module.
 
 Given the agent's GOAL and the PROPOSED ACTION, assess:
@@ -40,25 +43,34 @@ Given the agent's GOAL and the PROPOSED ACTION, assess:
 3. Safety      — are there risks, side-effects, or misuse potential? (0.0–1.0)
 
 Then decide:
-  "approve"  — the plan looks good; confidence_delta in [0.0, +0.05]
-  "revise"   — the plan needs adjustment; confidence_delta in [-0.15, 0.0]
-  "reject"   — the plan is unsafe or badly misaligned; confidence_delta in [-0.3, -0.15]
+    "approve"  — the plan looks good; confidence_delta in [0.0, +0.05]
+    "revise"   — the plan needs adjustment; confidence_delta in [-0.15, 0.0]
+    "reject"   — the plan is unsafe or badly misaligned;
+                             confidence_delta in [-0.3, -0.15]
 
 Respond ONLY with valid JSON — no markdown fences, no extra text:
 {
-  "verdict": "approve|revise|reject",
-  "alignment": 0.0,
-  "feasibility": 0.0,
-  "safety": 0.0,
-  "issues": [],
-  "confidence_delta": 0.0,
-  "rationale": "one sentence"
-}"""
+    "verdict": "approve|revise|reject",
+    "alignment": 0.0,
+    "feasibility": 0.0,
+    "safety": 0.0,
+    "issues": [],
+    "confidence_delta": 0.0,
+    "rationale": "one sentence"
+}
+"""
 
 
-async def _llm_evaluate(goal: str, action: str, rationale: str) -> Dict[str, Any]:
+async def _llm_evaluate(
+    goal: str,
+    action: str,
+    rationale: str,
+) -> Dict[str, Any]:
     """Call Claude Sonnet 4.5 to evaluate the proposed action."""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage  # type: ignore
+    from emergentintegrations.llm.chat import (  # type: ignore
+        LlmChat,
+        UserMessage,
+    )
 
     api_key = os.environ.get("EMERGENT_LLM_KEY", "")
     session_id = f"critic-{id(_tl)}"
@@ -87,7 +99,9 @@ def _format_conflict_issue(conflict: ConflictRecord) -> str:
     details = conflict.details or {}
 
     if conflict.reason_code == "different_action_kind":
-        actions = [str(action) for action in details.get("actions", []) if action]
+        actions = [
+            str(action) for action in details.get("actions", []) if action
+        ]
         if actions:
             return f"Conflicting actions proposed: {' vs '.join(actions)}"
         return "Conflicting actions proposed"
@@ -139,12 +153,15 @@ def _rule_based_critique(
         "safety": 0.9,
         "issues": issues,
         "confidence_delta": max(delta, -0.3),
-        "rationale": f"Rule-based: {len(conflicts)} conflict(s), {len(missing)} gap(s).",
+        "rationale": (
+            f"Rule-based: {len(conflicts)} conflict(s), "
+            f"{len(missing)} gap(s)."
+        ),
         "llm_powered": False,
     }
 
 
-# ── Critic class ──────────────────────────────────────────────────────────────
+# Critic class.
 
 
 class Critic:
@@ -153,7 +170,7 @@ class Critic:
     def propose(
         self, input_data: Union[str, List[WorkspaceItem]]
     ) -> ModuleProposal:
-        """Store the run_id for use in on_broadcast; return an empty proposal."""
+        """Store the run_id for use in on_broadcast."""
         if isinstance(input_data, str):
             _tl.run_id = input_data  # thread-local, safe for concurrent runs
         return ModuleProposal(
@@ -177,15 +194,19 @@ class Critic:
 
         # Extract the plan from workspace items.
         plan_item = next(
-            (i for i in items if i.kind in ("task_plan", "action_suggestion")), None
+            (
+                i for i in items
+                if i.kind in ("task_plan", "action_suggestion")
+            ),
+            None,
         )
-        action   = ""
+        action = ""
         rationale = ""
         if plan_item:
-            action    = plan_item.content.get("action", str(plan_item.content))
+            action = plan_item.content.get("action", str(plan_item.content))
             rationale = plan_item.content.get("rationale", "")
 
-        # ── LLM critique (with rule-based fallback) ───────────────────────────
+        # LLM critique with rule-based fallback.
         critique: Dict[str, Any] = {}
         if goal and action:
             try:
@@ -200,39 +221,44 @@ class Critic:
         if not critique:
             critique = _rule_based_critique(items)
 
-        # ── Build confidence adjustments for workspace items ──────────────────
+        # Build confidence adjustments for workspace items.
         delta = float(critique.get("confidence_delta", 0.0))
         adjustments = []
         for item in items:
             if item.kind in ("task_plan", "action_suggestion"):
                 adjustments.append(
                     {
-                        "item_id":   item.item_id,
-                        "new_confidence": max(0.0, min(1.0, item.confidence + delta)),
-                        "reason":    critique.get("rationale", ""),
+                        "item_id": item.item_id,
+                        "new_confidence": max(
+                            0.0,
+                            min(1.0, item.confidence + delta),
+                        ),
+                        "reason": critique.get("rationale", ""),
                     }
                 )
 
-        # ── Emit a critic item so the trace UI shows the verdict ──────────────
+        # Emit a critic item so the trace UI shows the verdict.
         critique_workspace_item = WorkspaceItem(
             source_module=self.name,
             kind="critic_verdict",
             content={
-                "verdict":          critique.get("verdict", "approve"),
-                "alignment":        critique.get("alignment", 1.0),
-                "feasibility":      critique.get("feasibility", 1.0),
-                "safety":           critique.get("safety", 1.0),
-                "issues":           critique.get("issues", []),
+                "verdict": critique.get("verdict", "approve"),
+                "alignment": critique.get("alignment", 1.0),
+                "feasibility": critique.get("feasibility", 1.0),
+                "safety": critique.get("safety", 1.0),
+                "issues": critique.get("issues", []),
                 "confidence_delta": delta,
-                "rationale":        critique.get("rationale", ""),
-                "llm_powered":      bool(critique.get("llm_powered", False)),
+                "rationale": critique.get("rationale", ""),
+                "llm_powered": bool(critique.get("llm_powered", False)),
             },
             salience=0.6,
             confidence=1.0,
         )
 
         return {
-            "revised_proposals":      [],
+            "revised_proposals": [],
             "confidence_adjustments": adjustments,
-            "critique_items":         [critique_workspace_item.model_dump(mode="json")],
+            "critique_items": [
+                critique_workspace_item.model_dump(mode="json")
+            ],
         }

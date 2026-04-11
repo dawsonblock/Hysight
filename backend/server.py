@@ -74,7 +74,8 @@ def _load_settings() -> BackendSettings:
     if missing:
         joined = ", ".join(missing)
         raise BackendConfigurationError(
-            f"Mongo configuration is partial; missing required backend settings: {joined}"
+            "Mongo configuration is partial; missing required backend "
+            f"settings: {joined}"
         )
 
     return BackendSettings(mongo_url=mongo_url, db_name=db_name)
@@ -85,7 +86,9 @@ def _load_cors_origins() -> List[str]:
     if not raw_origins:
         return []
 
-    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    origins = [
+        origin.strip() for origin in raw_origins.split(",") if origin.strip()
+    ]
     if not origins:
         return []
     if "*" in origins:
@@ -110,7 +113,9 @@ def _load_cors_origins() -> List[str]:
 async def _initialize_database(settings: BackendSettings) -> None:
     global client, db
     if not settings.database_enabled:
-        logger.info("Database integration disabled — /status routes will return 503.")
+        logger.info(
+            "Database integration disabled — /status routes will return 503."
+        )
         client = None
         db = None
         return
@@ -128,7 +133,7 @@ async def _initialize_database(settings: BackendSettings) -> None:
             serverSelectionTimeoutMS=2000,
         )
         await client.admin.command("ping")
-    except Exception as exc:  # pragma: no cover - exercised via monkeypatch in tests
+    except Exception as exc:  # pragma: no cover
         if client is not None:
             client.close()
         client = None
@@ -151,13 +156,17 @@ def _require_db() -> Any:
 
 api_router = APIRouter(prefix="/api")
 
-# ── Pydantic models ───────────────────────────────────────────────────────────
+
+# Pydantic models.
+
 
 class StatusCheck(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
 
 
 class StatusCheckCreate(BaseModel):
@@ -173,7 +182,7 @@ class HCAApproveRequest(BaseModel):
     approval_id: str
 
 
-# ── Status endpoints ──────────────────────────────────────────────────────────
+# Status endpoints.
 
 @api_router.get("/")
 async def root():
@@ -200,18 +209,17 @@ async def get_status_checks():
     return checks
 
 
-# ── HCA helpers ───────────────────────────────────────────────────────────────
+# HCA helpers.
 
 def _extract_run_summary(run_id: str) -> Dict[str, Any]:
-    """Read events and receipts for a run and distil a human-readable summary."""
-    from hca.storage import load_run, iter_events, iter_receipts  # type: ignore
+    """Read events for a run and distill a human-readable summary."""
+    from hca.storage import iter_events, load_run  # type: ignore
 
     context = load_run(run_id)
     if not context:
         return {}
 
     events = list(iter_events(run_id))
-    receipts = list(iter_receipts(run_id))
 
     plan: Dict[str, Any] = {}
     action_taken: Dict[str, Any] = {}
@@ -232,7 +240,10 @@ def _extract_run_summary(run_id: str) -> Dict[str, Any]:
                         "action": c.get("action"),
                         "rationale": c.get("rationale", ""),
                         "confidence": ci.get("confidence", 1.0),
-                        "memory_context_used": c.get("memory_context_used", False),
+                        "memory_context_used": c.get(
+                            "memory_context_used",
+                            False,
+                        ),
                     }
 
         if et == "action_selected":
@@ -285,7 +296,11 @@ def _extract_run_summary(run_id: str) -> Dict[str, Any]:
             for h in hits
         ]
     except (MemoryBackendError, MemoryConfigurationError) as exc:
-        logger.warning("Memory summary unavailable for run %s: %s", run_id, exc)
+        logger.warning(
+            "Memory summary unavailable for run %s: %s",
+            run_id,
+            exc,
+        )
 
     return {
         "run_id": run_id,
@@ -303,19 +318,27 @@ def _extract_run_summary(run_id: str) -> Dict[str, Any]:
 
 def _event_summary(event_type: str, payload: Dict[str, Any]) -> str:
     mapping = {
-        "run_created": f"Run started — goal logged",
-        "module_proposed": f"Module '{payload.get('source_module', '?')}' proposed {len(payload.get('candidate_items', []))} item(s)",
+        "run_created": "Run started — goal logged",
+        "module_proposed": (
+            f"Module '{payload.get('source_module', '?')}' proposed "
+            f"{len(payload.get('candidate_items', []))} item(s)"
+        ),
         "action_selected": f"Selected action: {payload.get('kind', '?')}",
-        "approval_requested": f"Approval requested (id={payload.get('approval_id', '?')[:8]}...)",
+        "approval_requested": (
+            "Approval requested "
+            f"(id={payload.get('approval_id', '?')[:8]}...)"
+        ),
         "execution_finished": f"Execution {payload.get('status', '?')}",
         "run_completed": "Run completed successfully",
         "run_failed": "Run failed",
-        "memory_written": f"Memory written — subject: {payload.get('subject', '?')}",
+        "memory_written": (
+            f"Memory written — subject: {payload.get('subject', '?')}"
+        ),
     }
     return mapping.get(event_type, event_type.replace("_", " "))
 
 
-# ── HCA endpoints ─────────────────────────────────────────────────────────────
+# HCA endpoints.
 
 @api_router.post("/hca/run")
 async def run_hca(body: HCARunRequest):
@@ -382,7 +405,11 @@ async def stream_hca_run(body: HCARunRequest):
         "actor": <str>, "timestamp": <iso>, "payload": {...} }
     Final 'done' event contains the full run summary.
     """
-    result_holder: Dict[str, Any] = {"run_id": None, "done": False, "error": None}
+    result_holder: Dict[str, Any] = {
+        "run_id": None,
+        "done": False,
+        "error": None,
+    }
 
     def _execute():
         from hca.runtime.runtime import Runtime  # type: ignore
@@ -425,7 +452,14 @@ async def stream_hca_run(body: HCARunRequest):
             # Pick up run_id as soon as it's available
             if not run_id and result_holder["run_id"]:
                 run_id = result_holder["run_id"]
-                yield _sse("status", {"label": "Pipeline running…", "step": step, "run_id": run_id})
+                yield _sse(
+                    "status",
+                    {
+                        "label": "Pipeline running…",
+                        "step": step,
+                        "run_id": run_id,
+                    },
+                )
                 step += 1
 
             if run_id:
@@ -510,7 +544,10 @@ async def approve_hca_action(run_id: str, body: HCAApproveRequest):
     approval_id = body.approval_id
 
     def _approve_and_resume():
-        append_grant(run_id, ApprovalGrant(approval_id=approval_id, token=token))
+        append_grant(
+            run_id,
+            ApprovalGrant(approval_id=approval_id, token=token),
+        )
         rt = Runtime()
         rt._current_state = context.state
         return rt.resume(run_id, approval_id, token)
@@ -532,7 +569,11 @@ async def deny_hca_action(run_id: str, body: HCAApproveRequest):
     def _deny():
         rt = Runtime()
         rt._current_state = context.state
-        return rt.deny_approval(run_id, body.approval_id, reason="Denied by user")
+        return rt.deny_approval(
+            run_id,
+            body.approval_id,
+            reason="Denied by user",
+        )
 
     new_run_id = await asyncio.to_thread(_deny)
     return _extract_run_summary(new_run_id)
@@ -585,7 +626,10 @@ async def list_memory(
     return MemoryListResponse(records=records, total=total)
 
 
-@api_router.delete("/hca/memory/{memory_id}", response_model=DeleteMemoryResponse)
+@api_router.delete(
+    "/hca/memory/{memory_id}",
+    response_model=DeleteMemoryResponse,
+)
 async def delete_memory(memory_id: str):
     """Delete a memory record by ID."""
     from memory_service.singleton import get_controller  # type: ignore
@@ -597,7 +641,6 @@ async def delete_memory(memory_id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail="Memory not found")
     return DeleteMemoryResponse(deleted=True, memory_id=memory_id)
-
 
 
 @asynccontextmanager

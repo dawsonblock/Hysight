@@ -4,8 +4,10 @@ Default mode runs mock-backed contract checks against an in-memory sidecar via
 requests-mock, so the backend suite can prove request/response shapes without a
 running Rust service. Live-sidecar behavior is opt-in:
 
-    RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3031 \
-        pytest backend/tests/test_memvid_sidecar.py -v
+    RUN_MEMVID_TESTS=1 \
+    MEMORY_BACKEND=rust \
+    MEMORY_SERVICE_URL=http://localhost:3031 \
+    pytest backend/tests/test_memvid_sidecar.py -v
 
 Tests that require real restart semantics skip unless the live sidecar is
 reachable and supervisorctl is available. If requests-mock is missing, the
@@ -35,7 +37,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
-# ── Sidecar availability probe ────────────────────────────────────────────────
+# Sidecar availability probe.
+
 
 def _probe_sidecar() -> bool:
     try:
@@ -45,7 +48,9 @@ def _probe_sidecar() -> bool:
         return False
 
 
-SIDECAR_REACHABLE = os.environ.get("RUN_MEMVID_TESTS") == "1" and _probe_sidecar()
+SIDECAR_REACHABLE = (
+    os.environ.get("RUN_MEMVID_TESTS") == "1" and _probe_sidecar()
+)
 _USE_REAL_SIDECAR = SIDECAR_REACHABLE
 _MOCK_SIDECAR_REASON = (
     "requests-mock is not installed; install backend/requirements.txt "
@@ -55,17 +60,20 @@ _LIVE_SIDECAR_REASON = (
     "requires RUN_MEMVID_TESTS=1 with a live memvid sidecar on localhost:3031"
 )
 _RESTART_REASON = (
-    "requires RUN_MEMVID_TESTS=1, a live memvid sidecar, and supervisorctl in PATH"
+    "requires RUN_MEMVID_TESTS=1, a live memvid sidecar, "
+    "and supervisorctl in PATH"
 )
-
-# ─────────────────────────────────────────────────────────────────────────────
 
 SIDECAR_URL = "http://localhost:3031"
 
-# ── In-memory mock sidecar ────────────────────────────────────────────────────
+# In-memory mock sidecar.
+
 
 class _FakeSidecar:
-    """Stateful in-memory mock that validates sidecar request/response shapes."""
+    """Stateful in-memory mock.
+
+    Validates sidecar request and response shapes.
+    """
 
     def __init__(self):
         self._store: dict = {}
@@ -109,7 +117,11 @@ class _FakeSidecar:
         def _overlap(m):
             return sum(1 for w in words if w in m.get("raw_text", "").lower())
 
-        ranked = sorted(self._store.values(), key=_overlap, reverse=True)[:top_k]
+        ranked = sorted(
+            self._store.values(),
+            key=_overlap,
+            reverse=True,
+        )[:top_k]
         return {
             "hits": [
                 {
@@ -182,7 +194,8 @@ def sidecar():
         )
         yield fake
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+    # Helpers.
+
 
 def ingest(text, memory_type="fact", scope="shared", tags=None, slot=None):
     payload = {
@@ -219,18 +232,25 @@ def delete_memory(memory_id):
     return requests.delete(f"{SIDECAR_URL}/memory/{memory_id}", timeout=10)
 
 
-# ── 1. Ingest ─────────────────────────────────────────────────────────────────
+# Ingest.
+
 
 class TestIngest:
-    """POST /memory/ingest — mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
+    """POST /memory/ingest.
+
+    Uses mock mode by default and live mode when RUN_MEMVID_TESTS=1.
+    """
 
     def test_ingest_returns_200_and_memory_id(self):
         r = ingest("TEST_ integration test fact for sidecar")
-        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        assert (
+            r.status_code == 200
+        ), f"Expected 200, got {r.status_code}: {r.text}"
         data = r.json()
         assert "memory_id" in data, f"No memory_id in response: {data}"
         assert data["memory_id"] is not None
-        assert isinstance(data["memory_id"], str) and len(data["memory_id"]) > 0
+        assert isinstance(data["memory_id"], str)
+        assert len(data["memory_id"]) > 0
 
     def test_ingest_preference_memory(self):
         r = ingest(
@@ -244,10 +264,14 @@ class TestIngest:
         assert "memory_id" in r.json()
 
 
-# ── 2. List ───────────────────────────────────────────────────────────────────
+# List.
+
 
 class TestList:
-    """GET /memory/list — mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
+    """GET /memory/list.
+
+    Uses mock mode by default and live mode when RUN_MEMVID_TESTS=1.
+    """
 
     def test_list_returns_records_and_total(self):
         r = list_memories()
@@ -269,16 +293,24 @@ class TestList:
         assert after == before + 1, f"Expected {before+1}, got {after}"
 
 
-# ── 3. Retrieve (BM25) ────────────────────────────────────────────────────────
+# Retrieve.
+
 
 class TestRetrieve:
-    """POST /memory/retrieve — BM25 scored retrieval. Mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
+    """POST /memory/retrieve.
+
+    Uses BM25-scored retrieval in mock mode by default and live mode when
+    RUN_MEMVID_TESTS=1.
+    """
 
     @pytest.fixture(autouse=True)
     def seed_memories(self):
         # Ingest distinct memories for relevance tests
         ingest(
-            "TEST_ user strongly prefers dark mode UI theme with high contrast colors",
+            (
+                "TEST_ user strongly prefers dark mode UI theme "
+                "with high contrast colors"
+            ),
             memory_type="preference",
             scope="private",
             tags=["ui", "dark_mode"],
@@ -328,7 +360,9 @@ class TestRetrieve:
         assert len(results) > 0
         top = results[0]
         text = top.get("text", "").lower()
-        assert "dark mode" in text, f"Top result does not contain 'dark mode': {text}"
+        assert "dark mode" in text, (
+            f"Top result does not contain 'dark mode': {text}"
+        )
 
     def test_retrieve_top_k_limits_results(self):
         r = retrieve("memory", top_k=2)
@@ -337,10 +371,14 @@ class TestRetrieve:
         assert len(results) <= 2
 
 
-# ── 4. Delete ────────────────────────────────────────────────────────────────
+# Delete.
+
 
 class TestDelete:
-    """DELETE /memory/:id — mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
+    """DELETE /memory/:id.
+
+    Uses mock mode by default and live mode when RUN_MEMVID_TESTS=1.
+    """
 
     def test_delete_removes_memory(self):
         # ingest a fresh memory
@@ -350,7 +388,9 @@ class TestDelete:
 
         # delete it
         dr = delete_memory(mid)
-        assert dr.status_code in (200, 204), f"Delete failed: {dr.status_code} {dr.text}"
+        assert (
+            dr.status_code in (200, 204)
+        ), f"Delete failed: {dr.status_code} {dr.text}"
         if dr.status_code == 200:
             assert dr.json() == {"deleted": True, "memory_id": mid}
 
@@ -361,10 +401,12 @@ class TestDelete:
 
     def test_delete_nonexistent_returns_error(self):
         r = delete_memory("00000000-0000-0000-0000-000000000000")
-        assert r.status_code in (404, 400), f"Expected 404/400, got {r.status_code}"
+        assert (
+            r.status_code in (404, 400)
+        ), f"Expected 404/400, got {r.status_code}"
 
+# Persistence.
 
-# ── 5. Persistence ────────────────────────────────────────────────────────────
 
 @pytest.mark.skipif(
     not _USE_REAL_SIDECAR or not shutil.which("supervisorctl"),
@@ -396,7 +438,9 @@ class TestPersistence:
 
         records = list_memories().json()["records"]
         ids = [rec["memory_id"] for rec in records]
-        assert mid in ids, f"Memory {mid} not found after restart. Total: {len(ids)}"
+        assert mid in ids, (
+            f"Memory {mid} not found after restart. Total: {len(ids)}"
+        )
 
     def test_delete_persists_across_restart(self):
         r = ingest(f"TEST_ delete-persist check {int(time.time())}")
@@ -413,14 +457,20 @@ class TestPersistence:
         assert mid not in ids, "Deleted memory came back after restart"
 
 
-# ── 6. Maintain (TTL) ─────────────────────────────────────────────────────────
+# Maintain.
+
 
 class TestMaintain:
-    """POST /memory/maintain — mock mode by default; live mode when RUN_MEMVID_TESTS=1."""
+    """POST /memory/maintain.
+
+    Uses mock mode by default and live mode when RUN_MEMVID_TESTS=1.
+    """
 
     def test_maintain_returns_200(self):
         r = requests.post(f"{SIDECAR_URL}/memory/maintain", timeout=10)
-        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        assert (
+            r.status_code == 200
+        ), f"Expected 200, got {r.status_code}: {r.text}"
 
 
 class TestHealth:

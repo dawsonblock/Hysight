@@ -1,10 +1,11 @@
-"""
-Shared pytest fixtures for backend tests.
+"""Shared pytest fixtures for backend tests.
 
 Provides in-process FastAPI TestClient with fully isolated storage so no
 Mongo instance, no sidecar, and no leftover state on disk are required.
 """
+
 import sys
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -13,9 +14,9 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import memory_service.singleton as _ms_singleton
-from fastapi.testclient import TestClient
-from backend.server import create_app
+_ms_singleton = import_module("memory_service.singleton")
+TestClient = import_module("fastapi.testclient").TestClient
+create_app = import_module("backend.server").create_app
 
 
 @pytest.fixture()

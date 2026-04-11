@@ -31,7 +31,9 @@ def test_rule_based_critique_formats_action_kind_conflicts():
     )
 
     assert critique["verdict"] == "revise"
-    assert critique["issues"] == ["Conflicting actions proposed: echo vs store_note"]
+    assert critique["issues"] == [
+        "Conflicting actions proposed: echo vs store_note"
+    ]
     assert critique["confidence_delta"] == pytest.approx(-0.05)
     assert critique["llm_powered"] is False
 
@@ -44,11 +46,14 @@ def test_rule_based_critique_formats_action_arg_conflicts():
         ]
     )
 
-    assert critique["issues"] == ["Action store_note has conflicting arguments"]
+    assert critique["issues"] == [
+        "Action store_note has conflicting arguments"
+    ]
     assert critique["confidence_delta"] == pytest.approx(-0.05)
 
 
-def test_rule_based_critique_formats_memory_contradictions_and_missing_fields():
+def test_rule_based_critique_formats_memory_contradictions_and_missing_fields(
+):
     critique = _rule_based_critique(
         [
             _action_item("action-1", "write_artifact", {}),
@@ -70,7 +75,9 @@ def test_rule_based_critique_formats_memory_contradictions_and_missing_fields():
     assert critique["confidence_delta"] == pytest.approx(-0.07)
 
 
-def test_on_broadcast_falls_back_when_llm_dependency_is_unavailable(monkeypatch):
+def test_on_broadcast_falls_back_when_llm_dependency_is_unavailable(
+    monkeypatch,
+):
     critic = Critic()
     critic.propose("run-critic-fallback")
 
@@ -84,11 +91,15 @@ def test_on_broadcast_falls_back_when_llm_dependency_is_unavailable(monkeypatch)
         lambda run_id: RunContext(run_id=run_id, goal="Create an artifact"),
     )
 
-    result = critic.on_broadcast([_action_item("action-1", "write_artifact", {})])
+    result = critic.on_broadcast(
+        [_action_item("action-1", "write_artifact", {})]
+    )
 
     assert result["revised_proposals"] == []
     assert len(result["confidence_adjustments"]) == 1
-    assert result["confidence_adjustments"][0]["new_confidence"] == pytest.approx(0.88)
+    assert result["confidence_adjustments"][0][
+        "new_confidence"
+    ] == pytest.approx(0.88)
 
     critique_item = result["critique_items"][0]["content"]
     assert critique_item["verdict"] == "revise"

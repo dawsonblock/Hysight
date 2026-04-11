@@ -7,8 +7,6 @@ conftest.py). No external service or pre-existing state is required.
 import sys
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -23,7 +21,8 @@ def _seed(text, memory_type="fact", scope="shared"):
     )
 
 
-# ── List ───────────────────────────────────────────────────────────────────────
+# List.
+
 
 def test_list_returns_records(app_client):
     _seed("alpha record")
@@ -96,7 +95,8 @@ def test_list_invalid_scope_returns_422(app_client):
     assert r.status_code == 422
 
 
-# ── Delete ────────────────────────────────────────────────────────────────────
+# Delete.
+
 
 def test_delete_nonexistent_returns_404(app_client):
     r = app_client.delete("/api/hca/memory/nonexistent-id")

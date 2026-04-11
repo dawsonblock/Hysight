@@ -1,9 +1,20 @@
-import hca.modules.critic as critic_module
-from hca.common.types import RunContext, WorkspaceItem
-from hca.modules.critic import Critic
-from hca.runtime.runtime import Runtime
-from hca.workspace.broadcast import broadcast
-from hca.workspace.workspace import Workspace
+# mypy: ignore-errors
+# pyright: reportMissingImports=false, reportMissingTypeStubs=false
+
+from importlib import import_module
+
+critic_module = import_module("hca.modules.critic")
+common_types = import_module("hca.common.types")
+runtime_module = import_module("hca.runtime.runtime")
+broadcast_module = import_module("hca.workspace.broadcast")
+workspace_module = import_module("hca.workspace.workspace")
+
+RunContext = common_types.RunContext
+WorkspaceItem = common_types.WorkspaceItem
+Critic = critic_module.Critic
+Runtime = runtime_module.Runtime
+broadcast = broadcast_module.broadcast
+Workspace = workspace_module.Workspace
 
 
 def test_run_completes():

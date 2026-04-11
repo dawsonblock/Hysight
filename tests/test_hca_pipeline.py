@@ -1,13 +1,13 @@
-"""
-Integration test for the full HCA pipeline.
+"""Integration test for the full HCA pipeline.
 
 Run from the repository root with:
     python -m pytest tests/test_hca_pipeline.py -v
     # or directly:
     python tests/test_hca_pipeline.py
 """
-import os
+
 import sys
+from importlib import import_module
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,12 +17,14 @@ for path in (str(ROOT), str(HCA_SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-import pytest
-from memory_service import CandidateMemory, RetrievalQuery, Provenance
-from memory_service.controller import MemoryController
+memory_service = import_module("memory_service")
+memory_controller_module = import_module("memory_service.controller")
+CandidateMemory = memory_service.CandidateMemory
+RetrievalQuery = memory_service.RetrievalQuery
+MemoryController = memory_controller_module.MemoryController
 
 
-# ── Memory service tests ──────────────────────────────────────────────────────
+# Memory service tests.
 
 class TestMemoryController:
     def setup_method(self):
@@ -39,25 +41,43 @@ class TestMemoryController:
         assert isinstance(mid, str)
 
     def test_retrieve_bm25(self):
-        self.ctrl.ingest(CandidateMemory(raw_text="The API key expires March 1st", memory_type="fact"))
-        self.ctrl.ingest(CandidateMemory(raw_text="Deploy the new service to production", memory_type="episode"))
+        self.ctrl.ingest(
+            CandidateMemory(
+                raw_text="The API key expires March 1st",
+                memory_type="fact",
+            )
+        )
+        self.ctrl.ingest(
+            CandidateMemory(
+                raw_text="Deploy the new service to production",
+                memory_type="episode",
+            )
+        )
 
-        hits = self.ctrl.retrieve(RetrievalQuery(query_text="API key expiry", top_k=5))
+        hits = self.ctrl.retrieve(
+            RetrievalQuery(query_text="API key expiry", top_k=5)
+        )
         assert len(hits) >= 1
         assert "API" in hits[0].text or "expires" in hits[0].text
 
     def test_retrieve_empty(self):
-        hits = self.ctrl.retrieve(RetrievalQuery(query_text="something completely unrelated zzz"))
+        hits = self.ctrl.retrieve(
+            RetrievalQuery(
+                query_text="something completely unrelated zzz"
+            )
+        )
         assert hits == []
 
     def test_maintain_no_expiry(self):
-        self.ctrl.ingest(CandidateMemory(raw_text="recent memory", memory_type="trace"))
+        self.ctrl.ingest(
+            CandidateMemory(raw_text="recent memory", memory_type="trace")
+        )
         report = self.ctrl.maintain()
         assert report.expired_count == 0
         assert isinstance(report.durable_memory_count, int)
 
 
-# ── HCA Runtime tests ─────────────────────────────────────────────────────────
+# HCA runtime tests.
 
 class TestHCARuntimeSmoke:
     def test_echo_run_completes(self):
@@ -98,7 +118,7 @@ class TestHCARuntimeSmoke:
         assert ctx.state.value in ("completed", "awaiting_approval", "failed")
 
 
-# ── Direct run ────────────────────────────────────────────────────────────────
+# Direct run.
 
 if __name__ == "__main__":
     print("=== Memory Service Tests ===")

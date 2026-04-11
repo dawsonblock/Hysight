@@ -40,7 +40,7 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-# ─── inbound ──────────────────────────────────────────────────────────────────
+# Inbound.
 
 class Provenance(ContractModel):
     source_type: str = "chat"          # chat | file | tool | system | external
@@ -76,7 +76,7 @@ class RetrievalQuery(ContractModel):
     intent: IntentType = "general"
 
 
-# ─── outbound ─────────────────────────────────────────────────────────────────
+# Outbound.
 
 class RetrievalHit(ContractModel):
     memory_id: Optional[str] = None

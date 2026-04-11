@@ -6,9 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "hybrid-cognitive-agent"
 version = "0.1.0"
 description = "A bounded cognitive agent runtime with a global workspace, meta monitoring, persistent memory and approval‑gated execution."
-authors = [
-    {name = "OpenAI User", email = "user@example.com"}
-]
+authors = [{ name = "OpenAI User", email = "user@example.com" }]
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -19,10 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.4",
-    "httpx>=0.27",
-]
+dev = ["pytest>=7.4", "httpx>=0.27"]
 
 [project.scripts]
 hca-smoke = "hca.cli.smoke:main"
@@ -30,7 +25,14 @@ hca-eval = "hca.cli.eval:main"
 hca-replay = "hca.cli.replay:main"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+hca = ["py.typed"]
+"hca.common" = ["py.typed"]
+"hca.modules" = ["py.typed"]
+"hca.runtime" = ["py.typed"]
+"hca.workspace" = ["py.typed"]

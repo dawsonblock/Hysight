@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import timedelta
+from functools import lru_cache
 from typing import Any, Dict, Optional
 
 from hca.common.enums import (
@@ -26,19 +27,10 @@ from hca.common.types import (
 from hca.executor.approvals import validate_resume_approval
 from hca.executor.executor import Executor
 from hca.memory.episodic_store import EpisodicStore
-from hca.paths import ensure_repo_root_on_sys_path
-
-ensure_repo_root_on_sys_path()
-
-try:
-    from memory_service.singleton import get_controller as _get_mem_controller  # type: ignore
-    from memory_service import CandidateMemory as _CandidateMemory, Provenance as _Provenance  # type: ignore
-    _MEMORY_SERVICE_AVAILABLE = True
-except ImportError:
-    _MEMORY_SERVICE_AVAILABLE = False
 from hca.meta.monitor import assess
 from hca.meta.self_model import capability_summary
 from hca.modules import Planner, Critic, TextPerception, ToolReasoner
+from hca.paths import ensure_repo_root_on_sys_path
 from hca.prediction.action_scoring import score_actions
 from hca.runtime.snapshots import build_runtime_snapshot
 from hca.runtime.state_machine import assert_transition
@@ -46,14 +38,27 @@ from hca.storage import (
     append_consumption as append_approval_consumption,
     append_denial as append_approval_denial,
     append_event,
-    append_snapshot,
     append_request as append_approval_request,
+    append_snapshot,
     load_run,
     save_run,
 )
 from hca.workspace.broadcast import broadcast
 from hca.workspace.recurrence import run_recurrence
 from hca.workspace.workspace import Workspace
+
+
+@lru_cache(maxsize=1)
+def _load_memory_service_bindings():
+    ensure_repo_root_on_sys_path()
+    try:
+        from memory_service import CandidateMemory as candidate_memory_cls
+        from memory_service import Provenance as provenance_cls
+        from memory_service.singleton import get_controller
+    except ImportError:
+        return None, None, None
+
+    return get_controller, candidate_memory_cls, provenance_cls
 
 
 class Runtime:
@@ -163,21 +168,33 @@ class Runtime:
         EpisodicStore(context.run_id).append(record)
 
         # Also ingest into the authoritative memory service (contract boundary)
-        if _MEMORY_SERVICE_AVAILABLE:
+        (
+            get_mem_controller,
+            candidate_memory_cls,
+            provenance_cls,
+        ) = _load_memory_service_bindings()
+        if (
+            get_mem_controller is not None
+            and candidate_memory_cls is not None
+            and provenance_cls is not None
+        ):
             try:
                 raw_text = (
                     f"{candidate.kind}: "
                     + _json.dumps(candidate.arguments, default=str)[:200]
                     + f" → {receipt_payload.get('status', 'unknown')}"
                 )
-                _get_mem_controller().ingest(
-                    _CandidateMemory(
+                get_mem_controller().ingest(
+                    candidate_memory_cls(
                         raw_text=raw_text,
                         memory_type="episode",
                         run_id=context.run_id,
                         confidence=record.confidence,
                         salience=0.6,
-                        source=_Provenance(source_type="system", trust_weight=0.9),
+                        source=provenance_cls(
+                            source_type="system",
+                            trust_weight=0.9,
+                        ),
                         metadata={"action_id": candidate.action_id},
                     )
                 )

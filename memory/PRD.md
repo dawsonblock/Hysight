@@ -5,7 +5,9 @@
 > For current runtime behavior use `README.md`, `backend/.env.example`, `backend/server.py`, and `contract/schema.json`.
 
 ## Original Problem Statement
+
 User uploaded `Hybrid-ai.zip` containing two isolated systems:
+
 1. `Conscious-hybrid--main-2` (Python HCA Runtime): State machine orchestrator with hardcoded stubs.
 2. `memvid-Human--main-main-2` (Rust Memory Engine): Rust memory kernel (BM25, WAL) lacking HTTP API.
 
@@ -18,7 +20,7 @@ User uploaded `Hybrid-ai.zip` containing two isolated systems:
 
 ## Architecture
 
-```
+```text
 Hysight/
 ├── backend/                     FastAPI server — HCA API surface
 ├── frontend/                    React chat UI ("Cognitive Agent Console")
@@ -47,7 +49,7 @@ Hysight/
 ## Contract Boundary (schema.json)
 
 | Method | Path | Description |
-|--------|------|-------------|
+| --- | --- | --- |
 | POST | /memory/ingest | CandidateMemory → {memory_id} |
 | POST | /memory/retrieve | RetrievalQuery → [RetrievalHit] (Tantivy BM25 scored) |
 | POST | /memory/maintain | TTL expiry → MaintenanceReport |
@@ -62,7 +64,7 @@ Hysight/
 ## Python API Endpoints
 
 | Method | Path | Description |
-|--------|------|-------------|
+| --- | --- | --- |
 | POST | /api/hca/run | Submit goal → HCA pipeline result |
 | GET | /api/hca/run/{run_id} | Fetch run state + trace |
 | POST | /api/hca/run/{run_id}/approve | Approve pending action |
@@ -80,6 +82,7 @@ Hysight/
 This section is a historical implementation log from the original migration work. It is not a current status dashboard.
 
 ### Session 1 (Apr 2025)
+
 - [x] Extracted and analyzed Hybrid-ai.zip
 - [x] Designed narrow contract schema (`contract/schema.json`)
 - [x] Created Python MemoryController with BM25 scoring (`memory_service/`)
@@ -91,18 +94,21 @@ This section is a historical implementation log from the original migration work
 - [x] Integration tests added
 
 ### Session 2 (Apr 2025)
+
 - [x] White background theme with larger text
 - [x] SSE streaming endpoint `POST /api/hca/run/stream`
 - [x] Frontend live-streaming trace via ReadableStream
 - [x] Markdown renderer (`react-markdown` + `remark-gfm`)
 
 ### Session 3 (Apr 2025)
+
 - [x] Installed Rust; compiled Axum sidecar
 - [x] Added `GET /memory/list` and `DELETE /memory/{memory_id}`
 - [x] Migrated 15 JSONL memories to Rust store; swapped to `MEMORY_BACKEND=rust`
 - [x] MemoryBrowser panel in frontend
 
 ### Session 4 (Apr 2025)
+
 - [x] **Connected memvid-core crate** (Tantivy BM25 + WAL) to the Axum sidecar
   - Dependency: `memvid-core = { path = "../memvid", default-features = false, features = ["lex"] }`
   - Replaced handcrafted BM25 with real Tantivy search engine

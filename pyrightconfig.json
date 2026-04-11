@@ -1,0 +1,17 @@
+{
+  "include": [
+    "backend",
+    "memory_service",
+    "hca/src",
+    "hca/tests",
+    "tests"
+  ],
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        "hca/src"
+      ]
+    }
+  ]
+}
