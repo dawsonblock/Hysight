@@ -1,0 +1,59 @@
+name: container-build
+
+on:
+    push:
+        paths:
+            - ".github/workflows/container-build.yml"
+            - "backend/Dockerfile"
+            - "backend/requirements*.txt"
+            - "memvid_service/Dockerfile"
+            - "compose.yml"
+            - "compose.sidecar.yml"
+            - "memory_service/**"
+            - "hca/**"
+            - "memvid/**"
+            - "memvid_service/src/**"
+    pull_request:
+        paths:
+            - ".github/workflows/container-build.yml"
+            - "backend/Dockerfile"
+            - "backend/requirements*.txt"
+            - "memvid_service/Dockerfile"
+            - "compose.yml"
+            - "compose.sidecar.yml"
+            - "memory_service/**"
+            - "hca/**"
+            - "memvid/**"
+            - "memvid_service/src/**"
+    workflow_dispatch:
+
+jobs:
+    build-backend:
+        name: Build backend container
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+            - name: Build backend image
+              run: |
+                  docker build \
+                    -f backend/Dockerfile \
+                    -t hysight-backend:ci \
+                    .
+
+    build-sidecar:
+        name: Build sidecar container
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+            - name: Build sidecar image
+              run: |
+                  docker build \
+                    -f memvid_service/Dockerfile \
+                    -t hysight-sidecar:ci \
+                    .

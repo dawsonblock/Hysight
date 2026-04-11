@@ -6,7 +6,11 @@
 	test-contract \
 	test-backend-local \
 	test-backend \
-	test-sidecar
+	test-sidecar \
+	run \
+	run-sidecar \
+	docker-build \
+	docker-build-sidecar
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -44,3 +48,16 @@ test-sidecar:
 	}
 	RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" \
 		$(PYTEST) backend/tests/test_memvid_sidecar.py -q
+
+run:
+	./scripts/run_backend.sh
+
+run-sidecar:
+	# MEMORY_SERVICE_URL defaults to http://localhost:3031 when unset
+	MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" ./scripts/run_backend.sh
+
+docker-build:
+	docker build -f backend/Dockerfile -t hysight-backend .
+
+docker-build-sidecar:
+	docker build -f memvid_service/Dockerfile -t hysight-sidecar .
