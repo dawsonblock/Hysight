@@ -11,6 +11,24 @@
 
 ---
 
+## Quick start
+
+```bash
+# 1. Install backend test dependencies
+python -m pip install -r backend/requirements-test.txt
+
+# 2. Run the full default proof surface
+python scripts/run_tests.py
+
+# 3. Optional — live sidecar proof (requires running memvid sidecar)
+RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
+```
+
+That is the only command you need to verify the system locally.
+Everything else below is full setup, configuration, and advanced use.
+
+---
+
 ## Overview
 
 Hysight is an implementation of a **Hybrid Cognitive Agent (HCA)** — a software system that models bounded, human-like deliberation. Instead of a single monolithic prompt, the HCA is composed of specialized cognitive modules (Planner, Critic, Perception, ToolReasoner) that compete for space in a capacity-limited **Global Workspace**, just as neuroscience models suggest conscious processing works.
@@ -196,7 +214,7 @@ make test-bootstrap
 If you do not want to use `make`, the equivalent command is:
 
 ```bash
-python -m pip install -e ./hca -r backend/requirements-test.txt
+python -m pip install -r backend/requirements-test.txt
 ```
 
 That single install command covers:
@@ -214,7 +232,7 @@ make dev-bootstrap
 Or, without `make`:
 
 ```bash
-python -m pip install -e ./hca -r backend/requirements-dev.txt
+python -m pip install -r backend/requirements-dev.txt
 ```
 
 If you only need the backend runtime and not the proof surface:
@@ -426,76 +444,72 @@ Each transition is recorded as an event. The Critic module runs during `broadcas
 
 ## Testing
 
-Backend tests assume the backend dependencies are installed first:
+### Bootstrap
+
+Install test dependencies before running any test commands:
 
 ```bash
-make test-bootstrap
+python -m pip install -r backend/requirements-test.txt
 ```
 
-Equivalent portable command:
-
-```bash
-python -m pip install -e ./hca -r backend/requirements-test.txt
-```
+Equivalent `make` alias: `make test-bootstrap`.
 
 If `backend/tests/test_contract_conformance.py` or the mock sidecar tests fail
 because `requests-mock` is missing, the environment was not bootstrapped with
 the repo's declared test dependencies yet.
 
-For formatter and lint tooling, install:
+For formatter and lint tooling:
 
 ```bash
-make dev-bootstrap
+python -m pip install -r backend/requirements-dev.txt   # or: make dev-bootstrap
 ```
 
+### Default proof surface (no external services required)
+
+The fastest correct path — runs all four proof modes in order:
+
 ```bash
-# All HCA unit tests
-pytest hca/tests/unit/ -q
+python scripts/run_tests.py
+```
 
-# All HCA integration tests
-pytest hca/tests/integration/ -q
+### Individual proof modes
 
-# Backend bootstrap tests (no running service required)
-pytest backend/tests/test_server_bootstrap.py -q
+| Proof mode | Command | CI job |
+| --- | --- | --- |
+| HCA pipeline proof | `pytest tests/test_hca_pipeline.py -q` | HCA Smoke Proof |
+| Contract conformance proof | `pytest backend/tests/test_contract_conformance.py -q` | Contract Conformance Proof |
+| Backend local proof | `pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q` | Backend Local Proof |
+| Backend full proof | `pytest backend/tests -q` | Backend Full Proof |
 
-# Backend local proof path (in-process, no external services required)
-pytest backend/tests/test_hca.py \
-  backend/tests/test_memory.py \
-  backend/tests/test_server_bootstrap.py -q
+### Live sidecar proof (opt-in)
 
-# Full backend suite
-# Default mode includes mock-backed contract checks for the memvid HTTP
-# boundary. This proves request/response shapes and backend integration without
-# requiring a running Rust sidecar.
-pytest backend/tests -q
+Proves real sidecar availability, retrieval, and restart semantics. Requires a
+running memvid sidecar (see [Build the memvid sidecar](#6-optional-build-the-memvid-sidecar)):
 
-# Live memvid sidecar proof
-# This is the opt-in path that proves real sidecar availability, retrieval, and
-# restart semantics. Persistence/restart checks additionally require
-# supervisorctl.
+```bash
+RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
+```
+
+Or directly:
+
+```bash
 RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3031 \
-pytest backend/tests/test_memvid_sidecar.py -q
-
-# Top-level pipeline integration test
-pytest tests/test_hca_pipeline.py -q
-
-# Full focused test suite
-pytest hca/tests/unit/ hca/tests/integration/ \
-       backend/tests/test_server_bootstrap.py \
-       tests/test_hca_pipeline.py -q
+  pytest backend/tests/test_memvid_sidecar.py -q
 ```
 
-In short:
+CI job name: **Backend Live Sidecar Proof** (opt-in via `workflow_dispatch`).
 
-- The backend local proof path validates the FastAPI app, in-process memory
-  routes, and HCA runtime behavior without external services.
-- The default full backend suite adds mock-backed memvid boundary coverage.
-- The live memvid command is the separate proof for the real Rust sidecar.
-- GitHub Actions mirrors those paths in `.github/workflows/backend-proof.yml`.
-- The backend now rejects the legacy `{"query": ...}` memory retrieve body;
+### Notes
+
+- The backend local proof validates the FastAPI app, in-process memory routes,
+  and HCA runtime behavior without external services.
+- The backend full proof adds mock-backed memvid boundary coverage.
+- The live sidecar proof is the separate opt-in path for the real Rust sidecar.
+- GitHub Actions mirrors these proof modes in `.github/workflows/backend-proof.yml`.
+- The backend rejects the legacy `{"query": ...}` memory retrieve body;
   use `{"query_text": ...}` everywhere.
-- CORS is disabled by default and must be enabled with explicit absolute
-  origins via `CORS_ORIGINS`.
+- CORS is disabled by default; enable with explicit absolute origins via
+  `CORS_ORIGINS`.
 
 ---
 
