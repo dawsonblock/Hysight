@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import timedelta
 from functools import lru_cache
+from time import perf_counter
 from typing import Any, Dict, Optional
 
 from hca.common.enums import (
@@ -307,6 +308,16 @@ class Runtime:
             selected_action=candidate,
         )
         return context.run_id
+
+    @staticmethod
+    def _require_matching_pending_approval(
+        context: RunContext,
+        approval_id: str,
+    ) -> None:
+        if context.pending_approval_id is None:
+            raise ValueError("run has no pending approval")
+        if context.pending_approval_id != approval_id:
+            raise ValueError("approval id does not match pending approval")
 
     def _record_workflow_step(
         self,
@@ -678,8 +689,13 @@ class Runtime:
             ),
         }
         try:
+            episodic_started_at = perf_counter()
             EpisodicStore(context.run_id).append(record)
         except Exception as exc:
+            episodic_latency_ms = round(
+                (perf_counter() - episodic_started_at) * 1000.0,
+                3,
+            )
             append_event(
                 context,
                 EventType.report_emitted,
@@ -687,11 +703,17 @@ class Runtime:
                 {
                     "reason_code": "episodic_memory_write_failed",
                     "action_id": candidate.action_id,
+                    "latency_ms": episodic_latency_ms,
                     "error_type": exc.__class__.__name__,
                     "error": str(exc),
                 },
             )
             raise
+
+        episodic_latency_ms = round(
+            (perf_counter() - episodic_started_at) * 1000.0,
+            3,
+        )
 
         episodic_payload = {
             **memory_event_context,
@@ -700,6 +722,7 @@ class Runtime:
             "status": "written",
             "failure_class": None,
             "memory_type": MemoryType.episodic.value,
+            "latency_ms": episodic_latency_ms,
         }
         append_event(
             context,
@@ -720,6 +743,7 @@ class Runtime:
             and provenance_cls is not None
         ):
             try:
+                external_started_at = perf_counter()
                 raw_text = (
                     f"{candidate.kind}: "
                     + _json.dumps(candidate.arguments, default=str)[:200]
@@ -746,6 +770,10 @@ class Runtime:
                         },
                     )
                 )
+                external_latency_ms = round(
+                    (perf_counter() - external_started_at) * 1000.0,
+                    3,
+                )
                 append_event(
                     context,
                     EventType.external_memory_written,
@@ -756,9 +784,14 @@ class Runtime:
                         "status": "written",
                         "memory_id": memory_id,
                         "failure_class": None,
+                        "latency_ms": external_latency_ms,
                     },
                 )
             except Exception as exc:
+                external_latency_ms = round(
+                    (perf_counter() - external_started_at) * 1000.0,
+                    3,
+                )
                 append_event(
                     context,
                     EventType.external_memory_write_failed,
@@ -770,6 +803,7 @@ class Runtime:
                         "failure_class": exc.__class__.__name__,
                         "error_type": exc.__class__.__name__,
                         "error": str(exc),
+                        "latency_ms": external_latency_ms,
                     },
                 )
 
@@ -895,6 +929,7 @@ class Runtime:
             raise ValueError(f"Run {run_id} not found")
 
         self._current_state = context.state
+        self._require_matching_pending_approval(context, approval_id)
         context.pending_approval_id = approval_id
         self._persist_context(context)
         append_approval_denial(run_id, approval_id, reason=reason)
@@ -914,6 +949,7 @@ class Runtime:
             raise ValueError(f"Run {run_id} not found")
 
         self._current_state = context.state
+        self._require_matching_pending_approval(context, approval_id)
         validation = validate_resume_approval(run_id, approval_id, token)
         if not validation["ok"]:
             reason = validation["reason"] or "invalid_approval"
@@ -963,6 +999,9 @@ class Runtime:
             raise ValueError(
                 "Could not validate selected action from events"
             ) from exc
+
+        if not candidate.requires_approval:
+            raise ValueError("selected action is not approval gated")
 
         validation = validate_resume_approval(
             run_id,

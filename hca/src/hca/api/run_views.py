@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from hca.paths import (
     ensure_repo_root_on_sys_path,
@@ -20,25 +20,6 @@ from hca.storage import iter_artifacts, iter_events, load_run
 
 
 ensure_repo_root_on_sys_path()
-
-_retrieval_query_cls: Any = None
-_memory_configuration_error: type[Exception] = RuntimeError
-_memory_backend_error: type[Exception] = RuntimeError
-
-try:
-    from memory_service import RetrievalQuery as _imported_retrieval_query
-    from memory_service.config import (
-        MemoryConfigurationError as _imported_configuration_error,
-    )
-    from memory_service.controller import (
-        MemoryBackendError as _imported_backend_error,
-    )
-
-    _retrieval_query_cls = _imported_retrieval_query
-    _memory_configuration_error = _imported_configuration_error
-    _memory_backend_error = _imported_backend_error
-except ImportError:  # pragma: no cover - package layout fallback
-    pass
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +35,8 @@ class RunPlanResponse(RunAPIModel):
     rationale: str = ""
     confidence: float = 1.0
     memory_context_used: bool = False
+    planning_mode: Optional[str] = None
+    fallback_reason: Optional[str] = None
 
 
 class RunActionResponse(RunAPIModel):
@@ -84,6 +67,26 @@ class RunKeyEventResponse(RunAPIModel):
     summary: str
 
 
+class RunLatencySummaryResponse(RunAPIModel):
+    count: int = 0
+    total_ms: float = 0.0
+    max_ms: float = 0.0
+    last_ms: Optional[float] = None
+
+
+class RunMetricsResponse(RunAPIModel):
+    run_duration_ms: Optional[float] = None
+    tool_latency: RunLatencySummaryResponse = Field(
+        default_factory=RunLatencySummaryResponse
+    )
+    memory_retrieval_latency: RunLatencySummaryResponse = Field(
+        default_factory=RunLatencySummaryResponse
+    )
+    memory_commit_latency: RunLatencySummaryResponse = Field(
+        default_factory=RunLatencySummaryResponse
+    )
+
+
 class RunSummaryResponse(RunAPIModel):
     run_id: str
     goal: str
@@ -110,6 +113,7 @@ class RunSummaryResponse(RunAPIModel):
     memory_hits: List[RunMemoryHitResponse] = Field(default_factory=list)
     key_events: List[RunKeyEventResponse] = Field(default_factory=list)
     event_count: int = 0
+    metrics: RunMetricsResponse = Field(default_factory=RunMetricsResponse)
 
 
 class RunListResponse(RunAPIModel):
@@ -190,6 +194,26 @@ def require_run_context(run_id: str):
     context = load_run(run_id)
     if not context:
         raise HTTPException(status_code=404, detail="Run not found")
+    return context
+
+
+def require_pending_approval_selection(run_id: str, approval_id: str):
+    from hca.storage.approvals import get_request
+
+    context = require_run_context(run_id)
+    pending_approval_id = context.pending_approval_id
+    if pending_approval_id is None:
+        raise HTTPException(status_code=400, detail="Run has no pending approval")
+    if pending_approval_id != approval_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Approval id does not match pending approval",
+        )
+    if get_request(run_id, approval_id) is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Approval request record is missing",
+        )
     return context
 
 
@@ -276,6 +300,54 @@ def _list_of_strings(value: Any) -> List[str]:
     return [str(item) for item in value if item is not None]
 
 
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
+
+    normalized = value.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _duration_ms(start_value: Any, end_value: Any) -> Optional[float]:
+    started_at = _parse_datetime(start_value)
+    finished_at = _parse_datetime(end_value)
+    if started_at is None or finished_at is None:
+        return None
+
+    duration_ms = (finished_at - started_at).total_seconds() * 1000.0
+    if duration_ms < 0:
+        return None
+    return round(duration_ms, 3)
+
+
+def _latency_summary(samples: List[float]) -> RunLatencySummaryResponse:
+    if not samples:
+        return RunLatencySummaryResponse()
+    return RunLatencySummaryResponse(
+        count=len(samples),
+        total_ms=round(sum(samples), 3),
+        max_ms=round(max(samples), 3),
+        last_ms=round(samples[-1], 3),
+    )
+
+
+def _recorded_memory_hits(payload: Dict[str, Any]) -> List[RunMemoryHitResponse]:
+    hits: List[RunMemoryHitResponse] = []
+    for raw_hit in payload.get("memory_hits", []):
+        if not isinstance(raw_hit, dict):
+            continue
+        try:
+            hits.append(RunMemoryHitResponse.model_validate(raw_hit))
+        except ValidationError:
+            continue
+    return hits
+
+
 def extract_run_summary(run_id: str) -> RunSummaryResponse:
     context = require_run_context(run_id)
     events = list(iter_events(run_id))
@@ -286,15 +358,28 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
     action_result = RunResultResponse()
     approval_id: Optional[str] = replay.get("pending_approval_id")
     key_events: List[RunKeyEventResponse] = []
+    memory_hits: List[RunMemoryHitResponse] = []
+    tool_latency_samples: List[float] = []
+    memory_retrieval_latency_samples: List[float] = []
+    memory_commit_latency_samples: List[float] = []
 
     for event in events:
         event_type = event.get("event_type", "")
         payload = event.get("payload", {})
+        safe_payload = payload if isinstance(payload, dict) else {}
 
         if event_type == "module_proposed" and event.get("actor") == "planner":
-            for candidate_item in payload.get("candidate_items", []):
+            for candidate_item in safe_payload.get("candidate_items", []):
                 if candidate_item.get("kind") == "task_plan":
                     content = candidate_item.get("content", {})
+                    memory_hits = _recorded_memory_hits(content)
+                    retrieval_latency = content.get(
+                        "memory_retrieval_latency_ms"
+                    )
+                    if isinstance(retrieval_latency, (int, float)):
+                        memory_retrieval_latency_samples.append(
+                            round(float(retrieval_latency), 3)
+                        )
                     plan = RunPlanResponse(
                         strategy=content.get("strategy"),
                         action=content.get("action"),
@@ -304,6 +389,16 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
                             "memory_context_used",
                             False,
                         ),
+                        planning_mode=(
+                            str(content.get("planning_mode"))
+                            if content.get("planning_mode") is not None
+                            else None
+                        ),
+                        fallback_reason=(
+                            str(content.get("fallback_reason"))
+                            if content.get("fallback_reason") is not None
+                            else None
+                        ),
                     )
 
         if (
@@ -311,25 +406,52 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
             and not replay.get("selected_action")
         ):
             action_taken = RunActionResponse(
-                kind=payload.get("kind"),
-                arguments=payload.get("arguments", {}),
-                action_id=payload.get("action_id"),
-                requires_approval=payload.get("requires_approval", False),
+                kind=safe_payload.get("kind"),
+                arguments=safe_payload.get("arguments", {}),
+                action_id=safe_payload.get("action_id"),
+                requires_approval=safe_payload.get("requires_approval", False),
             )
 
         if event_type == "approval_requested" and approval_id is None:
-            approval_id = payload.get("approval_id")
+            approval_id = safe_payload.get("approval_id")
 
         if (
             event_type == "execution_finished"
             and replay.get("latest_receipt") is None
         ):
             action_result = RunResultResponse(
-                status=payload.get("status"),
-                outputs=payload.get("outputs"),
-                artifacts=payload.get("artifacts") or [],
-                error=payload.get("error"),
+                status=safe_payload.get("status"),
+                outputs=safe_payload.get("outputs"),
+                artifacts=safe_payload.get("artifacts") or [],
+                error=safe_payload.get("error"),
             )
+            duration_ms = _duration_ms(
+                safe_payload.get("started_at"),
+                safe_payload.get("finished_at"),
+            )
+            if duration_ms is None:
+                outputs = safe_payload.get("outputs")
+                if isinstance(outputs, dict) and isinstance(
+                    outputs.get("duration_seconds"),
+                    (int, float),
+                ):
+                    duration_ms = round(
+                        float(outputs["duration_seconds"]) * 1000.0,
+                        3,
+                    )
+            if duration_ms is not None:
+                tool_latency_samples.append(duration_ms)
+
+        if event_type in {
+            "episodic_memory_written",
+            "external_memory_written",
+            "external_memory_write_failed",
+        }:
+            latency_ms = safe_payload.get("latency_ms")
+            if isinstance(latency_ms, (int, float)):
+                memory_commit_latency_samples.append(
+                    round(float(latency_ms), 3)
+                )
 
         if event_type in _KEY_EVENT_TYPES:
             key_events.append(
@@ -337,36 +459,8 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
                     type=event_type,
                     actor=event.get("actor"),
                     timestamp=event.get("timestamp"),
-                    summary=event_summary(event_type, payload),
+                    summary=event_summary(event_type, safe_payload),
                 )
-            )
-
-    memory_hits: List[RunMemoryHitResponse] = []
-    if _retrieval_query_cls is not None:
-        try:
-            from memory_service.singleton import get_controller
-
-            hits = get_controller().retrieve(
-                _retrieval_query_cls(
-                    query_text=context.goal,
-                    top_k=5,
-                    run_id=run_id,
-                )
-            )
-            memory_hits = [
-                RunMemoryHitResponse(
-                    text=hit.text,
-                    score=round(hit.score, 3),
-                    memory_type=hit.memory_type,
-                    stored_at=hit.stored_at,
-                )
-                for hit in hits
-            ]
-        except (_memory_backend_error, _memory_configuration_error) as exc:
-            logger.warning(
-                "Memory summary unavailable for run %s: %s",
-                run_id,
-                exc,
             )
 
     replay_action = replay.get("selected_action")
@@ -395,7 +489,18 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
             rationale=active_workflow.get("rationale", ""),
             confidence=float(active_workflow.get("confidence") or 1.0),
             memory_context_used=bool(memory_hits),
+            planning_mode="workflow_chain",
+            fallback_reason=None,
         )
+
+    metrics = RunMetricsResponse(
+        run_duration_ms=_duration_ms(context.created_at, context.updated_at),
+        tool_latency=_latency_summary(tool_latency_samples),
+        memory_retrieval_latency=_latency_summary(
+            memory_retrieval_latency_samples
+        ),
+        memory_commit_latency=_latency_summary(memory_commit_latency_samples),
+    )
 
     return RunSummaryResponse(
         run_id=run_id,
@@ -445,6 +550,7 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
         memory_hits=memory_hits,
         key_events=key_events[-12:],
         event_count=int(replay.get("event_count") or len(events)),
+        metrics=metrics,
     )
 
 

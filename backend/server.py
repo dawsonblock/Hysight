@@ -54,6 +54,9 @@ get_run_artifact_detail = _run_views.get_run_artifact_detail
 list_run_artifacts = _run_views.list_run_artifacts
 list_run_events = _run_views.list_run_events
 _list_run_summaries = _run_views.list_run_summaries
+_require_pending_approval_selection = (
+    _run_views.require_pending_approval_selection
+)
 _require_run_context = _run_views.require_run_context
 
 load_dotenv(ROOT_DIR / ".env")
@@ -489,16 +492,12 @@ async def approve_hca_action(
 ):
     """Grant approval for a pending HCA action and resume execution."""
     from hca.runtime.runtime import Runtime  # type: ignore
-    from hca.storage import load_run  # type: ignore
     from hca.storage.approvals import append_grant  # type: ignore
     from hca.common.types import ApprovalGrant  # type: ignore
 
-    context = load_run(run_id)
-    if not context:
-        raise HTTPException(status_code=404, detail="Run not found")
-
     token = str(uuid.uuid4())
     approval_id = body.approval_id
+    context = _require_pending_approval_selection(run_id, approval_id)
 
     def _approve_and_resume():
         append_grant(
@@ -509,7 +508,10 @@ async def approve_hca_action(
         rt._current_state = context.state
         return rt.resume(run_id, approval_id, token)
 
-    new_run_id = await asyncio.to_thread(_approve_and_resume)
+    try:
+        new_run_id = await asyncio.to_thread(_approve_and_resume)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _extract_run_summary(new_run_id)
 
 
@@ -523,11 +525,7 @@ async def deny_hca_action(
 ):
     """Deny a pending HCA action."""
     from hca.runtime.runtime import Runtime  # type: ignore
-    from hca.storage import load_run  # type: ignore
-
-    context = load_run(run_id)
-    if not context:
-        raise HTTPException(status_code=404, detail="Run not found")
+    context = _require_pending_approval_selection(run_id, body.approval_id)
 
     def _deny():
         rt = Runtime()
@@ -538,7 +536,10 @@ async def deny_hca_action(
             reason="Denied by user",
         )
 
-    new_run_id = await asyncio.to_thread(_deny)
+    try:
+        new_run_id = await asyncio.to_thread(_deny)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _extract_run_summary(new_run_id)
 
 

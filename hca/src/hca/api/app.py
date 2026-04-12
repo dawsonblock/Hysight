@@ -29,6 +29,7 @@ from hca.api.run_views import (
     list_run_artifacts,
     list_run_events,
     list_run_summaries,
+    require_pending_approval_selection,
     require_run_context,
 )
 from hca.common.enums import MemoryType
@@ -179,18 +180,18 @@ def grant_approval(
     approval_id: str,
     req: ApprovalGrantRequest,
 ) -> ApprovalActionResponse:
-    _require_run(run_id)
+    require_pending_approval_selection(run_id, approval_id)
     token = req.token or str(uuid.uuid4())
-    append_grant(
-        run_id,
-        ApprovalGrant(
-            approval_id=approval_id,
-            token=token,
-            actor=req.actor or "user",
-            expires_at=req.expires_at,
-        ),
-    )
     try:
+        append_grant(
+            run_id,
+            ApprovalGrant(
+                approval_id=approval_id,
+                token=token,
+                actor=req.actor or "user",
+                expires_at=req.expires_at,
+            ),
+        )
         runtime_engine.resume(run_id, approval_id, token)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -217,13 +218,16 @@ def deny_approval(
     approval_id: str,
     req: Optional[ApprovalDenyRequest] = None,
 ) -> ApprovalActionResponse:
-    _require_run(run_id)
+    require_pending_approval_selection(run_id, approval_id)
     deny_request = req or ApprovalDenyRequest()
-    runtime_engine.deny_approval(
-        run_id,
-        approval_id,
-        reason=deny_request.reason or "User denied via API",
-    )
+    try:
+        runtime_engine.deny_approval(
+            run_id,
+            approval_id,
+            reason=deny_request.reason or "User denied via API",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     replay = extract_run_summary(run_id)
     approval = get_approval_status(run_id, approval_id)
     return ApprovalActionResponse(

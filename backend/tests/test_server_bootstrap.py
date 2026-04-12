@@ -1,6 +1,7 @@
 import sys
 from importlib import import_module
 from pathlib import Path
+import re
 
 import pytest
 
@@ -147,3 +148,51 @@ def test_create_app_rejects_invalid_cors_origin(monkeypatch):
         match="http://localhost:3000",
     ):
         create_app()
+
+
+def test_frontend_uses_shared_api_client_only():
+    frontend_root = ROOT / "frontend" / "src"
+    direct_fetch_files = []
+    direct_backend_url_files = []
+    compatibility_route_files = []
+
+    for path in frontend_root.rglob("*.js"):
+        relative_path = path.relative_to(ROOT).as_posix()
+        content = path.read_text(encoding="utf-8")
+        if relative_path != "frontend/src/lib/api.js" and "fetch(" in content:
+            direct_fetch_files.append(relative_path)
+        if "http://localhost:8000" in content:
+            direct_backend_url_files.append(relative_path)
+        if re.search(r"['\"]/?runs(?:/|['\"])", content):
+            compatibility_route_files.append(relative_path)
+
+    assert direct_fetch_files == []
+    assert direct_backend_url_files == []
+    assert compatibility_route_files == []
+
+
+def test_launch_surfaces_do_not_start_compatibility_app():
+    launch_surfaces = [
+        ROOT / "scripts" / "run_backend.sh",
+        ROOT / "backend" / "Dockerfile",
+        ROOT / "compose.yml",
+        ROOT / "compose.sidecar.yml",
+        ROOT / ".github" / "workflows" / "backend-proof.yml",
+    ]
+
+    for path in launch_surfaces:
+        content = path.read_text(encoding="utf-8")
+        assert "hca.api.app:app" not in content
+
+    backend_launcher = (ROOT / "scripts" / "run_backend.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "backend.server:app" in backend_launcher
+
+
+def test_backend_proof_workflow_runs_documented_proof_script():
+    workflow = (
+        ROOT / ".github" / "workflows" / "backend-proof.yml"
+    ).read_text(encoding="utf-8")
+    assert "Documented Proof Surface" in workflow
+    assert "python scripts/run_tests.py" in workflow

@@ -67,6 +67,27 @@ def _apply_adjustments(
     return effects
 
 
+def _summarize_revision_payloads(
+    payloads: List[dict[str, Any]],
+) -> List[dict[str, Any]]:
+    summaries: List[dict[str, Any]] = []
+    for payload in payloads:
+        critique_items = payload.get("critique_items", [])
+        summaries.append(
+            {
+                "source_module": payload.get("source_module"),
+                "revised_proposal_count": len(
+                    payload.get("revised_proposals", [])
+                ),
+                "confidence_adjustment_count": len(
+                    payload.get("confidence_adjustments", [])
+                ),
+                "critique_items": critique_items,
+            }
+        )
+    return summaries
+
+
 def run_recurrence(
     workspace: Workspace,
     context: Optional[RunContext] = None,
@@ -145,6 +166,9 @@ def run_recurrence(
                     "changed": changed,
                     "winner": winner.item_id if winner else None,
                     "effects": effects,
+                    "revision_payloads": _summarize_revision_payloads(
+                        revision_payloads
+                    ),
                 },
             )
     return changed

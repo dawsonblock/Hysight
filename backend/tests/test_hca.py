@@ -1,6 +1,7 @@
 """HCA API backend tests — self-contained, no external services required."""
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -173,6 +174,188 @@ def test_get_run_artifacts_and_detail(app_client):
     assert detail["truncated"] is False
 
 
+def test_run_summary_uses_recorded_memory_hits_and_metrics(
+    app_client,
+    monkeypatch,
+):
+    from hca.common.enums import EventType, ReceiptStatus, RuntimeState  # type: ignore
+    from hca.common.types import ExecutionReceipt, RunContext  # type: ignore
+    from hca.storage.event_log import append_event  # type: ignore
+    from hca.storage.receipts import append_receipt  # type: ignore
+    from hca.storage.runs import save_run  # type: ignore
+
+    context = RunContext(
+        run_id="run-summary-metrics",
+        goal="find the stored API expiry",
+        state=RuntimeState.completed,
+    )
+    save_run(context)
+    append_event(
+        context,
+        EventType.run_created,
+        "runtime",
+        {"goal": context.goal},
+    )
+    append_event(
+        context,
+        EventType.module_proposed,
+        "planner",
+        {
+            "candidate_items": [
+                {
+                    "kind": "task_plan",
+                    "confidence": 0.73,
+                    "content": {
+                        "strategy": "information_retrieval_strategy",
+                        "action": "echo",
+                        "rationale": "Rule-based replay proof.",
+                        "memory_context_used": True,
+                        "planning_mode": "rule_based_fallback",
+                        "fallback_reason": "llm_error:RuntimeError",
+                        "memory_hits": [
+                            {
+                                "text": "The API key expires on March 1st.",
+                                "score": 0.98,
+                                "memory_type": "fact",
+                                "stored_at": "2026-03-01T00:00:00+00:00",
+                            }
+                        ],
+                        "memory_retrieval_latency_ms": 4.5,
+                    },
+                }
+            ]
+        },
+    )
+
+    started_at = datetime.now(timezone.utc)
+    finished_at = started_at + timedelta(milliseconds=25)
+    receipt = ExecutionReceipt(
+        action_id="action-1",
+        action_kind="echo",
+        status=ReceiptStatus.success,
+        started_at=started_at,
+        finished_at=finished_at,
+        outputs={"duration_seconds": 0.025},
+    )
+    append_receipt(context.run_id, receipt.model_dump(mode="json"))
+    append_event(
+        context,
+        EventType.execution_finished,
+        "executor",
+        receipt.model_dump(mode="json"),
+    )
+    append_event(
+        context,
+        EventType.episodic_memory_written,
+        "runtime",
+        {
+            "action_id": "action-1",
+            "subject": "echo",
+            "latency_ms": 1.75,
+        },
+    )
+    append_event(
+        context,
+        EventType.run_completed,
+        "runtime",
+        {"receipt_id": receipt.receipt_id},
+    )
+
+    import memory_service.singleton as _memory_singleton
+
+    def _unexpected_memory_lookup():
+        raise AssertionError("run summary performed a live memory lookup")
+
+    monkeypatch.setattr(
+        _memory_singleton,
+        "get_controller",
+        _unexpected_memory_lookup,
+        raising=False,
+    )
+
+    response = app_client.get(f"/api/hca/run/{context.run_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["plan"]["planning_mode"] == "rule_based_fallback"
+    assert data["plan"]["fallback_reason"] == "llm_error:RuntimeError"
+    assert data["memory_hits"][0]["text"] == "The API key expires on March 1st."
+    assert data["metrics"]["memory_retrieval_latency"]["count"] == 1
+    assert data["metrics"]["memory_retrieval_latency"]["total_ms"] == 4.5
+    assert data["metrics"]["tool_latency"]["count"] == 1
+    assert data["metrics"]["memory_commit_latency"]["count"] == 1
+    assert data["metrics"]["run_duration_ms"] is not None
+
+
+def test_approve_rejects_non_pending_approval_without_writing_grant(app_client):
+    from hca.common.enums import ActionClass, RuntimeState  # type: ignore
+    from hca.common.types import ApprovalRequest, RunContext  # type: ignore
+    from hca.storage.approvals import append_request, iter_records  # type: ignore
+    from hca.storage.runs import save_run  # type: ignore
+
+    context = RunContext(
+        run_id="run-approval-mismatch",
+        goal="remember this",
+        state=RuntimeState.awaiting_approval,
+        pending_approval_id="approval-expected",
+    )
+    save_run(context)
+    append_request(
+        context.run_id,
+        ApprovalRequest(
+            approval_id="approval-expected",
+            run_id=context.run_id,
+            action_id="action-1",
+            action_kind="store_note",
+            action_class=ActionClass.medium,
+            reason="Action requires approval",
+        ),
+    )
+
+    response = app_client.post(
+        f"/api/hca/run/{context.run_id}/approve",
+        json={"approval_id": "approval-other"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Approval id does not match pending approval"
+    records = list(iter_records(context.run_id))
+    assert [record["record_type"] for record in records] == ["request"]
+
+
+def test_deny_rejects_non_pending_approval(app_client):
+    from hca.common.enums import ActionClass, RuntimeState  # type: ignore
+    from hca.common.types import ApprovalRequest, RunContext  # type: ignore
+    from hca.storage.approvals import append_request, iter_records  # type: ignore
+    from hca.storage.runs import save_run  # type: ignore
+
+    context = RunContext(
+        run_id="run-deny-mismatch",
+        goal="remember this too",
+        state=RuntimeState.awaiting_approval,
+        pending_approval_id="approval-expected",
+    )
+    save_run(context)
+    append_request(
+        context.run_id,
+        ApprovalRequest(
+            approval_id="approval-expected",
+            run_id=context.run_id,
+            action_id="action-1",
+            action_kind="store_note",
+            action_class=ActionClass.medium,
+            reason="Action requires approval",
+        ),
+    )
+
+    response = app_client.post(
+        f"/api/hca/run/{context.run_id}/deny",
+        json={"approval_id": "approval-other"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Approval id does not match pending approval"
+    records = list(iter_records(context.run_id))
+    assert [record["record_type"] for record in records] == ["request"]
+
+
 # Memory retrieve: empty store returns empty hits.
 
 
@@ -276,6 +459,9 @@ def test_basic_run_completed(app_client):
     assert isinstance(data.get("memory_counts"), dict)
     assert isinstance(data.get("memory_outcomes"), dict)
     assert isinstance(data.get("discrepancies"), list)
+    assert data.get("plan", {}).get("planning_mode") is not None
+    assert "fallback_reason" in data.get("plan", {})
+    assert isinstance(data.get("metrics"), dict)
 
 
 @pytest.mark.slow

@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import uuid
+from time import perf_counter
 from typing import Any, List, Union
 
 from hca.common.types import ModuleProposal, WorkspaceItem, WorkflowPlan
@@ -270,6 +271,10 @@ class Planner:
 
         # Pull relevant memory context for grounding
         memory_context = ""
+        memory_hits: List[dict[str, Any]] = []
+        memory_retrieval_latency_ms: float | None = None
+        memory_retrieval_status = "not_attempted"
+        memory_retrieval_error: str | None = None
         if goal:
             try:
                 from memory_service.singleton import (  # type: ignore
@@ -277,19 +282,41 @@ class Planner:
                 )
                 from memory_service import RetrievalQuery  # type: ignore
 
+                retrieval_started_at = perf_counter()
                 hits = get_controller().retrieve(
                     RetrievalQuery(query_text=goal, top_k=3, run_id=run_id)
                 )
+                memory_retrieval_latency_ms = round(
+                    (perf_counter() - retrieval_started_at) * 1000.0,
+                    3,
+                )
+                memory_retrieval_status = "retrieved"
+                memory_hits = [
+                    {
+                        "text": hit.text,
+                        "score": round(hit.score, 3),
+                        "memory_type": hit.memory_type,
+                        "stored_at": (
+                            hit.stored_at.isoformat()
+                            if hit.stored_at is not None
+                            else None
+                        ),
+                    }
+                    for hit in hits
+                ]
                 if hits:
                     memory_context = "\n".join(
                         f"- [{h.memory_type}] {h.text} (score={h.score:.2f})"
                         for h in hits
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                memory_retrieval_status = "failed"
+                memory_retrieval_error = exc.__class__.__name__
 
         plan: dict[str, Any] | None
         workflow_plan = build_workflow_plan(goal) if goal else None
+        planning_mode = "rule_based_only"
+        fallback_reason: str | None = None
         if workflow_plan is not None:
             plan = {
                 "strategy": workflow_plan.strategy,
@@ -304,19 +331,29 @@ class Planner:
                 "rationale": workflow_plan.rationale,
             }
             plan_from_llm = False
+            planning_mode = "workflow_chain"
         else:
             # LLM planning
             plan = None
             plan_from_llm = False
+            llm_error: str | None = None
             if goal:
                 try:
                     plan = asyncio.run(_llm_plan(goal, memory_context))
                     plan_from_llm = True
-                except Exception:
-                    pass
+                    planning_mode = "llm"
+                except Exception as exc:
+                    llm_error = exc.__class__.__name__
 
             if plan is None:
                 plan = _rule_based_plan(perceived_intent, goal)
+                planning_mode = "rule_based_fallback"
+                if llm_error is not None:
+                    fallback_reason = f"llm_error:{llm_error}"
+                elif goal:
+                    fallback_reason = "rule_based_only"
+                else:
+                    fallback_reason = "missing_goal"
 
         assert plan is not None
 
@@ -353,7 +390,13 @@ class Planner:
                 "workflow_id": workflow_id,
                 "rationale": rationale,
                 "llm_planned": plan_from_llm,
-                "memory_context_used": bool(memory_context),
+                "memory_context_used": bool(memory_hits),
+                "planning_mode": planning_mode,
+                "fallback_reason": fallback_reason,
+                "memory_hits": memory_hits,
+                "memory_retrieval_latency_ms": memory_retrieval_latency_ms,
+                "memory_retrieval_status": memory_retrieval_status,
+                "memory_retrieval_error": memory_retrieval_error,
             },
             salience=0.7,
             confidence=confidence,

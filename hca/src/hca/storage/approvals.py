@@ -121,6 +121,24 @@ def append_decision(run_id: str, decision: ApprovalDecisionRecord) -> None:
 
 
 def append_grant(run_id: str, grant: ApprovalGrant) -> None:
+    request = get_request(run_id, grant.approval_id)
+    if request is None:
+        raise ValueError("approval request not found")
+
+    current_status = resolve_status(run_id, grant.approval_id)
+    if current_status == "denied":
+        raise ValueError("approval already denied")
+    if current_status == "consumed":
+        raise ValueError("approval already consumed")
+    if current_status == "granted":
+        raise ValueError("approval already granted")
+    if (
+        request.binding is not None
+        and grant.binding is not None
+        and not grant.binding.matches(request.binding)
+    ):
+        raise ValueError("approval binding does not match request")
+
     grant = _with_binding(grant, _approval_binding(run_id, grant.approval_id))
     append_decision(
         run_id,
@@ -144,6 +162,15 @@ def append_denial(
     expires_at: Optional[datetime] = None,
     reason: Optional[str] = None,
 ) -> None:
+    if get_request(run_id, approval_id) is None:
+        raise ValueError("approval request not found")
+
+    current_status = resolve_status(run_id, approval_id)
+    if current_status == "consumed":
+        raise ValueError("approval already consumed")
+    if current_status == "denied":
+        raise ValueError("approval already denied")
+
     append_decision(
         run_id,
         ApprovalDecisionRecord(

@@ -33,6 +33,7 @@ def test_runs_list_uses_shared_summary_surface():
     )
     assert "plan" in matching
     assert "event_count" in matching
+    assert "metrics" in matching
 
 
 def test_approval_via_api():

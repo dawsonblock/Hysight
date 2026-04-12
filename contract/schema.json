@@ -332,7 +332,9 @@
         "action",
         "rationale",
         "confidence",
-        "memory_context_used"
+        "memory_context_used",
+        "planning_mode",
+        "fallback_reason"
       ],
       "properties": {
         "strategy": { "type": ["string", "null"] },
@@ -343,7 +345,9 @@
           "minimum": 0.0,
           "maximum": 1.0
         },
-        "memory_context_used": { "type": "boolean" }
+        "memory_context_used": { "type": "boolean" },
+        "planning_mode": { "type": ["string", "null"] },
+        "fallback_reason": { "type": ["string", "null"] }
       }
     },
     "RunActionTakenResponse": {
@@ -396,6 +400,37 @@
         "actor": { "type": ["string", "null"] },
         "timestamp": { "type": ["string", "null"], "format": "date-time" },
         "summary": { "type": "string" }
+      }
+    },
+    "RunLatencySummaryResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "total_ms", "max_ms", "last_ms"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "total_ms": { "type": "number", "minimum": 0.0 },
+        "max_ms": { "type": "number", "minimum": 0.0 },
+        "last_ms": { "type": ["number", "null"], "minimum": 0.0 }
+      }
+    },
+    "RunMetricsResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_duration_ms",
+        "tool_latency",
+        "memory_retrieval_latency",
+        "memory_commit_latency"
+      ],
+      "properties": {
+        "run_duration_ms": { "type": ["number", "null"], "minimum": 0.0 },
+        "tool_latency": { "$ref": "#/definitions/RunLatencySummaryResponse" },
+        "memory_retrieval_latency": {
+          "$ref": "#/definitions/RunLatencySummaryResponse"
+        },
+        "memory_commit_latency": {
+          "$ref": "#/definitions/RunLatencySummaryResponse"
+        }
       }
     },
     "RunListQuery": {
@@ -620,7 +655,8 @@
         "discrepancies",
         "memory_hits",
         "key_events",
-        "event_count"
+        "event_count",
+        "metrics"
       ],
       "properties": {
         "run_id": { "type": "string" },
@@ -671,7 +707,8 @@
           "type": "array",
           "items": { "$ref": "#/definitions/RunKeyEventResponse" }
         },
-        "event_count": { "type": "integer", "minimum": 0 }
+        "event_count": { "type": "integer", "minimum": 0 },
+        "metrics": { "$ref": "#/definitions/RunMetricsResponse" }
       }
     }
   },

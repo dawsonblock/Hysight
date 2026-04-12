@@ -156,6 +156,7 @@ def _rule_based_critique(
             f"{len(missing)} gap(s)."
         ),
         "llm_powered": False,
+        "fallback_reason": "rule_based_only",
     }
 
 
@@ -206,6 +207,7 @@ class Critic:
 
         # LLM critique with rule-based fallback.
         critique: Dict[str, Any] = {}
+        fallback_reason: Optional[str] = None
         if goal and action:
             try:
                 critique = asyncio.run(_llm_evaluate(goal, action, rationale))
@@ -215,9 +217,13 @@ class Critic:
                 logging.getLogger(__name__).warning(
                     "LLM critic failed, falling back to rule-based: %s", exc
                 )
+                fallback_reason = f"llm_error:{exc.__class__.__name__}"
 
         if not critique:
             critique = _rule_based_critique(items)
+        if fallback_reason is not None:
+            critique["fallback_reason"] = fallback_reason
+        critique.setdefault("fallback_reason", None)
 
         # Build confidence adjustments for workspace items.
         delta = float(critique.get("confidence_delta", 0.0))
@@ -248,6 +254,7 @@ class Critic:
                 "confidence_delta": delta,
                 "rationale": critique.get("rationale", ""),
                 "llm_powered": bool(critique.get("llm_powered", False)),
+                "fallback_reason": critique.get("fallback_reason"),
             },
             salience=0.6,
             confidence=1.0,

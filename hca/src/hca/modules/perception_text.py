@@ -107,14 +107,24 @@ class TextPerception:
         goal = run.goal if run else ""
 
         perception = None
+        perception_mode = "rule_based_only"
+        fallback_reason = None
+        llm_attempted = False
         if goal:
+            llm_attempted = True
             try:
                 perception = asyncio.run(_llm_perceive(goal))
-            except Exception:
-                pass
+                perception_mode = "llm"
+            except Exception as exc:
+                fallback_reason = f"llm_error:{exc.__class__.__name__}"
 
         if not perception:
             perception = _rule_based_perceive(goal)
+            perception_mode = (
+                "rule_based_fallback" if llm_attempted else "rule_based_only"
+            )
+            if fallback_reason is None and not goal:
+                fallback_reason = "missing_goal"
 
         intent_class = perception.get("intent_class", "general")
         intent = perception.get("intent") or _INTENT_MAP.get(intent_class, "general")
@@ -127,6 +137,9 @@ class TextPerception:
                 "intent_class": intent_class,
                 "intent": intent,
                 "arguments": perception.get("arguments", {}),
+                "perception_mode": perception_mode,
+                "fallback_reason": fallback_reason,
+                "llm_attempted": llm_attempted,
             },
             salience=0.8,
             confidence=perception.get("confidence", 0.8),

@@ -34,74 +34,8 @@ on:
                 type: boolean
 
 jobs:
-    hca-smoke:
-        name: HCA Smoke Proof
-        runs-on: ubuntu-latest
-        timeout-minutes: 15
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Run make test-pipeline
-              run: make test-pipeline
-
-    contract-conformance:
-        name: Contract Conformance Proof
-        runs-on: ubuntu-latest
-        timeout-minutes: 15
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Run make test-contract
-              run: make test-contract
-
-    backend-local:
-        name: Backend Local Proof
-        runs-on: ubuntu-latest
-        timeout-minutes: 15
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Run make test-backend-local
-              run: make test-backend-local
-
-    backend-full:
-        name: Backend Full Proof
+    documented-proof-surface:
+        name: Documented Proof Surface
         runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:
@@ -119,54 +53,142 @@ jobs:
               run: |
                   python -m pip install --upgrade pip
                   make test-bootstrap
-            - name: Run make test-backend
-              run: make test-backend
+            - name: Run documented proof surface
+              run: python scripts/run_tests.py
 
-    backend-live-sidecar:
-        name: Backend Live Sidecar Proof
-        if: >-
-            ${{
-                github.event_name != 'workflow_dispatch' ||
-                inputs.run_live_sidecar
-            }}
-        runs-on: ubuntu-latest
-        timeout-minutes: 30
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
-            - name: Start memvid sidecar
-              run: |
-                  cargo run --manifest-path memvid_service/Cargo.toml --release > /tmp/memvid-sidecar.log 2>&1 &
-                  echo $! > /tmp/memvid-sidecar.pid
-                  for _ in $(seq 1 30); do
-                    if curl --fail --silent http://localhost:3031/health >/dev/null; then
-                      exit 0
-                    fi
-                    sleep 1
-                  done
-                  cat /tmp/memvid-sidecar.log
-                  exit 1
-            - name: Run make test-sidecar
-              env:
-                  MEMORY_SERVICE_URL: http://localhost:3031
-              run: make test-sidecar
-            - name: Stop memvid sidecar
-              if: always()
-              run: |
-                  if [ -f /tmp/memvid-sidecar.pid ]; then
-                    kill "$(cat /tmp/memvid-sidecar.pid)" || true
-                  fi
+        hca-smoke:
+            name: HCA Smoke Proof
+            runs-on: ubuntu-latest
+            timeout-minutes: 15
+            steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-python@v5
+                  with:
+                      python-version: "3.11"
+                      cache: "pip"
+                      cache-dependency-path: |
+                          backend/requirements-core.txt
+                          backend/requirements.txt
+                          backend/requirements-test.txt
+                          hca/pyproject.toml
+                - name: Bootstrap test environment
+                  run: |
+                      python -m pip install --upgrade pip
+                      make test-bootstrap
+                - name: Run make test-pipeline
+                  run: make test-pipeline
+
+        contract-conformance:
+            name: Contract Conformance Proof
+            runs-on: ubuntu-latest
+            timeout-minutes: 15
+            steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-python@v5
+                  with:
+                      python-version: "3.11"
+                      cache: "pip"
+                      cache-dependency-path: |
+                          backend/requirements-core.txt
+                          backend/requirements.txt
+                          backend/requirements-test.txt
+                          hca/pyproject.toml
+                - name: Bootstrap test environment
+                  run: |
+                      python -m pip install --upgrade pip
+                      make test-bootstrap
+                - name: Run make test-contract
+                  run: make test-contract
+
+        backend-local:
+            name: Backend Local Proof
+            runs-on: ubuntu-latest
+            timeout-minutes: 15
+            steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-python@v5
+                  with:
+                      python-version: "3.11"
+                      cache: "pip"
+                      cache-dependency-path: |
+                          backend/requirements-core.txt
+                          backend/requirements.txt
+                          backend/requirements-test.txt
+                          hca/pyproject.toml
+                - name: Bootstrap test environment
+                  run: |
+                      python -m pip install --upgrade pip
+                      make test-bootstrap
+                - name: Run make test-backend-local
+                  run: make test-backend-local
+
+        backend-full:
+            name: Backend Full Proof
+            runs-on: ubuntu-latest
+            timeout-minutes: 20
+            steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-python@v5
+                  with:
+                      python-version: "3.11"
+                      cache: "pip"
+                      cache-dependency-path: |
+                          backend/requirements-core.txt
+                          backend/requirements.txt
+                          backend/requirements-test.txt
+                          hca/pyproject.toml
+                - name: Bootstrap test environment
+                  run: |
+                      python -m pip install --upgrade pip
+                      make test-bootstrap
+                - name: Run make test-backend
+                  run: make test-backend
+
+        backend-live-sidecar:
+            name: Backend Live Sidecar Proof
+            if: >-
+                ${{
+                    github.event_name != 'workflow_dispatch' ||
+                    inputs.run_live_sidecar
+                }}
+            runs-on: ubuntu-latest
+            timeout-minutes: 30
+            steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-python@v5
+                  with:
+                      python-version: "3.11"
+                      cache: "pip"
+                      cache-dependency-path: |
+                          backend/requirements-core.txt
+                          backend/requirements.txt
+                          backend/requirements-test.txt
+                          hca/pyproject.toml
+                - name: Bootstrap test environment
+                  run: |
+                      python -m pip install --upgrade pip
+                      make test-bootstrap
+                - name: Install Rust toolchain
+                  uses: dtolnay/rust-toolchain@stable
+                - name: Start memvid sidecar
+                  run: |
+                      cargo run --manifest-path memvid_service/Cargo.toml --release > /tmp/memvid-sidecar.log 2>&1 &
+                      echo $! > /tmp/memvid-sidecar.pid
+                      for _ in $(seq 1 30); do
+                        if curl --fail --silent http://localhost:3031/health >/dev/null; then
+                          exit 0
+                        fi
+                        sleep 1
+                      done
+                      cat /tmp/memvid-sidecar.log
+                      exit 1
+                - name: Run make test-sidecar
+                  env:
+                      MEMORY_SERVICE_URL: http://localhost:3031
+                  run: make test-sidecar
+                - name: Stop memvid sidecar
+                  if: always()
+                  run: |
+                      if [ -f /tmp/memvid-sidecar.pid ]; then
+                        kill "$(cat /tmp/memvid-sidecar.pid)" || true
+                      fi
