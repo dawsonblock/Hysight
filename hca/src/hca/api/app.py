@@ -1,4 +1,4 @@
-"""FastAPI application exposing runtime operations."""
+"""Compatibility FastAPI application for internal runtime tests."""
 
 from __future__ import annotations
 
@@ -20,6 +20,17 @@ from hca.api.models import (
     MemoryResponse,
     ReplayResponse,
 )
+from hca.api.run_views import (
+    RunArtifactDetailResponse,
+    RunArtifactListResponse,
+    RunListResponse,
+    extract_run_summary,
+    get_run_artifact_detail,
+    list_run_artifacts,
+    list_run_events,
+    list_run_summaries,
+    require_run_context,
+)
 from hca.common.enums import MemoryType
 from hca.common.types import ApprovalGrant
 from hca.memory.episodic_store import EpisodicStore
@@ -27,23 +38,28 @@ from hca.memory.identity_store import IdentityStore
 from hca.memory.procedural_store import ProceduralStore
 from hca.memory.semantic_store import SemanticStore
 from hca.runtime.runtime import Runtime
-from hca.runtime.replay import reconstruct_state
 from hca.storage.approvals import (
     append_grant,
     get_approval_status,
     get_pending_requests,
     iter_records,
 )
-from hca.storage.event_log import iter_events
-from hca.storage.runs import load_run
 
 app = FastAPI(title="Hybrid Cognitive Agent API")
 runtime_engine = Runtime()
 
 
 def _require_run(run_id: str) -> None:
-    if load_run(run_id) is None:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    require_run_context(run_id)
+
+
+@app.get("/runs", response_model=RunListResponse)
+def get_runs(
+    query: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> RunListResponse:
+    return list_run_summaries(limit=limit, offset=offset, query_text=query)
 
 
 def _approval_ids(run_id: str) -> List[str]:
@@ -84,10 +100,9 @@ def create_run(req: CreateRunRequest) -> CreateRunResponse:
 @app.get("/runs/{run_id}", response_model=ReplayResponse)
 def get_run(run_id: str) -> ReplayResponse:
     _require_run(run_id)
-    try:
-        return ReplayResponse.model_validate(reconstruct_state(run_id))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return ReplayResponse.model_validate(
+        extract_run_summary(run_id).model_dump(mode="json")
+    )
 
 
 @app.get("/runs/{run_id}/state", response_model=ReplayResponse)
@@ -98,12 +113,43 @@ def get_run_state(run_id: str) -> ReplayResponse:
 @app.get("/runs/{run_id}/events", response_model=List[Dict[str, Any]])
 def get_events(run_id: str) -> List[Dict[str, Any]]:
     _require_run(run_id)
-    return list(iter_events(run_id))
+    return [
+        record.model_dump(mode="json")
+        for record in list_run_events(run_id, limit=100, offset=0).records
+    ]
 
 
 @app.get("/runs/{run_id}/replay", response_model=ReplayResponse)
 def get_replay(run_id: str) -> ReplayResponse:
     return get_run(run_id)
+
+
+@app.get(
+    "/runs/{run_id}/artifacts",
+    response_model=RunArtifactListResponse,
+)
+def get_artifacts(
+    run_id: str,
+    limit: int = 100,
+    offset: int = 0,
+) -> RunArtifactListResponse:
+    return list_run_artifacts(run_id, limit=limit, offset=offset)
+
+
+@app.get(
+    "/runs/{run_id}/artifacts/{artifact_id}",
+    response_model=RunArtifactDetailResponse,
+)
+def get_artifact_detail(
+    run_id: str,
+    artifact_id: str,
+    preview_bytes: int = 20000,
+) -> RunArtifactDetailResponse:
+    return get_run_artifact_detail(
+        run_id,
+        artifact_id,
+        preview_bytes=preview_bytes,
+    )
 
 
 @app.get("/runs/{run_id}/approvals", response_model=ApprovalListResponse)
@@ -149,7 +195,7 @@ def grant_approval(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    replay = reconstruct_state(run_id)
+    replay = extract_run_summary(run_id)
     approval = get_approval_status(run_id, approval_id)
     return ApprovalActionResponse(
         run_id=run_id,
@@ -157,7 +203,7 @@ def grant_approval(
         decision="granted",
         status="granted",
         resolved_status=approval["status"],
-        state=replay["state"],
+        state=replay.state,
         token=token,
     )
 
@@ -178,7 +224,7 @@ def deny_approval(
         approval_id,
         reason=deny_request.reason or "User denied via API",
     )
-    replay = reconstruct_state(run_id)
+    replay = extract_run_summary(run_id)
     approval = get_approval_status(run_id, approval_id)
     return ApprovalActionResponse(
         run_id=run_id,
@@ -186,7 +232,7 @@ def deny_approval(
         decision="denied",
         status="denied",
         resolved_status=approval["status"],
-        state=replay["state"],
+        state=replay.state,
         reason=deny_request.reason,
     )
 

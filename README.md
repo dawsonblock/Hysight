@@ -20,7 +20,7 @@ A proof-first Hybrid Cognitive Agent runtime with bounded authority, replay-back
 | Verify the default local proof surface | `python scripts/run_tests.py` |
 | Start the backend | `./scripts/run_backend.sh` |
 | Start the frontend | `cd frontend && yarn start` |
-| Run the optional memvid sidecar | `./memvid_service/target/release/memvid-sidecar` |
+| Run the optional memvid sidecar | `cargo run --manifest-path memvid_service/Cargo.toml --release` |
 
 If you only do one thing, run the proof surface first. Hysight treats local verification as the default entry point, not an afterthought.
 
@@ -229,7 +229,7 @@ Replay and memory guarantees:
 Hysight/
 ├── hca/                        # Core cognitive agent package
 │   ├── src/hca/
-│   │   ├── api/                # FastAPI sub-application (runs, eval, memory, admin)
+│   │   ├── api/                # Shared API models + internal compatibility app
 │   │   ├── cli/                # CLI entry points (smoke, eval, replay)
 │   │   ├── common/             # Shared enums, types, time utilities
 │   │   ├── evaluation/         # Evaluation harnesses and metrics
@@ -276,7 +276,7 @@ Hysight/
 - React 19, React Router v7
 - shadcn/ui (Radix UI primitives + Tailwind CSS)
 - Recharts for data visualization
-- Axios for HTTP
+- Fetch-based API client helpers
 
 ### Sidecar
 
@@ -452,7 +452,7 @@ The default layout is two-pane: live agent chat on the left and a persistent ope
 ### (Optional) Run the memvid sidecar
 
 ```bash
-./memvid_service/target/release/memvid-sidecar
+cargo run --manifest-path memvid_service/Cargo.toml --release
 ```
 
 ---
@@ -485,6 +485,10 @@ hca-replay --run-id <run-id>
 ```
 
 ### API
+
+The deployed HTTP surface is `backend.server:app`. The `hca/src/hca/api/app.py`
+application is a repo-local compatibility layer for direct runtime tests and
+inspection, not the frontend or container entrypoint.
 
 All agent operations are available via the REST API:
 

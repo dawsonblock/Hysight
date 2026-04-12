@@ -2,6 +2,10 @@
 
 Operational reference for running the Hysight backend stack.
 
+The canonical public HTTP surface is `backend.server:app`, exposed through `./scripts/run_backend.sh` locally or `docker compose up --build` in containers. The FastAPI app in `hca/src/hca/api/app.py` is an internal compatibility surface for repo-local tests; it is not a deployment or frontend entrypoint.
+
+The default memory mode is the in-process Python backend (`MEMORY_BACKEND=python`). The Rust memvid sidecar is optional and only changes the memory implementation behind the backend; it does not replace the public HTTP API.
+
 ---
 
 ## Prerequisites
@@ -11,7 +15,7 @@ Operational reference for running the Hysight backend stack.
 
 ---
 
-## 1 — Local backend-only mode (default, Python memory)
+## 1 — Local backend-only mode (default public API, Python memory)
 
 ### Container
 
@@ -35,9 +39,11 @@ cp .env.example .env
 ./scripts/run_backend.sh
 ```
 
+This starts the public backend app. Do not deploy `hca.api.app:app` for normal local or container-backed usage.
+
 ---
 
-## 2 — Local backend + memvid sidecar mode (Rust memory)
+## 2 — Optional backend + memvid sidecar mode (public API unchanged)
 
 ```bash
 cp .env.example .env          # MEMORY_BACKEND / MEMORY_SERVICE_URL are set by the overlay
@@ -45,10 +51,13 @@ docker compose -f compose.yml -f compose.sidecar.yml up --build
 ```
 
 The overlay (`compose.sidecar.yml`) automatically sets:
+
 - `MEMORY_BACKEND=rust`
 - `MEMORY_SERVICE_URL=http://memvid-sidecar:3031`
 
 And adds a `depends_on` so the backend waits for the sidecar to be healthy before starting.
+
+The frontend and operator APIs still talk to the same backend routes (`/api/...` and `/api/hca/...`). Only the backing memory implementation changes.
 
 ---
 
@@ -72,7 +81,7 @@ MEMORY_SERVICE_URL=http://localhost:3031 make test-sidecar
 ## 4 — Required environment variables
 
 | Variable | Required | Default | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `EMERGENT_LLM_KEY` | yes (for agent runs) | — | LLM API key |
 | `MEMORY_BACKEND` | no | `python` | `python` or `rust` |
 | `MEMORY_SERVICE_URL` | when `rust` | — | e.g. `http://localhost:3031` |
@@ -89,7 +98,7 @@ See `.env.example` for the full annotated template.
 ## 5 — Health check URLs
 
 | Service | URL | Expected response |
-|---|---|---|
+| --- | --- | --- |
 | Backend | `http://localhost:8000/api/` | `{"message":"HCA API — Hybrid Cognitive Agent"}` |
 | Memvid sidecar | `http://localhost:3031/health` | `{"status":"ok",...}` |
 
@@ -123,7 +132,7 @@ Both containers run as a non-root system user (`hysight`). The only directory
 that requires write access is mounted as a named volume:
 
 | Container | Mount path | Volume name |
-|---|---|---|
+| --- | --- | --- |
 | `backend` | `/app/storage` | `hca-storage` |
 | `memvid-sidecar` | `/app/data` | `sidecar-data` |
 
@@ -146,26 +155,35 @@ chown -R <uid>:<uid> /your/host/path
 ```
 
 ### `BackendConfigurationError: Mongo configuration is partial`
+
 Set **both** `MONGO_URL` and `DB_NAME`, or unset both. Mixed state is rejected at startup.
 
 ### `MemoryConfigurationError: MEMORY_SERVICE_URL is required`
+
 `MEMORY_BACKEND=rust` was set but `MEMORY_SERVICE_URL` was not. Either switch back to `MEMORY_BACKEND=python` or start the sidecar and set the URL.
 
 ### `MemoryConfigurationError: Rust memory backend health check failed`
+
 The sidecar URL is set but the sidecar is not reachable. Verify the sidecar is running:
+
 ```bash
 curl http://localhost:3031/health
 ```
+
 If using compose, check `docker compose logs memvid-sidecar`.
 
 ### `BackendConfigurationError: CORS_ORIGINS cannot contain '*'`
+
 Replace `*` with a specific origin list, e.g. `http://localhost:3000`.
 
 ### Backend container exits immediately
+
 Check logs: `docker compose logs backend`. Common causes: missing `EMERGENT_LLM_KEY`, bad `MONGO_URL`, or sidecar not ready (in sidecar mode).
 
 ### `ERROR: memory_service package not found` (local mode)
+
 Run from the repo root after installing deps:
+
 ```bash
 pip install -r backend/requirements-test.txt
 ./scripts/run_backend.sh

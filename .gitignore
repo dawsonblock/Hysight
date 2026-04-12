@@ -27,6 +27,7 @@ next-env.d.ts
 
 # Production builds
 /build
+frontend/build/
 dist/
 dist
 
@@ -75,6 +76,11 @@ agenthub/agents/youtube/db
 
 # Build caches
 .cache/
+memvid/target/
+memvid_service/target/
+
+# Runtime state
+storage/
 
 memory/test_credentials.md
 

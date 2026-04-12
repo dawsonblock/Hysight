@@ -25,8 +25,12 @@ import pathlib
 import shlex
 import subprocess
 import sys
+from typing import Any, Dict, List
 
-MEMORY_SERVICE_URL = os.environ.get("MEMORY_SERVICE_URL", "http://localhost:3031")
+MEMORY_SERVICE_URL = os.environ.get(
+    "MEMORY_SERVICE_URL",
+    "http://localhost:3031",
+)
 
 # Repo root is two levels up from this file (scripts/run_tests.py → repo root).
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -35,7 +39,10 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Proof surface definition
 # ---------------------------------------------------------------------------
 
-DEFAULT_STEPS = [
+Step = Dict[str, Any]
+
+
+DEFAULT_STEPS: List[Step] = [
     {
         "name": "HCA pipeline proof",
         "cmd": [
@@ -69,7 +76,7 @@ DEFAULT_STEPS = [
     },
 ]
 
-SIDECAR_STEP = {
+SIDECAR_STEP: Step = {
     "name": "Live sidecar proof",
     "cmd": [
         sys.executable, "-m", "pytest",
@@ -113,7 +120,8 @@ def _check_sidecar_health() -> bool:
         if parsed.scheme != "http":
             return False
         if parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
-            # Only probe loopback addresses to avoid SSRF via env-var injection.
+            # Only probe loopback addresses to avoid SSRF via env-var
+            # injection.
             return False
 
         health_url = urllib.parse.urlunparse(
@@ -136,7 +144,7 @@ def _check_sidecar_health() -> bool:
 # Runner
 # ---------------------------------------------------------------------------
 
-def _run_step(step: dict) -> int:
+def _run_step(step: Step) -> int:
     cmd = step["cmd"]
     extra_env = step.get("env", {})
     env = {**os.environ, **extra_env}
@@ -183,7 +191,7 @@ def main() -> int:
             print(
                 "Sidecar mode requested but RUN_MEMVID_TESTS is not set.\n"
                 "Re-run with:\n"
-                f"    RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar"
+                "    RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar"
             )
             return 1
         if not _check_sidecar_health():
@@ -191,7 +199,8 @@ def main() -> int:
                 f"Sidecar mode requested, but health check failed at "
                 f"{MEMORY_SERVICE_URL}/health\n"
                 "Start the memvid sidecar first:\n"
-                "    ./memvid_service/target/release/memvid-sidecar"
+                "    cargo run --manifest-path "
+                "memvid_service/Cargo.toml --release"
             )
             return 1
 

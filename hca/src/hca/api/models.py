@@ -5,30 +5,40 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from hca.api.run_views import RunSummaryResponse
 
 
-class CreateRunRequest(BaseModel):
+class APIModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class CreateRunRequest(APIModel):
     goal: str
     user_id: Optional[str] = None
 
 
-class CreateRunResponse(BaseModel):
+class CreateRunResponse(APIModel):
     run_id: str
 
 
-class ApprovalGrantRequest(BaseModel):
+class ApprovalSelectionRequest(APIModel):
+    approval_id: str
+
+
+class ApprovalGrantRequest(APIModel):
     token: Optional[str] = None
     actor: Optional[str] = None
     expires_at: Optional[datetime] = None
 
 
-class ApprovalDenyRequest(BaseModel):
+class ApprovalDenyRequest(APIModel):
     actor: Optional[str] = None
     reason: Optional[str] = None
 
 
-class ApprovalActionResponse(BaseModel):
+class ApprovalActionResponse(APIModel):
     run_id: str
     approval_id: str
     decision: str
@@ -39,7 +49,7 @@ class ApprovalActionResponse(BaseModel):
     token: Optional[str] = None
 
 
-class ApprovalDecisionRequest(BaseModel):
+class ApprovalDecisionRequest(APIModel):
     decision: str
     token: Optional[str] = None
     actor: Optional[str] = None
@@ -47,7 +57,7 @@ class ApprovalDecisionRequest(BaseModel):
     expires_at: Optional[datetime] = None
 
 
-class ApprovalSummaryItem(BaseModel):
+class ApprovalSummaryItem(APIModel):
     approval_id: str
     status: str
     expired: bool = False
@@ -58,35 +68,19 @@ class ApprovalSummaryItem(BaseModel):
     corruption_count: int = 0
 
 
-class ApprovalListResponse(BaseModel):
+class ApprovalListResponse(APIModel):
     approvals: List[ApprovalSummaryItem] = Field(default_factory=list)
 
 
-class ReplayResponse(BaseModel):
-    run_id: str
-    state: str
-    transition_history: List[str] = Field(default_factory=list)
-    selected_action: Optional[Dict[str, Any]] = None
-    selected_action_kind: Optional[str] = None
-    workspace_summary: Dict[str, Any] = Field(default_factory=dict)
-    pending_approval_id: Optional[str] = None
-    approval: Optional[Dict[str, Any]] = None
-    last_approval_decision: Optional[str] = None
-    latest_receipt: Optional[Dict[str, Any]] = None
-    latest_receipt_id: Optional[str] = None
-    artifacts: List[Dict[str, Any]] = Field(default_factory=list)
-    artifacts_count: int = 0
-    memory_counts: Dict[str, int] = Field(default_factory=dict)
-    event_count: int = 0
-    meta_signals_seen: List[str] = Field(default_factory=list)
-    discrepancies: List[str] = Field(default_factory=list)
+class ReplayResponse(RunSummaryResponse):
+    """Compatibility alias for the shared replay-backed run summary."""
 
 
-class MemoryResponse(BaseModel):
+class MemoryResponse(APIModel):
     run_id: str
     memory_type: str
     items: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class HealthResponse(BaseModel):
+class HealthResponse(APIModel):
     status: str
