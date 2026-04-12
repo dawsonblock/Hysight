@@ -1,4 +1,5 @@
 """HCA API backend tests — self-contained, no external services required."""
+import os
 import sys
 from pathlib import Path
 
@@ -7,6 +8,63 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+
+def _seed_run(run_id: str, goal: str, *, completed: bool = True):
+    from hca.common.enums import EventType, RuntimeState  # type: ignore
+    from hca.common.types import RunContext  # type: ignore
+    from hca.storage.event_log import append_event  # type: ignore
+    from hca.storage.runs import save_run  # type: ignore
+
+    context = RunContext(
+        run_id=run_id,
+        goal=goal,
+        state=(RuntimeState.completed if completed else RuntimeState.created),
+    )
+    save_run(context)
+    append_event(
+        context,
+        EventType.run_created,
+        "runtime",
+        {"goal": goal},
+    )
+    if completed:
+        append_event(
+            context,
+            EventType.run_completed,
+            "runtime",
+            {"status": "success"},
+        )
+    return context
+
+
+def _seed_artifact(run_id: str, artifact_id: str, content: str):
+    from hca.paths import run_storage_path  # type: ignore
+    from hca.storage.artifacts import append_artifact  # type: ignore
+
+    artifact_path = run_storage_path(run_id, "artifacts", "report.txt")
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(content, encoding="utf-8")
+
+    relative_path = (
+        Path("storage") / "runs" / run_id / "artifacts" / "report.txt"
+    )
+    append_artifact(
+        run_id,
+        {
+            "artifact_id": artifact_id,
+            "run_id": run_id,
+            "action_id": "action-1",
+            "kind": "create_run_report",
+            "path": relative_path.as_posix(),
+            "source_action_ids": ["action-1"],
+            "file_paths": [],
+            "hashes": {},
+            "approval_id": None,
+            "workflow_id": None,
+            "metadata": {"args": {"note": "seeded artifact"}},
+        },
+    )
 
 
 # Root / health.
@@ -24,6 +82,95 @@ def test_root_message(app_client):
 def test_get_run_not_found(app_client):
     r = app_client.get("/api/hca/run/nonexistent-run-id")
     assert r.status_code == 404
+
+
+def test_list_runs_returns_bounded_summaries(app_client):
+    first = _seed_run("run-alpha", "alpha goal")
+    second = _seed_run("run-beta", "beta goal")
+    storage_root = Path(os.environ["HCA_STORAGE_ROOT"])
+
+    os.utime(
+        storage_root / "runs" / first.run_id / "run.json",
+        (1, 1),
+    )
+    os.utime(
+        storage_root / "runs" / second.run_id / "run.json",
+        (2, 2),
+    )
+
+    r = app_client.get("/api/hca/runs?limit=10")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] == 2
+    assert [record["run_id"] for record in data["records"]] == [
+        "run-beta",
+        "run-alpha",
+    ]
+    assert all(record.get("created_at") for record in data["records"])
+    assert all(record.get("updated_at") for record in data["records"])
+
+
+def test_list_runs_query_filters_by_goal(app_client):
+    _seed_run("run-alpha", "alpha goal")
+    _seed_run("run-beta", "beta goal")
+
+    r = app_client.get("/api/hca/runs?q=beta")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] == 1
+    assert [record["run_id"] for record in data["records"]] == ["run-beta"]
+
+
+def test_get_run_events_returns_newest_first(app_client):
+    context = _seed_run("run-events", "eventful goal", completed=False)
+
+    from hca.common.enums import EventType  # type: ignore
+    from hca.storage.event_log import append_event  # type: ignore
+
+    append_event(
+        context,
+        EventType.action_selected,
+        "runtime",
+        {"kind": "echo", "action_id": "action-1"},
+    )
+    append_event(
+        context,
+        EventType.run_completed,
+        "runtime",
+        {"status": "success"},
+    )
+
+    r = app_client.get("/api/hca/run/run-events/events?limit=10")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["run_id"] == "run-events"
+    assert data["total"] == 3
+    assert data["records"][0]["event_type"] == "run_completed"
+    assert data["records"][0]["is_key_event"] is True
+    assert data["records"][1]["summary"] == "Selected action: echo"
+
+
+def test_get_run_artifacts_and_detail(app_client):
+    _seed_run("run-artifacts", "artifact goal")
+    _seed_artifact("run-artifacts", "artifact-1", "artifact content")
+
+    list_response = app_client.get("/api/hca/run/run-artifacts/artifacts")
+    assert list_response.status_code == 200
+    data = list_response.json()
+    assert data["run_id"] == "run-artifacts"
+    assert data["total"] == 1
+    assert data["records"][0]["artifact_id"] == "artifact-1"
+    assert data["records"][0]["content_available"] is True
+
+    detail_response = app_client.get(
+        "/api/hca/run/run-artifacts/artifacts/artifact-1"
+    )
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["artifact_id"] == "artifact-1"
+    assert detail["content"] == "artifact content"
+    assert detail["size_bytes"] == len("artifact content")
+    assert detail["truncated"] is False
 
 
 # Memory retrieve: empty store returns empty hits.
@@ -124,6 +271,11 @@ def test_basic_run_completed(app_client):
     assert data.get("plan", {}).get("strategy") is not None
     assert data.get("plan", {}).get("action") is not None
     assert data.get("action_result", {}).get("status") == "success"
+    assert data.get("latest_receipt", {}).get("status") == "success"
+    assert isinstance(data.get("artifacts"), list)
+    assert isinstance(data.get("memory_counts"), dict)
+    assert isinstance(data.get("memory_outcomes"), dict)
+    assert isinstance(data.get("discrepancies"), list)
 
 
 @pytest.mark.slow
@@ -142,6 +294,48 @@ def test_get_run_by_id(app_client):
     assert data.get("run_id") == run_id
     assert "state" in data
     assert "key_events" in data
+    assert "latest_receipt" in data
+    assert "workflow_step_history" in data
+
+
+@pytest.mark.slow
+def test_contract_run_includes_replay_workflow_fields(app_client):
+    r = app_client.post(
+        "/api/hca/run",
+        json={
+            "goal": (
+                "investigate contract mismatch for `RuntimeState` in "
+                "`hca/src/hca/common/enums.py`"
+            )
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("state") == "completed"
+    assert data.get("active_workflow", {}).get("workflow_class") == (
+        "contract_api_drift"
+    )
+    assert data.get("active_workflow", {}).get("strategy") == (
+        "contract_drift_strategy"
+    )
+    assert data.get("workflow_budget", {}).get("max_steps") == 7
+    assert [
+        step.get("step_key")
+        for step in data.get("workflow_step_history", [])
+    ] == [
+        "target_glob",
+        "target_search",
+        "target_read_context",
+        "contract_surface_search",
+        "contract_surface_read_context",
+        "contract_surface_summary",
+        "run_report",
+    ]
+    assert any(
+        "contract_drift_summary" in artifact.get("path", "")
+        for artifact in data.get("workflow_artifacts", [])
+    )
+    assert data.get("discrepancies") == []
 
 
 @pytest.mark.slow

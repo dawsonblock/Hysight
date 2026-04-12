@@ -28,10 +28,39 @@ def test_runtime_emits_explicit_memory_success_events(monkeypatch, tmp_path):
     assert "episodic_memory_written" in event_types
     assert "external_memory_written" in event_types
 
+    events = list(iter_events(run_id))
+    episodic_event = next(
+        event
+        for event in events
+        if event["event_type"] == "episodic_memory_written"
+    )
+    external_event = next(
+        event
+        for event in events
+        if event["event_type"] == "external_memory_written"
+    )
+    assert episodic_event["payload"]["run_id"] == run_id
+    assert episodic_event["payload"]["sink"] == "episodic_store"
+    assert episodic_event["payload"]["status"] == "written"
+    assert episodic_event["payload"]["failure_class"] is None
+    assert episodic_event["payload"]["finalization_context"] == (
+        "single_action"
+    )
+    assert external_event["payload"]["run_id"] == run_id
+    assert external_event["payload"]["sink"] == "external_memory"
+    assert external_event["payload"]["status"] == "written"
+    assert external_event["payload"]["failure_class"] is None
+
     replay = reconstruct_state(run_id)
     assert replay["memory_outcomes"]["episodic_memory_writes"] == 1
     assert replay["memory_outcomes"]["external_memory_writes"] == 1
     assert replay["memory_outcomes"]["external_memory_failures"] == 0
+    assert replay["memory_outcomes"]["episodic_memory_details"][0][
+        "sink"
+    ] == "episodic_store"
+    assert replay["memory_outcomes"]["external_memory_details"][0][
+        "sink"
+    ] == "external_memory"
 
 
 def test_runtime_emits_external_memory_failure_event(monkeypatch, tmp_path):
@@ -66,7 +95,14 @@ def test_runtime_emits_external_memory_failure_event(monkeypatch, tmp_path):
         if event["event_type"] == "external_memory_write_failed"
     ]
     assert len(failure_events) == 1
+    assert failure_events[0]["payload"]["run_id"] == run_id
+    assert failure_events[0]["payload"]["sink"] == "external_memory"
+    assert failure_events[0]["payload"]["status"] == "failed"
+    assert failure_events[0]["payload"]["failure_class"] == "RuntimeError"
     assert (
         failure_events[0]["payload"]["error"]
         == "memory sidecar unavailable"
     )
+    assert replay["memory_outcomes"]["external_memory_failure_details"][0][
+        "status"
+    ] == "failed"

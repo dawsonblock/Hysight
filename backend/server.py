@@ -239,6 +239,8 @@ class HCARunSummaryResponse(BackendModel):
     run_id: str
     goal: str
     state: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     plan: HCARunPlanResponse = Field(default_factory=HCARunPlanResponse)
     action_taken: HCARunActionResponse = Field(
         default_factory=HCARunActionResponse
@@ -247,9 +249,74 @@ class HCARunSummaryResponse(BackendModel):
         default_factory=HCARunResultResponse
     )
     approval_id: Optional[str] = None
+    approval: Optional[Dict[str, Any]] = None
+    last_approval_decision: Optional[str] = None
+    latest_receipt: Optional[Dict[str, Any]] = None
+    artifacts: List[Dict[str, Any]] = Field(default_factory=list)
+    artifacts_count: int = 0
+    memory_counts: Dict[str, int] = Field(default_factory=dict)
+    memory_outcomes: Dict[str, Any] = Field(default_factory=dict)
+    active_workflow: Optional[Dict[str, Any]] = None
+    workflow_budget: Optional[Dict[str, Any]] = None
+    workflow_checkpoint: Optional[Dict[str, Any]] = None
+    workflow_step_history: List[Dict[str, Any]] = Field(default_factory=list)
+    workflow_artifacts: List[Dict[str, Any]] = Field(default_factory=list)
+    discrepancies: List[str] = Field(default_factory=list)
     memory_hits: List[HCARunMemoryHitResponse] = Field(default_factory=list)
     key_events: List[HCARunKeyEventResponse] = Field(default_factory=list)
     event_count: int = 0
+
+
+class HCARunListResponse(BackendModel):
+    records: List[HCARunSummaryResponse] = Field(default_factory=list)
+    total: int = 0
+
+
+class HCARunEventResponse(BackendModel):
+    event_id: str
+    run_id: str
+    event_type: str
+    actor: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    summary: str
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    prior_state: Optional[str] = None
+    next_state: Optional[str] = None
+    is_key_event: bool = False
+
+
+class HCARunEventListResponse(BackendModel):
+    run_id: str
+    records: List[HCARunEventResponse] = Field(default_factory=list)
+    total: int = 0
+
+
+class HCARunArtifactResponse(BackendModel):
+    artifact_id: str
+    run_id: str
+    action_id: str
+    kind: str
+    path: str
+    source_action_ids: List[str] = Field(default_factory=list)
+    file_paths: List[str] = Field(default_factory=list)
+    hashes: Dict[str, str] = Field(default_factory=dict)
+    approval_id: Optional[str] = None
+    workflow_id: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[datetime] = None
+    content_available: bool = False
+
+
+class HCARunArtifactListResponse(BackendModel):
+    run_id: str
+    records: List[HCARunArtifactResponse] = Field(default_factory=list)
+    total: int = 0
+
+
+class HCARunArtifactDetailResponse(HCARunArtifactResponse):
+    content: Optional[str] = None
+    size_bytes: int = 0
+    truncated: bool = False
 
 
 # Status endpoints.
@@ -281,8 +348,31 @@ async def get_status_checks():
 
 # HCA helpers.
 
+_KEY_EVENT_TYPES = {
+    "run_created",
+    "module_proposed",
+    "action_selected",
+    "approval_requested",
+    "approval_granted",
+    "approval_denied",
+    "execution_finished",
+    "workflow_selected",
+    "workflow_step_started",
+    "workflow_step_finished",
+    "workflow_budget_exhausted",
+    "workflow_terminated",
+    "run_completed",
+    "run_failed",
+    "memory_written",
+    "episodic_memory_written",
+    "external_memory_written",
+    "external_memory_write_failed",
+}
+
+
 def _extract_run_summary(run_id: str) -> HCARunSummaryResponse:
     """Read events for a run and distill a human-readable summary."""
+    from hca.runtime.replay import reconstruct_state  # type: ignore
     from hca.storage import iter_events, load_run  # type: ignore
 
     context = load_run(run_id)
@@ -290,11 +380,12 @@ def _extract_run_summary(run_id: str) -> HCARunSummaryResponse:
         raise LookupError(f"Run not found: {run_id}")
 
     events = list(iter_events(run_id))
+    replay = reconstruct_state(run_id)
 
     plan = HCARunPlanResponse()
     action_taken = HCARunActionResponse()
     action_result = HCARunResultResponse()
-    approval_id: Optional[str] = None
+    approval_id: Optional[str] = replay.get("pending_approval_id")
     key_events: List[HCARunKeyEventResponse] = []
 
     for ev in events:
@@ -316,7 +407,7 @@ def _extract_run_summary(run_id: str) -> HCARunSummaryResponse:
                         ),
                     )
 
-        if et == "action_selected":
+        if et == "action_selected" and not replay.get("selected_action"):
             action_taken = HCARunActionResponse(
                 kind=payload.get("kind"),
                 arguments=payload.get("arguments", {}),
@@ -324,10 +415,10 @@ def _extract_run_summary(run_id: str) -> HCARunSummaryResponse:
                 requires_approval=payload.get("requires_approval", False),
             )
 
-        if et == "approval_requested":
+        if et == "approval_requested" and approval_id is None:
             approval_id = payload.get("approval_id")
 
-        if et == "execution_finished":
+        if et == "execution_finished" and replay.get("latest_receipt") is None:
             action_result = HCARunResultResponse(
                 status=payload.get("status"),
                 outputs=payload.get("outputs"),
@@ -336,11 +427,7 @@ def _extract_run_summary(run_id: str) -> HCARunSummaryResponse:
             )
 
         # Collect key milestones for the trace
-        if et in {
-            "run_created", "module_proposed", "action_selected",
-            "approval_requested", "execution_finished",
-            "run_completed", "run_failed", "memory_written",
-        }:
+        if et in _KEY_EVENT_TYPES:
             key_events.append(
                 HCARunKeyEventResponse(
                     type=et,
@@ -374,17 +461,104 @@ def _extract_run_summary(run_id: str) -> HCARunSummaryResponse:
             exc,
         )
 
+    replay_action = replay.get("selected_action")
+    if isinstance(replay_action, dict):
+        action_taken = HCARunActionResponse(
+            kind=replay_action.get("kind"),
+            arguments=replay_action.get("arguments", {}),
+            action_id=replay_action.get("action_id"),
+            requires_approval=replay_action.get("requires_approval", False),
+        )
+
+    latest_receipt = replay.get("latest_receipt")
+    if isinstance(latest_receipt, dict):
+        action_result = HCARunResultResponse(
+            status=latest_receipt.get("status"),
+            outputs=latest_receipt.get("outputs"),
+            artifacts=latest_receipt.get("artifacts") or [],
+            error=latest_receipt.get("error"),
+        )
+
+    active_workflow = replay.get("active_workflow")
+    if plan.strategy is None and isinstance(active_workflow, dict):
+        plan = HCARunPlanResponse(
+            strategy=active_workflow.get("strategy"),
+            action=action_taken.kind,
+            rationale=active_workflow.get("rationale", ""),
+            confidence=float(active_workflow.get("confidence") or 1.0),
+            memory_context_used=bool(memory_hits),
+        )
+
     return HCARunSummaryResponse(
         run_id=run_id,
         goal=context.goal,
-        state=context.state.value,
+        state=str(replay.get("state") or context.state.value),
+        created_at=context.created_at,
+        updated_at=context.updated_at,
         plan=plan,
         action_taken=action_taken,
         action_result=action_result,
         approval_id=approval_id,
+        approval=(
+            replay.get("approval")
+            if isinstance(replay.get("approval"), dict)
+            else None
+        ),
+        last_approval_decision=(
+            str(replay.get("last_approval_decision"))
+            if replay.get("last_approval_decision") is not None
+            else None
+        ),
+        latest_receipt=(
+            latest_receipt if isinstance(latest_receipt, dict) else None
+        ),
+        artifacts=(
+            replay.get("artifacts")
+            if isinstance(replay.get("artifacts"), list)
+            else []
+        ),
+        artifacts_count=int(replay.get("artifacts_count") or 0),
+        memory_counts=(
+            replay.get("memory_counts")
+            if isinstance(replay.get("memory_counts"), dict)
+            else {}
+        ),
+        memory_outcomes=(
+            replay.get("memory_outcomes")
+            if isinstance(replay.get("memory_outcomes"), dict)
+            else {}
+        ),
+        active_workflow=(
+            active_workflow if isinstance(active_workflow, dict) else None
+        ),
+        workflow_budget=(
+            replay.get("workflow_budget")
+            if isinstance(replay.get("workflow_budget"), dict)
+            else None
+        ),
+        workflow_checkpoint=(
+            replay.get("workflow_checkpoint")
+            if isinstance(replay.get("workflow_checkpoint"), dict)
+            else None
+        ),
+        workflow_step_history=(
+            replay.get("workflow_step_history")
+            if isinstance(replay.get("workflow_step_history"), list)
+            else []
+        ),
+        workflow_artifacts=(
+            replay.get("workflow_artifacts")
+            if isinstance(replay.get("workflow_artifacts"), list)
+            else []
+        ),
+        discrepancies=(
+            replay.get("discrepancies")
+            if isinstance(replay.get("discrepancies"), list)
+            else []
+        ),
         memory_hits=memory_hits,
         key_events=key_events[-12:],
-        event_count=len(events),
+        event_count=int(replay.get("event_count") or len(events)),
     )
 
 
@@ -401,17 +575,228 @@ def _event_summary(event_type: str, payload: Dict[str, Any]) -> str:
             "Approval requested "
             f"(id={approval_label}...)"
         ),
+        "approval_granted": (
+            "Approval granted "
+            f"(id={approval_label}...)"
+        ),
+        "approval_denied": (
+            "Approval denied "
+            f"(id={approval_label}...)"
+        ),
         "execution_finished": f"Execution {payload.get('status', '?')}",
+        "workflow_selected": (
+            "Workflow selected: "
+            f"{payload.get('workflow_class', '?')}"
+        ),
+        "workflow_step_started": (
+            "Workflow step started: "
+            f"{payload.get('step_key') or payload.get('tool_name', '?')}"
+        ),
+        "workflow_step_finished": (
+            "Workflow step finished: "
+            f"{payload.get('step_key') or payload.get('tool_name', '?')}"
+            f" ({payload.get('status', '?')})"
+        ),
+        "workflow_budget_exhausted": "Workflow budget exhausted",
+        "workflow_terminated": (
+            "Workflow terminated: "
+            f"{payload.get('reason', '?')}"
+        ),
         "run_completed": "Run completed successfully",
         "run_failed": "Run failed",
         "memory_written": (
             f"Memory written — subject: {payload.get('subject', '?')}"
         ),
+        "episodic_memory_written": "Episodic memory written",
+        "external_memory_written": "External memory written",
+        "external_memory_write_failed": "External memory write failed",
     }
     return mapping.get(event_type, event_type.replace("_", " "))
 
 
+def _require_run_context(run_id: str):
+    from hca.storage import load_run  # type: ignore
+
+    context = load_run(run_id)
+    if not context:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return context
+
+
+def _iter_run_json_paths() -> List[Path]:
+    from hca.paths import storage_root  # type: ignore
+
+    runs_root = storage_root() / "runs"
+    if not runs_root.exists():
+        return []
+    return sorted(
+        (path for path in runs_root.glob("*/run.json") if path.is_file()),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def _list_run_summaries(
+    *,
+    limit: int,
+    offset: int,
+    query_text: Optional[str],
+) -> HCARunListResponse:
+    from hca.storage import load_run  # type: ignore
+
+    normalized_query = (query_text or "").strip().lower()
+    total = 0
+    selected_run_ids: List[str] = []
+
+    for run_path in _iter_run_json_paths():
+        run_id = run_path.parent.name
+        context = load_run(run_id)
+        if context is None:
+            continue
+
+        if normalized_query:
+            haystack = f"{run_id} {context.goal}".lower()
+            if normalized_query not in haystack:
+                continue
+
+        if total >= offset and len(selected_run_ids) < limit:
+            selected_run_ids.append(run_id)
+        total += 1
+
+    return HCARunListResponse(
+        records=[_extract_run_summary(run_id) for run_id in selected_run_ids],
+        total=total,
+    )
+
+
+def _event_to_response(event: Dict[str, Any]) -> HCARunEventResponse:
+    payload = event.get("payload")
+    safe_payload = payload if isinstance(payload, dict) else {}
+    event_type = str(event.get("event_type") or "")
+    return HCARunEventResponse(
+        event_id=str(event.get("event_id") or ""),
+        run_id=str(event.get("run_id") or ""),
+        event_type=event_type,
+        actor=(
+            str(event.get("actor"))
+            if event.get("actor") is not None
+            else None
+        ),
+        timestamp=event.get("timestamp"),
+        summary=_event_summary(event_type, safe_payload),
+        payload=safe_payload,
+        prior_state=(
+            str(event.get("prior_state"))
+            if event.get("prior_state") is not None
+            else None
+        ),
+        next_state=(
+            str(event.get("next_state"))
+            if event.get("next_state") is not None
+            else None
+        ),
+        is_key_event=event_type in _KEY_EVENT_TYPES,
+    )
+
+
+def _resolve_artifact_full_path(run_id: str, artifact_path: str) -> Path:
+    from hca.paths import run_storage_path  # type: ignore
+
+    parts = Path(artifact_path).parts
+    if len(parts) >= 5 and parts[:4] == (
+        "storage",
+        "runs",
+        run_id,
+        "artifacts",
+    ):
+        candidate = run_storage_path(run_id, "artifacts", *parts[4:])
+    else:
+        candidate = run_storage_path(run_id, "artifacts", *parts)
+
+    artifacts_root = run_storage_path(run_id, "artifacts").resolve()
+    resolved = candidate.resolve()
+    if resolved != artifacts_root and artifacts_root not in resolved.parents:
+        raise ValueError("Artifact path escapes bounded run storage")
+    return resolved
+
+
+def _artifact_to_response(record: Dict[str, Any]) -> HCARunArtifactResponse:
+    path = str(record.get("path") or "")
+    run_id = str(record.get("run_id") or "")
+    content_available = False
+
+    if run_id and path:
+        try:
+            content_available = _resolve_artifact_full_path(
+                run_id,
+                path,
+            ).is_file()
+        except ValueError:
+            content_available = False
+
+    metadata = record.get("metadata")
+    hashes = record.get("hashes")
+    return HCARunArtifactResponse(
+        artifact_id=str(record.get("artifact_id") or ""),
+        run_id=run_id,
+        action_id=str(record.get("action_id") or ""),
+        kind=str(record.get("kind") or ""),
+        path=path,
+        source_action_ids=[
+            str(value)
+            for value in record.get("source_action_ids", [])
+            if value is not None
+        ],
+        file_paths=[
+            str(value)
+            for value in record.get("file_paths", [])
+            if value is not None
+        ],
+        hashes=(
+            {
+                str(key): str(value)
+                for key, value in hashes.items()
+                if value is not None
+            }
+            if isinstance(hashes, dict)
+            else {}
+        ),
+        approval_id=(
+            str(record.get("approval_id"))
+            if record.get("approval_id") is not None
+            else None
+        ),
+        workflow_id=(
+            str(record.get("workflow_id"))
+            if record.get("workflow_id") is not None
+            else None
+        ),
+        metadata=metadata if isinstance(metadata, dict) else {},
+        created_at=record.get("created_at"),
+        content_available=content_available,
+    )
+
+
+def _find_artifact_record(run_id: str, artifact_id: str) -> Dict[str, Any]:
+    from hca.storage import iter_artifacts  # type: ignore
+
+    for record in iter_artifacts(run_id):
+        if str(record.get("artifact_id")) == artifact_id:
+            return record
+    raise HTTPException(status_code=404, detail="Artifact not found")
+
+
 # HCA endpoints.
+
+@api_router.get("/hca/runs", response_model=HCARunListResponse)
+async def list_hca_runs(
+    q: Optional[str] = Query(default=None, max_length=200),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    """List recent runs with replay-backed summaries."""
+    return _list_run_summaries(limit=limit, offset=offset, query_text=q)
+
 
 @api_router.post("/hca/run", response_model=HCARunSummaryResponse)
 async def run_hca(body: HCARunRequest):
@@ -593,12 +978,86 @@ async def stream_hca_run(body: HCARunRequest):
 @api_router.get("/hca/run/{run_id}", response_model=HCARunSummaryResponse)
 async def get_hca_run(run_id: str):
     """Fetch current state of an HCA run."""
-    from hca.storage import load_run  # type: ignore
-
-    context = load_run(run_id)
-    if not context:
-        raise HTTPException(status_code=404, detail="Run not found")
+    _require_run_context(run_id)
     return _extract_run_summary(run_id)
+
+
+@api_router.get(
+    "/hca/run/{run_id}/events",
+    response_model=HCARunEventListResponse,
+)
+async def list_hca_run_events(
+    run_id: str,
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """List bounded, newest-first events for a run."""
+    from hca.storage import iter_events  # type: ignore
+
+    _require_run_context(run_id)
+    events = list(iter_events(run_id))
+    total = len(events)
+    selected = list(reversed(events))[offset:offset + limit]
+    return HCARunEventListResponse(
+        run_id=run_id,
+        records=[_event_to_response(event) for event in selected],
+        total=total,
+    )
+
+
+@api_router.get(
+    "/hca/run/{run_id}/artifacts",
+    response_model=HCARunArtifactListResponse,
+)
+async def list_hca_run_artifacts(
+    run_id: str,
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """List bounded, newest-first artifact records for a run."""
+    from hca.storage import iter_artifacts  # type: ignore
+
+    _require_run_context(run_id)
+    artifact_records = list(iter_artifacts(run_id))
+    total = len(artifact_records)
+    selected = list(reversed(artifact_records))[offset:offset + limit]
+    return HCARunArtifactListResponse(
+        run_id=run_id,
+        records=[_artifact_to_response(record) for record in selected],
+        total=total,
+    )
+
+
+@api_router.get(
+    "/hca/run/{run_id}/artifacts/{artifact_id}",
+    response_model=HCARunArtifactDetailResponse,
+)
+async def get_hca_run_artifact(
+    run_id: str,
+    artifact_id: str,
+    preview_bytes: int = Query(default=20000, ge=1, le=200000),
+):
+    """Fetch a single artifact record with bounded text content preview."""
+    _require_run_context(run_id)
+    record = _find_artifact_record(run_id, artifact_id)
+    artifact = _artifact_to_response(record)
+
+    if not artifact.content_available:
+        raise HTTPException(status_code=404, detail="Artifact content missing")
+
+    try:
+        artifact_path = _resolve_artifact_full_path(run_id, artifact.path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    raw_content = artifact_path.read_bytes()
+    preview = raw_content[:preview_bytes].decode("utf-8", errors="replace")
+    return HCARunArtifactDetailResponse(
+        **artifact.model_dump(),
+        content=preview,
+        size_bytes=len(raw_content),
+        truncated=len(raw_content) > preview_bytes,
+    )
 
 
 @api_router.post(

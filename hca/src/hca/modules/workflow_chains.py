@@ -63,6 +63,20 @@ def _default_path_glob(path_hint: Optional[str]) -> str:
     return "**/*.py"
 
 
+def _contract_surface_root(path_hint: Optional[str]) -> str:
+    if not path_hint or "/" not in path_hint:
+        return "."
+    return path_hint.split("/", 1)[0] or "."
+
+
+def _contract_surface_glob(path_hint: Optional[str]) -> str:
+    if path_hint:
+        suffix = PurePosixPath(path_hint).suffix
+        if suffix:
+            return f"**/*{suffix}"
+    return "**/*"
+
+
 def _verification_command(text: str) -> Optional[Dict[str, Any]]:
     goal_lower = text.lower()
     if "cargo check" in goal_lower:
@@ -95,6 +109,11 @@ def _workflow_parameters(goal: str) -> Dict[str, Any]:
         "query": query,
         "root": _default_root(path_hint),
         "path_glob": _default_path_glob(path_hint),
+        "target_root": _default_root(path_hint),
+        "target_path_glob": _default_path_glob(path_hint),
+        "contract_root": _contract_surface_root(path_hint),
+        "contract_path_glob": _contract_surface_glob(path_hint),
+        "contract_summary_path": "contract_drift_summary.json",
         "context_radius": 2,
     }
     if replace_directive is not None:
@@ -108,6 +127,10 @@ def _workflow_parameters(goal: str) -> Dict[str, Any]:
             parameters["query"] = old_text
         parameters["path_glob"] = _default_path_glob(path)
         parameters["root"] = _default_root(path)
+        parameters["target_path_glob"] = _default_path_glob(path)
+        parameters["target_root"] = _default_root(path)
+        parameters["contract_root"] = _contract_surface_root(path)
+        parameters["contract_path_glob"] = _contract_surface_glob(path)
     if verification is not None:
         parameters["verification"] = verification
     return parameters
@@ -218,6 +241,120 @@ def _investigation_steps() -> List[WorkflowStep]:
     ]
 
 
+def _contract_drift_steps() -> List[WorkflowStep]:
+    return [
+        WorkflowStep(
+            step_key="target_glob",
+            tool_name="glob_workspace",
+            arguments_template={
+                "root": "workflow:target_root",
+                "pattern": "workflow:target_path_glob",
+                "max_results": 20,
+            },
+            description=(
+                "List the bounded target files implicated in the reported "
+                "contract drift."
+            ),
+        ),
+        WorkflowStep(
+            step_key="target_search",
+            tool_name="search_workspace",
+            arguments_template={
+                "query": "workflow:query",
+                "root": "workflow:target_root",
+                "path_glob": "workflow:target_path_glob",
+                "max_results": 8,
+                "max_files": 12,
+                "max_total_bytes": 256000,
+            },
+            description=(
+                "Search the bounded target surface for the contract signal "
+                "that appears to have drifted."
+            ),
+        ),
+        WorkflowStep(
+            step_key="target_read_context",
+            tool_name="read_text_range",
+            arguments_template={
+                "path": "step:target_search.outputs.matches.0.path",
+                "start_line": {
+                    "ref": "step:target_search.outputs.matches.0.line_number",
+                    "offset": -2,
+                    "min": 1,
+                },
+                "end_line": {
+                    "ref": "step:target_search.outputs.matches.0.line_number",
+                    "offset": 2,
+                    "min": 1,
+                },
+            },
+            description=(
+                "Read the bounded target context around the first drift "
+                "signal."
+            ),
+        ),
+        WorkflowStep(
+            step_key="contract_surface_search",
+            tool_name="search_workspace",
+            arguments_template={
+                "query": "workflow:query",
+                "root": "workflow:contract_root",
+                "path_glob": "workflow:contract_path_glob",
+                "max_results": 12,
+                "max_files": 24,
+                "max_total_bytes": 512000,
+            },
+            description=(
+                "Search the broader bounded surface for matching contract or "
+                "interface evidence."
+            ),
+        ),
+        WorkflowStep(
+            step_key="contract_surface_read_context",
+            tool_name="read_text_range",
+            arguments_template={
+                "path": "step:contract_surface_search.outputs.matches.0.path",
+                "start_line": {
+                    "ref": "step:contract_surface_search.outputs.matches.0"
+                    ".line_number",
+                    "offset": -2,
+                    "min": 1,
+                },
+                "end_line": {
+                    "ref": "step:contract_surface_search.outputs.matches.0"
+                    ".line_number",
+                    "offset": 2,
+                    "min": 1,
+                },
+            },
+            description=(
+                "Read the bounded comparison context from the wider contract "
+                "surface."
+            ),
+        ),
+        WorkflowStep(
+            step_key="contract_surface_summary",
+            tool_name="summarize_search_results",
+            arguments_template={
+                "query": "workflow:query",
+                "search_result": "step:contract_surface_search.outputs",
+                "excerpt": "step:contract_surface_read_context.outputs",
+                "path": "workflow:contract_summary_path",
+            },
+            description=(
+                "Materialize a deterministic contract-drift summary artifact "
+                "from the bounded comparison surface."
+            ),
+        ),
+        WorkflowStep(
+            step_key="run_report",
+            tool_name="create_run_report",
+            arguments_template={"projected_final_status": "completed"},
+            description="Materialize the final run report artifact.",
+        ),
+    ]
+
+
 def _mutation_steps(include_verification: bool) -> List[WorkflowStep]:
     steps = _investigation_steps()[:-1]
     steps.extend(
@@ -310,12 +447,16 @@ def build_workflow_plan(goal: str) -> Optional[WorkflowPlan]:
         strategy = "run_reporting_strategy"
     elif workflow_class in {
         WorkflowClass.investigation,
-        WorkflowClass.contract_api_drift,
     }:
         if not parameters.get("query"):
             return None
         steps = _investigation_steps()
         strategy = "investigation_strategy"
+    elif workflow_class == WorkflowClass.contract_api_drift:
+        if not parameters.get("query"):
+            return None
+        steps = _contract_drift_steps()
+        strategy = "contract_drift_strategy"
     elif workflow_class == WorkflowClass.targeted_mutation:
         if not parameters.get("replace"):
             return None

@@ -110,6 +110,11 @@ class ToolReasoner:
                 "replace_in_file",
             },
             "investigation_strategy": {"investigate_workspace_issue"},
+            "contract_drift_strategy": {
+                "search_workspace",
+                "read_text_range",
+                "summarize_search_results",
+            },
             "run_reporting_strategy": {"create_run_report"},
             "workspace_inspection_strategy": {
                 "list_dir",

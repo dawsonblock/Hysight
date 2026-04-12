@@ -26,6 +26,7 @@ from hca.common.enums import ActionClass, ApprovalDecision
 from hca.common.types import ActionBinding, ActionCandidate
 from hca.executor.sandbox import (
     CommandPolicyError,
+    CommandTimeoutError,
     allowlisted_commands,
     run_in_sandbox,
 )
@@ -1454,16 +1455,6 @@ def _investigate_workspace_issue(
 
 def _run_command(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
     cwd_full_path, normalized_cwd = _resolve_repo_path(args["cwd"])
-    try:
-        result = run_in_sandbox(
-            args["argv"],
-            cwd=cwd_full_path,
-            repo_root=REPO_ROOT,
-            timeout_seconds=args["timeout_seconds"],
-            max_output_chars=12_000,
-        )
-    except CommandPolicyError as exc:
-        raise ValueError(str(exc)) from exc
 
     artifact_relative_path, artifact_full_path = _artifact_paths(
         run_id,
@@ -1472,6 +1463,55 @@ def _run_command(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
         default_suffix=".json",
     )
     artifact_full_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        result = run_in_sandbox(
+            args["argv"],
+            cwd=cwd_full_path,
+            repo_root=REPO_ROOT,
+            timeout_seconds=args["timeout_seconds"],
+            max_output_chars=12_000,
+        )
+    except CommandTimeoutError as exc:
+        result = {
+            "argv": list(args["argv"]),
+            "cwd": normalized_cwd,
+            "returncode": None,
+            "stdout": exc.stdout,
+            "stderr": exc.stderr,
+            "ok": False,
+            "timed_out": True,
+            "truncated": exc.truncated,
+            "duration_seconds": float(args["timeout_seconds"]),
+            "timeout_seconds": args["timeout_seconds"],
+        }
+        artifact_full_path.write_text(
+            json.dumps(result, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+        payload = {
+            **result,
+            "artifact_path": str(artifact_relative_path),
+        }
+        payload["_artifact_records"] = [
+            {
+                "path": str(artifact_relative_path),
+                "kind": "command_result",
+                "metadata": {
+                    "argv": result["argv"],
+                    "cwd": normalized_cwd,
+                    "returncode": result["returncode"],
+                    "ok": result["ok"],
+                    "timed_out": True,
+                },
+            }
+        ]
+        payload["_failure_message"] = str(exc)
+        return payload
+    except CommandPolicyError as exc:
+        raise ValueError(str(exc)) from exc
+
     artifact_full_path.write_text(
         json.dumps(result, indent=2, sort_keys=True),
         encoding="utf-8",
@@ -1484,8 +1524,10 @@ def _run_command(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
         "stdout": result["stdout"],
         "stderr": result["stderr"],
         "ok": result["ok"],
+        "timed_out": False,
         "truncated": result["truncated"],
         "duration_seconds": result["duration_seconds"],
+        "timeout_seconds": args["timeout_seconds"],
         "artifact_path": str(artifact_relative_path),
     }
     payload["_artifact_records"] = [

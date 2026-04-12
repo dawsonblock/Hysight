@@ -176,6 +176,50 @@ def test_resume_patch_action_preserves_binding(monkeypatch, tmp_path):
     assert target_path.read_text(encoding="utf-8") == "hello mars\n"
 
 
+def test_workflow_denial_preserves_workflow_context(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+
+    target_path = tmp_path / "notes" / "todo.txt"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text("hello world\n", encoding="utf-8")
+
+    rt = Runtime()
+    run_id = rt.run("replace `world` with `mars` in `notes/todo.txt`")
+
+    replayed = reconstruct_state(run_id)
+    assert replayed["state"] == RuntimeState.awaiting_approval.value
+    assert replayed["active_workflow"]["workflow_class"] == (
+        "targeted_mutation"
+    )
+    app_id = replayed["pending_approval_id"]
+    assert app_id is not None
+
+    rt.deny_approval(run_id, app_id, reason="not yet")
+
+    halted = reconstruct_state(run_id)
+    assert halted["state"] == RuntimeState.halted.value
+    assert halted["approval"] is not None
+    assert halted["approval"]["status"] == "denied"
+    assert halted["selected_action_kind"] == "patch_text_file"
+    assert halted["active_workflow"]["workflow_class"] == (
+        "targeted_mutation"
+    )
+    assert [
+        step["step_key"] for step in halted["workflow_step_history"]
+    ] == [
+        "glob",
+        "search",
+        "read_context",
+        "summary",
+        "patch_preview",
+    ]
+    assert target_path.read_text(encoding="utf-8") == "hello world\n"
+
+
 if __name__ == "__main__":
     setup_module()
     test_deny_halts_run()

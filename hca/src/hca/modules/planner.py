@@ -38,6 +38,8 @@ def _system_prompt() -> str:
         "  workspace_mutation_strategy    — patch one bounded text file\n"
         "  investigation_strategy         — gather evidence and emit "
         "a structured report\n"
+        "  contract_drift_strategy        — contrast target-local and "
+        "broader contract evidence before reporting\n"
         "  mutation_verification_strategy — inspect, patch, verify, "
         "and report within a bounded chain\n"
         "  run_reporting_strategy         — summarize the current run\n\n"

@@ -398,6 +398,200 @@
         "summary": { "type": "string" }
       }
     },
+    "RunListQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "q": { "type": ["string", "null"] },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "offset": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "RunListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "total"],
+      "properties": {
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RunSummaryResponse" }
+        },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "RunEventListQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
+        "offset": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "RunEventResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "run_id",
+        "event_type",
+        "actor",
+        "timestamp",
+        "summary",
+        "payload",
+        "prior_state",
+        "next_state",
+        "is_key_event"
+      ],
+      "properties": {
+        "event_id": { "type": "string" },
+        "run_id": { "type": "string" },
+        "event_type": { "type": "string" },
+        "actor": { "type": ["string", "null"] },
+        "timestamp": { "type": ["string", "null"], "format": "date-time" },
+        "summary": { "type": "string" },
+        "payload": { "$ref": "#/definitions/FlexibleObject" },
+        "prior_state": { "type": ["string", "null"] },
+        "next_state": { "type": ["string", "null"] },
+        "is_key_event": { "type": "boolean" }
+      }
+    },
+    "RunEventListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "records", "total"],
+      "properties": {
+        "run_id": { "type": "string" },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RunEventResponse" }
+        },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "RunArtifactListQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
+        "offset": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "RunArtifactDetailQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preview_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200000
+        }
+      }
+    },
+    "RunArtifactResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "run_id",
+        "action_id",
+        "kind",
+        "path",
+        "source_action_ids",
+        "file_paths",
+        "hashes",
+        "approval_id",
+        "workflow_id",
+        "metadata",
+        "created_at",
+        "content_available"
+      ],
+      "properties": {
+        "artifact_id": { "type": "string" },
+        "run_id": { "type": "string" },
+        "action_id": { "type": "string" },
+        "kind": { "type": "string" },
+        "path": { "type": "string" },
+        "source_action_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "file_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "hashes": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "approval_id": { "type": ["string", "null"] },
+        "workflow_id": { "type": ["string", "null"] },
+        "metadata": { "$ref": "#/definitions/FlexibleObject" },
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "content_available": { "type": "boolean" }
+      }
+    },
+    "RunArtifactListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "records", "total"],
+      "properties": {
+        "run_id": { "type": "string" },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RunArtifactResponse" }
+        },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "RunArtifactDetailResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "run_id",
+        "action_id",
+        "kind",
+        "path",
+        "source_action_ids",
+        "file_paths",
+        "hashes",
+        "approval_id",
+        "workflow_id",
+        "metadata",
+        "created_at",
+        "content_available",
+        "content",
+        "size_bytes",
+        "truncated"
+      ],
+      "properties": {
+        "artifact_id": { "type": "string" },
+        "run_id": { "type": "string" },
+        "action_id": { "type": "string" },
+        "kind": { "type": "string" },
+        "path": { "type": "string" },
+        "source_action_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "file_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "hashes": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "approval_id": { "type": ["string", "null"] },
+        "workflow_id": { "type": ["string", "null"] },
+        "metadata": { "$ref": "#/definitions/FlexibleObject" },
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "content_available": { "type": "boolean" },
+        "content": { "type": ["string", "null"] },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "boolean" }
+      }
+    },
     "RunSummaryResponse": {
       "type": "object",
       "additionalProperties": false,
@@ -405,10 +599,25 @@
         "run_id",
         "goal",
         "state",
+        "created_at",
+        "updated_at",
         "plan",
         "action_taken",
         "action_result",
         "approval_id",
+        "approval",
+        "last_approval_decision",
+        "latest_receipt",
+        "artifacts",
+        "artifacts_count",
+        "memory_counts",
+        "memory_outcomes",
+        "active_workflow",
+        "workflow_budget",
+        "workflow_checkpoint",
+        "workflow_step_history",
+        "workflow_artifacts",
+        "discrepancies",
         "memory_hits",
         "key_events",
         "event_count"
@@ -417,10 +626,43 @@
         "run_id": { "type": "string" },
         "goal": { "type": "string" },
         "state": { "$ref": "#/definitions/RunState" },
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "updated_at": { "type": ["string", "null"], "format": "date-time" },
         "plan": { "$ref": "#/definitions/RunPlanResponse" },
         "action_taken": { "$ref": "#/definitions/RunActionTakenResponse" },
         "action_result": { "$ref": "#/definitions/RunActionResultResponse" },
         "approval_id": { "type": ["string", "null"] },
+        "approval": { "type": ["object", "null"] },
+        "last_approval_decision": { "type": ["string", "null"] },
+        "latest_receipt": { "type": ["object", "null"] },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/FlexibleObject" }
+        },
+        "artifacts_count": { "type": "integer", "minimum": 0 },
+        "memory_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "memory_outcomes": { "$ref": "#/definitions/FlexibleObject" },
+        "active_workflow": { "type": ["object", "null"] },
+        "workflow_budget": { "type": ["object", "null"] },
+        "workflow_checkpoint": { "type": ["object", "null"] },
+        "workflow_step_history": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/FlexibleObject" }
+        },
+        "workflow_artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/FlexibleObject" }
+        },
+        "discrepancies": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "memory_hits": {
           "type": "array",
           "items": { "$ref": "#/definitions/RunMemoryHitResponse" }
@@ -472,8 +714,24 @@
       "request": { "$ref": "#/definitions/HCARunRequest" },
       "response": { "$ref": "#/definitions/RunSummaryResponse" }
     },
+    "GET /api/hca/runs": {
+      "request": { "$ref": "#/definitions/RunListQuery" },
+      "response": { "$ref": "#/definitions/RunListResponse" }
+    },
     "GET /api/hca/run/{run_id}": {
       "response": { "$ref": "#/definitions/RunSummaryResponse" }
+    },
+    "GET /api/hca/run/{run_id}/events": {
+      "request": { "$ref": "#/definitions/RunEventListQuery" },
+      "response": { "$ref": "#/definitions/RunEventListResponse" }
+    },
+    "GET /api/hca/run/{run_id}/artifacts": {
+      "request": { "$ref": "#/definitions/RunArtifactListQuery" },
+      "response": { "$ref": "#/definitions/RunArtifactListResponse" }
+    },
+    "GET /api/hca/run/{run_id}/artifacts/{artifact_id}": {
+      "request": { "$ref": "#/definitions/RunArtifactDetailQuery" },
+      "response": { "$ref": "#/definitions/RunArtifactDetailResponse" }
     },
     "POST /api/hca/run/{run_id}/approve": {
       "request": { "$ref": "#/definitions/HCAApproveRequest" },

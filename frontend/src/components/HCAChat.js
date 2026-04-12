@@ -48,7 +48,11 @@ const STRATEGY_LABELS = {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
+export default function HCAChat({
+  memPanelOpen,
+  onToggleMemPanel,
+  onRunObserved,
+}) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState("");
   const [loading, setLoading]   = useState(false);
@@ -132,7 +136,14 @@ export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
               ...currentMessage,
               steps: [...currentMessage.steps, data],
             }));
+          } else if (eventType === "status") {
+            if (typeof data?.run_id === "string") {
+              onRunObserved?.(data.run_id);
+            }
           } else if (eventType === "done") {
+            if (typeof data?.run_id === "string") {
+              onRunObserved?.(data.run_id);
+            }
             updateMessageById(agentId, (currentMessage) => ({
               ...currentMessage,
               type: "agent",
@@ -158,7 +169,7 @@ export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, updateMessageById]);
+  }, [input, loading, onRunObserved, updateMessageById]);
 
   const resolveAction = useCallback(async (decision, runId, approvalId, agentId) => {
     updateMessageById(agentId, (currentMessage) => ({
@@ -182,6 +193,9 @@ export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
         _approved: decision === "approve",
         _denied: decision === "deny",
       }));
+      if (typeof data?.run_id === "string") {
+        onRunObserved?.(data.run_id);
+      }
     } catch (error) {
       updateMessageById(agentId, (currentMessage) => ({
         ...currentMessage,
@@ -192,7 +206,7 @@ export default function HCAChat({ memPanelOpen, onToggleMemPanel }) {
         ),
       }));
     }
-  }, [updateMessageById]);
+  }, [onRunObserved, updateMessageById]);
 
   const approveAction = useCallback((runId, approvalId, agentId) => {
     return resolveAction("approve", runId, approvalId, agentId);

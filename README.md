@@ -35,6 +35,8 @@ Hysight is an implementation of a **Hybrid Cognitive Agent (HCA)** as a bounded 
 
 The runtime executes through one canonical authority path in `hca/src/hca/runtime/runtime.py`. A run may execute either a single validated action or a bounded workflow plan that chains inspection, approval-bound mutation, verification, and deterministic reporting steps inside the same run context. Approvals, snapshots, receipts, artifacts, and replay all remain anchored to that single path, and workflow runs commonly terminate on `create_run_report` rather than the mutating step itself.
 
+The frontend also exposes a replay-backed operator console beside the live chat surface. Recent run summaries, per-run event history, and artifact previews all come from the same bounded backend replay and storage surface rather than a second UI-only state model.
+
 ---
 
 ## Architecture
@@ -138,6 +140,7 @@ Current bounded tools:
 Mutation and reporting behavior:
 
 - Workflow plans persist `active_workflow`, workflow checkpoints, step history, and workflow artifacts in the run context, snapshots, and replay output.
+- `contract_api_drift` now performs bounded target-local evidence collection and a broader bounded contract-surface comparison before emitting a dedicated `contract_drift_summary` artifact.
 - `patch_text_file` binds approval to the canonical validated action plus a file-state hash before execution.
 - Successful patch actions emit before/after hashes, changed-line summaries, and a diff artifact.
 - `summarize_search_results` writes a deterministic investigation artifact from bounded search output and targeted file excerpts.
@@ -145,6 +148,7 @@ Mutation and reporting behavior:
 - `create_run_report` materializes a deterministic artifact from prior events, receipts, approvals, artifacts, and memory outcomes for a run.
 - In workflow runs, the terminal selected action and latest receipt may be `create_run_report`, so mutation and verification evidence should be read from workflow step history or the relevant receipt rather than assuming the last receipt is the mutating step.
 - `investigate_workspace_issue` is a bounded read-only workflow tool that searches, reads targeted ranges, and emits a structured evidence artifact.
+- Workflow budgets fail closed: exhausting a declared step budget emits `workflow_budget_exhausted`, and unresolved next-step arguments emit `workflow_terminated` with `next_step_unbuildable` rather than improvising execution.
 
 Replay and memory guarantees:
 
@@ -380,6 +384,8 @@ yarn start
 The UI will open at `http://localhost:3000`. In local development, `/api`
 requests proxy to the backend at `http://localhost:8000` by default.
 
+The default layout is two-pane: live agent chat on the left and a persistent operator console on the right. The operator console lists recent runs, shows replay-backed workflow and approval state, and lets you inspect stored events and artifact previews without separate manual API calls.
+
 ### (Optional) Run the memvid sidecar
 
 ```bash
@@ -426,7 +432,11 @@ All agent operations are available via the REST API:
 | `GET` | `/api/status` | List persisted status checks when Mongo is configured |
 | `POST` | `/api/hca/run` | Create and execute a new HCA run |
 | `POST` | `/api/hca/run/stream` | Stream run progress via server-sent events |
+| `GET` | `/api/hca/runs` | List recent replay-backed run summaries |
 | `GET` | `/api/hca/run/{run_id}` | Fetch run state, trace, and summary |
+| `GET` | `/api/hca/run/{run_id}/events` | List bounded newest-first run events |
+| `GET` | `/api/hca/run/{run_id}/artifacts` | List stored artifact records for a run |
+| `GET` | `/api/hca/run/{run_id}/artifacts/{artifact_id}` | Fetch a bounded artifact content preview |
 | `POST` | `/api/hca/run/{run_id}/approve` | Grant approval for a pending action |
 | `POST` | `/api/hca/run/{run_id}/deny` | Deny a pending action |
 | `POST` | `/api/hca/memory/retrieve` | Retrieve memories using the `query_text` contract |

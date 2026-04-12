@@ -218,10 +218,16 @@ class Runtime:
         score: Optional[Dict[str, float]] = None,
     ) -> None:
         context.active_workflow = workflow
-        context.workflow_budget = WorkflowBudget(
-            max_steps=max(workflow.max_steps, len(workflow.steps)),
+        configured_max_steps = (
+            workflow.max_steps
+            if workflow.max_steps > 0
+            else len(workflow.steps)
+        )
+        budget = WorkflowBudget(
+            max_steps=max(1, configured_max_steps),
             consumed_steps=0,
         )
+        context.workflow_budget = budget
         context.workflow_checkpoint = WorkflowCheckpoint(
             workflow_id=workflow.workflow_id,
             current_step_index=0,
@@ -241,6 +247,7 @@ class Runtime:
                 "workflow_class": workflow.workflow_class.value,
                 "strategy": workflow.strategy,
                 "step_count": len(workflow.steps),
+                "max_steps": budget.max_steps,
                 "score": score,
             },
         )
@@ -529,6 +536,7 @@ class Runtime:
             )
             return context.run_id
 
+        next_step = workflow.steps[next_index]
         if (
             context.workflow_budget is not None
             and context.workflow_budget.remaining_steps <= 0
@@ -540,6 +548,8 @@ class Runtime:
                 {
                     "workflow_id": workflow.workflow_id,
                     "max_steps": context.workflow_budget.max_steps,
+                    "consumed_steps": context.workflow_budget.consumed_steps,
+                    "next_step_id": next_step.step_id,
                 },
             )
             append_event(
@@ -549,6 +559,12 @@ class Runtime:
                 {
                     "workflow_id": workflow.workflow_id,
                     "reason": "budget_exhausted",
+                    "consumed_steps": (
+                        context.workflow_budget.consumed_steps
+                        if context.workflow_budget is not None
+                        else None
+                    ),
+                    "next_step_id": next_step.step_id,
                 },
             )
             self._set_state(
@@ -567,7 +583,6 @@ class Runtime:
             )
             return context.run_id
 
-        next_step = workflow.steps[next_index]
         try:
             next_candidate = self._candidate_for_workflow_step(
                 context,
@@ -648,6 +663,20 @@ class Runtime:
                 else 0.5
             ),
         )
+        memory_event_context = {
+            "run_id": context.run_id,
+            "action_id": candidate.action_id,
+            "action_kind": candidate.kind,
+            "subject": record.subject,
+            "workflow_id": candidate.workflow_id,
+            "workflow_step_id": candidate.workflow_step_id,
+            "receipt_status": receipt_payload.get("status"),
+            "finalization_context": (
+                "workflow_step"
+                if candidate.workflow_id is not None
+                else "single_action"
+            ),
+        }
         try:
             EpisodicStore(context.run_id).append(record)
         except Exception as exc:
@@ -665,10 +694,12 @@ class Runtime:
             raise
 
         episodic_payload = {
+            **memory_event_context,
             "record_id": record.record_id,
+            "sink": "episodic_store",
+            "status": "written",
+            "failure_class": None,
             "memory_type": MemoryType.episodic.value,
-            "subject": record.subject,
-            "action_id": candidate.action_id,
         }
         append_event(
             context,
@@ -720,9 +751,11 @@ class Runtime:
                     EventType.external_memory_written,
                     "runtime",
                     {
-                        "action_id": candidate.action_id,
-                        "subject": record.subject,
+                        **memory_event_context,
+                        "sink": "external_memory",
+                        "status": "written",
                         "memory_id": memory_id,
+                        "failure_class": None,
                     },
                 )
             except Exception as exc:
@@ -731,8 +764,10 @@ class Runtime:
                     EventType.external_memory_write_failed,
                     "runtime",
                     {
-                        "action_id": candidate.action_id,
-                        "subject": record.subject,
+                        **memory_event_context,
+                        "sink": "external_memory",
+                        "status": "failed",
+                        "failure_class": exc.__class__.__name__,
                         "error_type": exc.__class__.__name__,
                         "error": str(exc),
                     },

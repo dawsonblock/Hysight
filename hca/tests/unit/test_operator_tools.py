@@ -234,6 +234,18 @@ def test_patch_text_file_preview_and_apply(monkeypatch, tmp_path):
     assert preview_receipt.artifacts == [
         preview_receipt.outputs["diff_artifact_path"]
     ]
+    assert preview_receipt.mutation_result is not None
+    assert preview_receipt.mutation_result.status == "preview"
+    assert preview_receipt.mutation_result.before_hash == (
+        preview_receipt.outputs["before_hash"]
+    )
+    assert preview_receipt.mutation_result.after_hash == (
+        preview_receipt.outputs["after_hash"]
+    )
+    assert preview_receipt.artifact_summaries is not None
+    assert preview_receipt.artifact_summaries[0].artifact_type.value == (
+        "patch_diff"
+    )
     preview_diff = _artifact_full_path(
         "test_run",
         preview_receipt.outputs["diff_artifact_path"],
@@ -263,6 +275,11 @@ def test_patch_text_file_preview_and_apply(monkeypatch, tmp_path):
     assert apply_receipt.artifacts == [
         apply_receipt.outputs["diff_artifact_path"]
     ]
+    assert apply_receipt.mutation_result is not None
+    assert apply_receipt.mutation_result.status == "applied"
+    assert apply_receipt.mutation_result.artifact_path == (
+        apply_receipt.outputs["diff_artifact_path"]
+    )
     assert (tmp_path / "notes/todo.txt").read_text(encoding="utf-8") == (
         "hello mars\n"
     )
@@ -290,6 +307,55 @@ def test_patch_text_file_rejects_hash_mismatch(monkeypatch, tmp_path):
 
     assert receipt.status == ReceiptStatus.failure
     assert "expected_hash does not match" in receipt.error
+
+
+def test_patch_text_file_rejects_binary_target(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    binary_path = tmp_path / "notes" / "blob.bin"
+    binary_path.parent.mkdir(parents=True, exist_ok=True)
+    binary_path.write_bytes(b"\x00\x01binary")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="patch_text_file",
+            arguments={
+                "path": "notes/blob.bin",
+                "old_text": "binary",
+                "new_text": "text",
+                "apply": False,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert "text file" in receipt.error
+
+
+def test_patch_text_file_rejects_oversized_target(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(tool_registry, "_PATCH_MAX_FILE_BYTES", 8)
+    _write_file(tmp_path, "notes/todo.txt", "0123456789")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="patch_text_file",
+            arguments={
+                "path": "notes/todo.txt",
+                "old_text": "0",
+                "new_text": "x",
+                "apply": False,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert "bounded patch size" in receipt.error
 
 
 def test_investigate_workspace_issue_writes_report(monkeypatch, tmp_path):
@@ -521,3 +587,146 @@ def test_run_command_rejects_disallowed_command(monkeypatch, tmp_path):
 
     assert receipt.status == ReceiptStatus.failure
     assert "not allowlisted" in receipt.error
+
+
+def test_run_command_rejects_shell_metacharacters(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="run_command",
+            arguments={
+                "argv": ["pytest", "-q", "test_sample.py;echo hacked"],
+                "cwd": ".",
+                "timeout_seconds": 5,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert "shell metacharacters" in receipt.error
+
+
+def test_run_command_rejects_dangerous_pytest_flags(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="run_command",
+            arguments={
+                "argv": ["pytest", "-q", "--rootdir=.."],
+                "cwd": ".",
+                "timeout_seconds": 5,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert "not allowed" in receipt.error
+
+
+def test_run_command_rejects_cwd_escape(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="run_command",
+            arguments={
+                "argv": ["pytest", "-q"],
+                "cwd": "../outside",
+                "timeout_seconds": 5,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert "bounded workspace" in receipt.error
+
+
+def test_run_command_timeout_records_failure_artifact(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    _write_file(
+        tmp_path,
+        "test_slow.py",
+        "import time\n\n"
+        "def test_slow():\n"
+        "    time.sleep(2)\n"
+        "    assert True\n",
+    )
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="run_command",
+            arguments={
+                "argv": ["pytest", "-q", "test_slow.py"],
+                "cwd": ".",
+                "timeout_seconds": 1,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert receipt.outputs["timed_out"] is True
+    assert receipt.artifacts == [receipt.outputs["artifact_path"]]
+    assert "timed out after 1s" in receipt.error
+    payload = json.loads(
+        _artifact_full_path(
+            "test_run",
+            receipt.outputs["artifact_path"],
+        ).read_text(encoding="utf-8")
+    )
+    assert payload["timed_out"] is True
+    assert payload["ok"] is False
+
+
+def test_run_command_truncates_output_deterministically(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    _write_file(
+        tmp_path,
+        "test_loud.py",
+        "def test_loud():\n"
+        "    print('x' * 13050)\n"
+        "    assert False\n",
+    )
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="run_command",
+            arguments={
+                "argv": ["pytest", "-q", "-s", "test_loud.py"],
+                "cwd": ".",
+                "timeout_seconds": 10,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert receipt.outputs["truncated"] is True
+    combined_output = (
+        (receipt.outputs.get("stdout") or "")
+        + (receipt.outputs.get("stderr") or "")
+    )
+    assert "...[truncated]..." in combined_output

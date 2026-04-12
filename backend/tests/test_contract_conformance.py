@@ -118,6 +118,72 @@ def test_hca_run_detail_contract(app_client):
     assert_contract_payload("GET /api/hca/run/{run_id}", response.json())
 
 
+def test_hca_runs_list_contract(app_client):
+    test_hca_module = import_module("backend.tests.test_hca")
+
+    test_hca_module._seed_run("contract-run-list", "contract list goal")
+    response = app_client.get("/api/hca/runs")
+    assert response.status_code == 200
+    assert_contract_payload("GET /api/hca/runs", response.json())
+
+
+def test_hca_run_events_contract(app_client):
+    test_hca_module = import_module("backend.tests.test_hca")
+    context = test_hca_module._seed_run(
+        "contract-run-events",
+        "contract events goal",
+        completed=False,
+    )
+
+    event_type_module = import_module("hca.common.enums")
+    event_log_module = import_module("hca.storage.event_log")
+    event_log_module.append_event(
+        context,
+        event_type_module.EventType.run_completed,
+        "runtime",
+        {"status": "success"},
+    )
+
+    response = app_client.get("/api/hca/run/contract-run-events/events")
+    assert response.status_code == 200
+    assert_contract_payload(
+        "GET /api/hca/run/{run_id}/events",
+        response.json(),
+    )
+
+
+def test_hca_run_artifacts_contract(app_client):
+    test_hca_module = import_module("backend.tests.test_hca")
+
+    test_hca_module._seed_run(
+        "contract-run-artifacts",
+        "contract artifacts goal",
+    )
+    test_hca_module._seed_artifact(
+        "contract-run-artifacts",
+        "contract-artifact-1",
+        "contract artifact content",
+    )
+
+    list_response = app_client.get(
+        "/api/hca/run/contract-run-artifacts/artifacts"
+    )
+    assert list_response.status_code == 200
+    assert_contract_payload(
+        "GET /api/hca/run/{run_id}/artifacts",
+        list_response.json(),
+    )
+
+    detail_response = app_client.get(
+        "/api/hca/run/contract-run-artifacts/artifacts/contract-artifact-1"
+    )
+    assert detail_response.status_code == 200
+    assert_contract_payload(
+        "GET /api/hca/run/{run_id}/artifacts/{artifact_id}",
+        detail_response.json(),
+    )
+
+
 def test_backend_memory_retrieve_contract(app_client):
     controller = import_module("memory_service.singleton").get_controller()
     candidate_cls = import_module("memory_service").CandidateMemory

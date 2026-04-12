@@ -177,6 +177,8 @@ def _memory_outcomes_from_events(
 ) -> Dict[str, Any]:
     episodic_writes = 0
     external_writes = 0
+    episodic_details: List[Dict[str, Any]] = []
+    external_details: List[Dict[str, Any]] = []
     external_failures: List[Dict[str, Any]] = []
 
     for event in events:
@@ -184,8 +186,12 @@ def _memory_outcomes_from_events(
         payload = event.get("payload")
         if event_type == EventType.episodic_memory_written.value:
             episodic_writes += 1
+            if isinstance(payload, dict):
+                episodic_details.append(payload)
         elif event_type == EventType.external_memory_written.value:
             external_writes += 1
+            if isinstance(payload, dict):
+                external_details.append(payload)
         elif (
             event_type == EventType.external_memory_write_failed.value
             and isinstance(payload, dict)
@@ -194,7 +200,9 @@ def _memory_outcomes_from_events(
 
     return {
         "episodic_memory_writes": episodic_writes,
+        "episodic_memory_details": episodic_details,
         "external_memory_writes": external_writes,
+        "external_memory_details": external_details,
         "external_memory_failures": len(external_failures),
         "external_memory_failure_details": external_failures,
     }

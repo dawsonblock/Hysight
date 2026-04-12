@@ -6,7 +6,7 @@ import os
 import signal
 import subprocess
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
 
 
@@ -16,6 +16,64 @@ class CommandPolicyError(RuntimeError):
 
 class CommandTimeoutError(RuntimeError):
     """Raised when a command exceeds the allowed timeout."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        stdout: str = "",
+        stderr: str = "",
+        truncated: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.stdout = stdout
+        self.stderr = stderr
+        self.truncated = truncated
+
+
+_SHELL_META_SNIPPETS = (
+    "&&",
+    "||",
+    ";",
+    "|",
+    "`",
+    "$(",
+    "${",
+    ">",
+    "<",
+    "\n",
+    "\r",
+)
+
+_PYTEST_BLOCKED_FLAGS = {
+    "-c",
+    "-p",
+    "--basetemp",
+    "--confcutdir",
+    "--junitxml",
+    "--override-ini",
+    "--pyargs",
+    "--resultlog",
+    "--rootdir",
+}
+
+_CARGO_BLOCKED_FLAGS = {
+    "--config",
+    "--manifest-path",
+    "--target-dir",
+    "-Z",
+}
+
+_GIT_BLOCKED_FLAGS = {
+    "-C",
+    "-c",
+    "--config-env",
+    "--exec-path",
+    "--git-dir",
+    "--namespace",
+    "--output",
+    "--work-tree",
+}
 
 
 def allowlisted_commands() -> list[str]:
@@ -48,16 +106,81 @@ def _truncate_output(text: str, max_output_chars: int) -> tuple[str, bool]:
     return text[:keep] + marker, True
 
 
+def _contains_shell_metacharacters(value: str) -> bool:
+    return any(snippet in value for snippet in _SHELL_META_SNIPPETS)
+
+
+def _blocked_option(value: str, blocked_flags: set[str]) -> bool:
+    option = value.split("=", 1)[0]
+    return option in blocked_flags
+
+
+def _looks_like_repo_path(value: str) -> bool:
+    return value in {".", ".."} or "/" in value or value.endswith(
+        (".py", ".rs", ".toml", ".json", ".yaml", ".yml")
+    ) or "::" in value
+
+
+def _validate_repo_relative_argument(value: str, *, label: str) -> None:
+    target = value.split("::", 1)[0]
+    normalized = PurePosixPath(target.replace("\\", "/"))
+    if normalized.is_absolute() or any(
+        part == ".." for part in normalized.parts if part not in {"", "."}
+    ):
+        raise CommandPolicyError(
+            f"{label} must stay within the repository root"
+        )
+
+
+def _validate_pytest_arguments(args: Sequence[str]) -> None:
+    for arg in args:
+        if _blocked_option(arg, _PYTEST_BLOCKED_FLAGS):
+            raise CommandPolicyError(
+                f"pytest option '{arg.split('=', 1)[0]}' is not allowed"
+            )
+        if arg.startswith("-"):
+            continue
+        if _looks_like_repo_path(arg):
+            _validate_repo_relative_argument(arg, label="pytest target")
+
+
+def _validate_cargo_arguments(args: Sequence[str]) -> None:
+    for arg in args:
+        if _blocked_option(arg, _CARGO_BLOCKED_FLAGS):
+            raise CommandPolicyError(
+                f"cargo option '{arg.split('=', 1)[0]}' is not allowed"
+            )
+
+
+def _validate_git_arguments(args: Sequence[str]) -> None:
+    for arg in args:
+        if _blocked_option(arg, _GIT_BLOCKED_FLAGS):
+            raise CommandPolicyError(
+                f"git option '{arg.split('=', 1)[0]}' is not allowed"
+            )
+        if arg.startswith("-"):
+            continue
+        if _looks_like_repo_path(arg):
+            _validate_repo_relative_argument(arg, label="git path argument")
+
+
 def _validate_command(argv: Sequence[str]) -> list[str]:
     if not argv:
         raise CommandPolicyError("argv must contain at least one element")
 
+    if any(_contains_shell_metacharacters(arg) for arg in argv):
+        raise CommandPolicyError(
+            "argv contains disallowed shell metacharacters"
+        )
+
     command = argv[0]
     if command == "pytest":
+        _validate_pytest_arguments(argv[1:])
         return list(argv)
 
     if command in {"python", "python3"}:
         if len(argv) >= 3 and list(argv[1:3]) == ["-m", "pytest"]:
+            _validate_pytest_arguments(argv[3:])
             return list(argv)
         raise CommandPolicyError(
             "Only python -m pytest is allowlisted"
@@ -65,6 +188,7 @@ def _validate_command(argv: Sequence[str]) -> list[str]:
 
     if command == "cargo":
         if len(argv) >= 2 and argv[1] in {"test", "check"}:
+            _validate_cargo_arguments(argv[2:])
             return list(argv)
         raise CommandPolicyError(
             "Only cargo test and cargo check are allowlisted"
@@ -72,6 +196,7 @@ def _validate_command(argv: Sequence[str]) -> list[str]:
 
     if command == "git":
         if len(argv) >= 2 and argv[1] in {"status", "diff", "log", "show"}:
+            _validate_git_arguments(argv[2:])
             return list(argv)
         raise CommandPolicyError(
             "Only git status, diff, log, and show are allowlisted"
@@ -164,8 +289,10 @@ def run_in_sandbox(
         )
         raise CommandTimeoutError(
             "Command timed out after "
-            f"{timeout_seconds}s. stdout={stdout!r} stderr={stderr!r} "
-            f"truncated={stdout_truncated or stderr_truncated}"
+            f"{timeout_seconds}s",
+            stdout=stdout,
+            stderr=stderr,
+            truncated=stdout_truncated or stderr_truncated,
         ) from exc
 
     duration_seconds = round(time.monotonic() - started, 3)

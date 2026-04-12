@@ -40,7 +40,11 @@ Workflow-backed candidates additionally carry the workflow identity and the curr
 
 Each `WorkflowStep` binds a registry tool name to an argument template.  Argument templates may refer to workflow parameters or prior step outputs, but they must still resolve into ordinary tool arguments before execution.
 
+`contract_api_drift` is a dedicated bounded workflow family.  Its declared steps first inspect the target-local surface, then search and read a broader bounded contract surface, and finally emit a deterministic `contract_drift_summary` artifact before the terminal run report.
+
 `WorkflowCheckpoint` captures where the runtime is within the selected workflow so pause/resume and replay can continue from the correct step without reconstructing side effects heuristically.
+
+If the next step cannot be reconstructed from prior outputs, the runtime fails closed with `workflow_terminated` reason `next_step_unbuildable`.  If a configured workflow step budget is exhausted before the next declared step can run, the runtime emits `workflow_budget_exhausted` and terminates the run as failed.
 
 ### MetaAssessment
 

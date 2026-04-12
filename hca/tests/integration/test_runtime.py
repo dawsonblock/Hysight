@@ -7,23 +7,38 @@ from pathlib import Path
 critic_module = import_module("hca.modules.critic")
 common_types = import_module("hca.common.types")
 common_enums = import_module("hca.common.enums")
+event_log_module = import_module("hca.storage.event_log")
+planner_module = import_module("hca.modules.planner")
 replay_module = import_module("hca.runtime.replay")
 runtime_module = import_module("hca.runtime.runtime")
+tool_reasoner_module = import_module("hca.modules.tool_reasoner")
 broadcast_module = import_module("hca.workspace.broadcast")
 workspace_module = import_module("hca.workspace.workspace")
 approvals_module = import_module("hca.storage.approvals")
 
 RunContext = common_types.RunContext
+WorkflowPlan = common_types.WorkflowPlan
+WorkflowStep = common_types.WorkflowStep
 RuntimeState = common_enums.RuntimeState
+WorkflowClass = common_enums.WorkflowClass
 WorkspaceItem = common_types.WorkspaceItem
 ApprovalGrant = common_types.ApprovalGrant
 Critic = critic_module.Critic
 Runtime = runtime_module.Runtime
 reconstruct_state = replay_module.reconstruct_state
 broadcast = broadcast_module.broadcast
+iter_events = event_log_module.iter_events
 Workspace = workspace_module.Workspace
 append_grant = approvals_module.append_grant
 get_pending_requests = approvals_module.get_pending_requests
+
+
+def _stub_workflow_plan(monkeypatch, workflow_plan: WorkflowPlan) -> None:
+    def _build(_goal: str) -> WorkflowPlan:
+        return workflow_plan.model_copy(deep=True)
+
+    monkeypatch.setattr(planner_module, "build_workflow_plan", _build)
+    monkeypatch.setattr(tool_reasoner_module, "build_workflow_plan", _build)
 
 
 def test_run_completes():
@@ -88,13 +103,145 @@ def test_run_investigates_workspace_issue(monkeypatch, tmp_path):
     assert replay["active_workflow"]["workflow_class"] == (
         "contract_api_drift"
     )
+    assert replay["active_workflow"]["strategy"] == (
+        "contract_drift_strategy"
+    )
+    step_keys = [
+        step["step_key"] for step in replay["workflow_step_history"]
+    ]
+    assert step_keys == [
+        "target_glob",
+        "target_search",
+        "target_read_context",
+        "contract_surface_search",
+        "contract_surface_read_context",
+        "contract_surface_summary",
+        "run_report",
+    ]
     assert replay["artifacts_count"] >= 2
     summary_step = next(
         step
         for step in replay["workflow_step_history"]
-        if step["step_key"] == "summary"
+        if step["step_key"] == "contract_surface_summary"
     )
     assert summary_step["artifacts"]
+    assert any(
+        "contract_drift_summary" in artifact
+        for artifact in summary_step["artifacts"]
+    )
+
+
+def test_workflow_budget_exhaustion_fails_closed(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    workflow_plan = WorkflowPlan(
+        workflow_class=WorkflowClass.investigation,
+        strategy="budget_test_strategy",
+        steps=[
+            WorkflowStep(
+                step_key="first_step",
+                tool_name="echo",
+                arguments_template={"text": "first"},
+            ),
+            WorkflowStep(
+                step_key="second_step",
+                tool_name="echo",
+                arguments_template={"text": "second"},
+            ),
+        ],
+        parameters={"goal": "exercise workflow budget"},
+        rationale="Budget exhaustion should fail closed before step two.",
+        confidence=0.91,
+        max_steps=1,
+        termination_condition="budget_or_completion",
+    )
+    _stub_workflow_plan(monkeypatch, workflow_plan)
+
+    runtime = Runtime()
+    run_id = runtime.run("exercise workflow budget")
+
+    replay = reconstruct_state(run_id)
+    assert replay["state"] == RuntimeState.failed.value
+    assert replay["workflow_budget"] == {
+        "max_steps": 1,
+        "consumed_steps": 1,
+    }
+    assert [
+        step["step_key"] for step in replay["workflow_step_history"]
+    ] == ["first_step"]
+
+    events = list(iter_events(run_id))
+    assert any(
+        event["event_type"] == "workflow_budget_exhausted"
+        for event in events
+    )
+    terminated_event = next(
+        event
+        for event in events
+        if event["event_type"] == "workflow_terminated"
+        and event["payload"]["reason"] == "budget_exhausted"
+    )
+    assert terminated_event["payload"]["next_step_id"] == (
+        replay["workflow_checkpoint"]["current_step_id"]
+    )
+
+
+def test_workflow_next_step_unbuildable_fails_closed(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    workflow_plan = WorkflowPlan(
+        workflow_class=WorkflowClass.investigation,
+        strategy="unbuildable_test_strategy",
+        steps=[
+            WorkflowStep(
+                step_key="emit_marker",
+                tool_name="echo",
+                arguments_template={"text": "marker"},
+            ),
+            WorkflowStep(
+                step_key="missing_reference",
+                tool_name="read_text_range",
+                arguments_template={
+                    "path": "step:emit_marker.outputs.path",
+                    "start_line": 1,
+                    "end_line": 1,
+                },
+            ),
+        ],
+        parameters={"goal": "exercise next step unbuildable"},
+        rationale="Missing step outputs should fail closed.",
+        confidence=0.9,
+        max_steps=2,
+        termination_condition="all_steps_completed",
+    )
+    _stub_workflow_plan(monkeypatch, workflow_plan)
+
+    runtime = Runtime()
+    run_id = runtime.run("exercise next step unbuildable")
+
+    replay = reconstruct_state(run_id)
+    assert replay["state"] == RuntimeState.failed.value
+    assert [
+        step["step_key"] for step in replay["workflow_step_history"]
+    ] == ["emit_marker"]
+
+    terminated_event = next(
+        event
+        for event in iter_events(run_id)
+        if event["event_type"] == "workflow_terminated"
+    )
+    assert terminated_event["payload"]["reason"] == (
+        "next_step_unbuildable"
+    )
+    assert terminated_event["payload"]["workflow_step_id"] == (
+        replay["workflow_checkpoint"]["current_step_id"]
+    )
 
 
 def test_runtime_executes_mutation_verification_workflow(
