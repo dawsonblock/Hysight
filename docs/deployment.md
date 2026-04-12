@@ -132,8 +132,18 @@ content (which is already owned by `hysight`), so no manual `chown` step is
 needed for compose-managed deployments.
 
 If you bind-mount a host directory instead of using a named volume, ensure the
-host directory is writable by UID/GID 65534 (the system user Docker assigns by
-default) or create a user with a matching UID.
+host directory is writable by the UID assigned to the `hysight` system user
+inside the container. You can check it with:
+
+```bash
+docker run --rm hysight-backend id -u hysight
+```
+
+Then on the host:
+
+```bash
+chown <uid> /your/host/path
+```
 
 ### `BackendConfigurationError: Mongo configuration is partial`
 Set **both** `MONGO_URL` and `DB_NAME`, or unset both. Mixed state is rejected at startup.
