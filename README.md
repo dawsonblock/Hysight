@@ -307,9 +307,21 @@ fails fast if the service is unreachable.
 
 ### Start the backend
 
+**Linux / macOS / WSL / Git Bash:**
+
 ```bash
 ./scripts/run_backend.sh
 ```
+
+**Windows (PowerShell / CMD) — portable alternative:**
+
+```powershell
+python -m uvicorn backend.server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+> On Windows, load `.env` first or set the relevant variables in your shell
+> before running the command above. The shell script handles this automatically
+> on Unix-like systems.
 
 The script loads `.env`, validates prerequisites and mode, and starts uvicorn.
 The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
