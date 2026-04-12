@@ -142,7 +142,7 @@ docker run --rm hysight-backend id -u hysight
 Then on the host:
 
 ```bash
-chown <uid> /your/host/path
+chown -R <uid>:<uid> /your/host/path
 ```
 
 ### `BackendConfigurationError: Mongo configuration is partial`
