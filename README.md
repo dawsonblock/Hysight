@@ -444,6 +444,34 @@ All agent operations are available via the REST API:
 | `GET` | `/api/hca/memory/list` | List stored memories |
 | `DELETE` | `/api/hca/memory/{memory_id}` | Delete a memory record |
 
+### Operator API examples
+
+The frontend operator console uses the same bounded replay-backed HTTP surface
+shown below. There is no separate UI-only state model.
+
+```bash
+# List recent runs
+curl "http://localhost:8000/api/hca/runs?limit=5"
+
+# Fetch the newest events for a specific run
+curl "http://localhost:8000/api/hca/run/<run-id>/events?limit=20"
+
+# List stored artifacts for a run
+curl "http://localhost:8000/api/hca/run/<run-id>/artifacts?limit=20"
+
+# Preview a single artifact body
+curl "http://localhost:8000/api/hca/run/<run-id>/artifacts/<artifact-id>"
+```
+
+### Runtime reference docs
+
+- `hca/docs/operator-runtime-contract.md` freezes the current bounded
+  operator/runtime contract from code reality.
+- `hca/docs/runtime-contracts.md` describes the runtime types, workflow
+  semantics, and state-machine guarantees.
+- `contract/schema.json` is the authoritative HTTP payload contract used by
+  the backend contract-conformance proof.
+
 ---
 
 ## Configuration
