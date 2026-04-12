@@ -78,22 +78,57 @@ def _latest_model(
     return latest
 
 
+def _with_binding(record: Any, binding: Any) -> Any:
+    if binding is None or getattr(record, "binding", None) is not None:
+        return record
+
+    updates: Dict[str, Any] = {"binding": binding}
+    if (
+        hasattr(record, "action_kind")
+        and getattr(record, "action_kind") is None
+    ):
+        updates["action_kind"] = binding.tool_name
+    return record.model_copy(update=updates)
+
+
+def _approval_binding(run_id: str, approval_id: str) -> Any:
+    request = get_request(run_id, approval_id)
+    if request and request.binding is not None:
+        return request.binding
+
+    grant = get_grant(run_id, approval_id)
+    if grant and grant.binding is not None:
+        return grant.binding
+
+    return None
+
+
 def append_request(run_id: str, request: ApprovalRequest) -> None:
+    if request.binding is not None and request.action_kind is None:
+        request = request.model_copy(
+            update={"action_kind": request.binding.tool_name}
+        )
     _append_record(run_id, "request", request.model_dump(mode="json"))
 
 
 def append_decision(run_id: str, decision: ApprovalDecisionRecord) -> None:
+    decision = _with_binding(
+        decision,
+        _approval_binding(run_id, decision.approval_id),
+    )
     append_decision_record = decision.model_dump(mode="json")
     _append_record(run_id, "decision", append_decision_record)
 
 
 def append_grant(run_id: str, grant: ApprovalGrant) -> None:
+    grant = _with_binding(grant, _approval_binding(run_id, grant.approval_id))
     append_decision(
         run_id,
         ApprovalDecisionRecord(
             approval_id=grant.approval_id,
             decision=ApprovalDecision.granted,
             actor=grant.actor,
+            binding=grant.binding,
             decided_at=grant.granted_at,
             expires_at=grant.expires_at,
         ),
@@ -123,6 +158,10 @@ def append_denial(
 
 
 def append_consumption(run_id: str, consumption: ApprovalConsumption) -> None:
+    consumption = _with_binding(
+        consumption,
+        _approval_binding(run_id, consumption.approval_id),
+    )
     _append_record(run_id, "consumption", consumption.model_dump(mode="json"))
 
 

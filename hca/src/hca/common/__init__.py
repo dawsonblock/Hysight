@@ -14,6 +14,7 @@ _TYPE_EXPORTS = {
     "RunContext",
     "WorkspaceItem",
     "ModuleProposal",
+    "ActionBinding",
     "ActionCandidate",
     "MetaAssessment",
     "MemoryRecord",

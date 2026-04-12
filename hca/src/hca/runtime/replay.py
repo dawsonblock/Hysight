@@ -6,6 +6,10 @@ from collections import Counter
 from typing import Any, Dict, List, Optional
 
 from hca.common.enums import EventType, RuntimeState
+from hca.executor.tool_registry import (
+    ToolValidationError,
+    build_action_binding,
+)
 from hca.runtime.snapshots import (
     count_memory_records,
     summarize_workspace_items,
@@ -48,6 +52,48 @@ def _selected_action_from_events(
         if isinstance(action, dict):
             return action
     return None
+
+
+def _action_fingerprint(payload: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+
+    binding = payload.get("binding")
+    if not isinstance(binding, dict):
+        return None
+
+    fingerprint = binding.get("action_fingerprint")
+    if isinstance(fingerprint, str):
+        return fingerprint
+    return None
+
+
+def _recomputed_action_fingerprint(
+    payload: Optional[Dict[str, Any]],
+) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+
+    kind = payload.get("kind")
+    if not isinstance(kind, str) or not kind:
+        return None
+
+    arguments = payload.get("arguments")
+    if not isinstance(arguments, dict):
+        arguments = {}
+
+    target = payload.get("target")
+    if not isinstance(target, str):
+        target = None
+
+    try:
+        return build_action_binding(
+            kind,
+            arguments,
+            target=target,
+        ).action_fingerprint
+    except (KeyError, ToolValidationError):
+        return None
 
 
 def _workspace_summary_from_events(
@@ -169,6 +215,21 @@ def _detect_snapshot_discrepancies(
             f"events={reconstructed_action_id}"
         )
 
+    snapshot_action_fingerprint = _action_fingerprint(snapshot_action)
+    reconstructed_action_fingerprint = _action_fingerprint(
+        reconstructed_action
+    )
+    if (
+        snapshot_action_fingerprint
+        and reconstructed_action_fingerprint
+        and snapshot_action_fingerprint != reconstructed_action_fingerprint
+    ):
+        discrepancies.append(
+            "Selected action fingerprint mismatch: "
+            f"snapshot={snapshot_action_fingerprint}, "
+            f"events={reconstructed_action_fingerprint}"
+        )
+
     snapshot_memory = snapshot.get("memory_summary", {})
     if isinstance(snapshot_memory, dict):
         for key, value in snapshot_memory.items():
@@ -177,6 +238,74 @@ def _detect_snapshot_discrepancies(
                     f"Memory mismatch ({key}): snapshot={value}, "
                     f"events={reconstructed['memory_counts'].get(key)}"
                 )
+
+    return discrepancies
+
+
+def _detect_binding_discrepancies(
+    reconstructed: Dict[str, Any],
+) -> List[str]:
+    discrepancies: List[str] = []
+    selected_action = reconstructed.get("selected_action")
+    selected_fingerprint = _recomputed_action_fingerprint(selected_action)
+    stored_selected_fingerprint = _action_fingerprint(selected_action)
+    if (
+        selected_fingerprint
+        and stored_selected_fingerprint
+        and selected_fingerprint != stored_selected_fingerprint
+    ):
+        discrepancies.append(
+            "Selected action binding does not match selected action arguments"
+        )
+    if selected_fingerprint is None:
+        selected_fingerprint = stored_selected_fingerprint
+
+    approval = reconstructed.get("approval")
+    if isinstance(approval, dict):
+        request_fingerprint = _action_fingerprint(approval.get("request"))
+        grant_fingerprint = _action_fingerprint(approval.get("grant"))
+        consumption_fingerprint = _action_fingerprint(
+            approval.get("consumption")
+        )
+
+        if (
+            selected_fingerprint
+            and request_fingerprint
+            and selected_fingerprint != request_fingerprint
+        ):
+            discrepancies.append(
+                "Approval request does not match selected action"
+            )
+
+        if (
+            request_fingerprint
+            and grant_fingerprint
+            and request_fingerprint != grant_fingerprint
+        ):
+            discrepancies.append(
+                "Approval grant does not match the original request"
+            )
+
+        if (
+            request_fingerprint
+            and consumption_fingerprint
+            and request_fingerprint != consumption_fingerprint
+        ):
+            discrepancies.append(
+                "Approval consumption does not match the original request"
+            )
+
+    receipt_fingerprint = _action_fingerprint(
+        reconstructed.get("latest_receipt")
+    )
+    if (
+        selected_fingerprint
+        and receipt_fingerprint
+        and selected_fingerprint != receipt_fingerprint
+    ):
+        discrepancies.append(
+            "Latest receipt does not match selected action"
+        )
 
     return discrepancies
 
@@ -258,7 +387,9 @@ def reconstruct_state(run_id: str) -> Dict[str, Any]:
         "meta_signals_seen": meta_signals_seen,
         "discrepancies": [],
     }
-    reconstructed["discrepancies"] = _detect_snapshot_discrepancies(
+    discrepancies = _detect_snapshot_discrepancies(
         snapshot, reconstructed
     )
+    discrepancies.extend(_detect_binding_discrepancies(reconstructed))
+    reconstructed["discrepancies"] = discrepancies
     return reconstructed

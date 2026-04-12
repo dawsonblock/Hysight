@@ -69,11 +69,29 @@ class ModuleProposal(BaseModel):
     estimated_value: float = 0.0
 
 
+class ActionBinding(BaseModel):
+    tool_name: str
+    target: Optional[str] = None
+    normalized_arguments: Dict[str, Any] = Field(default_factory=dict)
+    action_class: Optional[ActionClass] = None
+    requires_approval: bool = False
+    policy_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    policy_fingerprint: str
+    action_fingerprint: str
+
+    def matches(self, other: Optional["ActionBinding"]) -> bool:
+        if other is None:
+            return False
+        return self.action_fingerprint == other.action_fingerprint
+
+
 class ActionCandidate(BaseModel):
     action_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     kind: str
     target: Optional[str] = None
     arguments: Dict[str, Any] = Field(default_factory=dict)
+    action_class: Optional[ActionClass] = None
+    binding: Optional[ActionBinding] = None
     expected_progress: float = 0.0
     expected_uncertainty_reduction: float = 0.0
     reversibility: float = 1.0
@@ -148,6 +166,8 @@ class MissingInfoResult(BaseModel):
     item_id: str
     action_kind: str
     missing_fields: List[str] = Field(default_factory=list)
+    invalid_fields: List[str] = Field(default_factory=list)
+    validation_errors: List[str] = Field(default_factory=list)
 
 
 class CapabilitySummary(BaseModel):
@@ -160,7 +180,10 @@ class CapabilitySummary(BaseModel):
 class ExecutionReceipt(BaseModel):
     receipt_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     action_id: str
+    action_kind: Optional[str] = None
+    approval_id: Optional[str] = None
     status: ReceiptStatus
+    binding: Optional[ActionBinding] = None
     started_at: UtcDateTime = Field(default_factory=utc_now)
     finished_at: Optional[UtcDateTime] = None
     outputs: Optional[Any] = None
@@ -174,7 +197,9 @@ class ApprovalRequest(BaseModel):
     approval_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     run_id: str
     action_id: str
+    action_kind: Optional[str] = None
     action_class: ActionClass
+    binding: Optional[ActionBinding] = None
     reason: str
     requested_at: UtcDateTime = Field(default_factory=utc_now)
     expires_at: Optional[UtcDateTime] = None
@@ -185,6 +210,7 @@ class ApprovalDecisionRecord(BaseModel):
     decision: ApprovalDecision
     actor: str = "user"
     reason: Optional[str] = None
+    binding: Optional[ActionBinding] = None
     decided_at: UtcDateTime = Field(default_factory=utc_now)
     expires_at: Optional[UtcDateTime] = None
 
@@ -204,6 +230,7 @@ class ApprovalGrant(BaseModel):
     approval_id: str
     token: str
     actor: str = "user"
+    binding: Optional[ActionBinding] = None
     granted_at: UtcDateTime = Field(default_factory=utc_now)
     expires_at: Optional[UtcDateTime] = None
 
@@ -211,6 +238,7 @@ class ApprovalGrant(BaseModel):
 class ApprovalConsumption(BaseModel):
     approval_id: str
     token: str
+    binding: Optional[ActionBinding] = None
     consumed_at: UtcDateTime = Field(default_factory=utc_now)
 
 

@@ -389,6 +389,7 @@ def _extract_run_summary(run_id: str) -> HCARunSummaryResponse:
 
 
 def _event_summary(event_type: str, payload: Dict[str, Any]) -> str:
+    approval_label = str(payload.get("approval_id") or "?")[:8]
     mapping = {
         "run_created": "Run started — goal logged",
         "module_proposed": (
@@ -398,7 +399,7 @@ def _event_summary(event_type: str, payload: Dict[str, Any]) -> str:
         "action_selected": f"Selected action: {payload.get('kind', '?')}",
         "approval_requested": (
             "Approval requested "
-            f"(id={payload.get('approval_id', '?')[:8]}...)"
+            f"(id={approval_label}...)"
         ),
         "execution_finished": f"Execution {payload.get('status', '?')}",
         "run_completed": "Run completed successfully",

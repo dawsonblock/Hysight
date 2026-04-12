@@ -65,6 +65,21 @@ def test_missing_info_detector():
     assert missing[0].item_id == "1"
 
 
+def test_missing_info_detector_flags_invalid_fields():
+    item = WorkspaceItem(
+        item_id="2",
+        source_module="test",
+        kind="action_suggestion",
+        content={
+            "action": "echo",
+            "args": {"text": "hello", "path": "oops.txt"},
+        },
+    )
+    missing = detect_missing_information([item])
+    assert len(missing) == 1
+    assert missing[0].invalid_fields == ["path"]
+
+
 def test_self_model_limits():
     item = WorkspaceItem(
         item_id="1",

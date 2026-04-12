@@ -12,7 +12,10 @@ from hca.common.types import (
     WorkspaceItem,
 )
 from hca.meta.conflict_detector import detect_conflicts
-from hca.meta.missing_info import detect_missing_information
+from hca.meta.missing_info import (
+    describe_missing_information,
+    detect_missing_information,
+)
 from hca.meta.self_model import capability_summary
 
 
@@ -136,9 +139,9 @@ def assess(
         confidence = 0.7
         reason_code = "missing_required_input"
         explanation = (
-            "Missing required information: "
+            "Action inputs need clarification: "
             + ", ".join(
-                f"{item.action_kind} missing {', '.join(item.missing_fields)}"
+                describe_missing_information(item)
                 for item in missing
             )
         )
@@ -164,7 +167,7 @@ def assess(
         overall_confidence=confidence,
         contradiction_flags=contradiction_flags,
         missing_information=[
-            f"{item.action_kind}:{','.join(item.missing_fields)}"
+            describe_missing_information(item)
             for item in missing
         ],
         self_limitations=self_limits,

@@ -26,6 +26,11 @@ from hca.common.types import (
 )
 from hca.executor.approvals import validate_resume_approval
 from hca.executor.executor import Executor
+from hca.executor.tool_registry import (
+    ToolValidationError,
+    build_action_candidate,
+    canonicalize_action_candidate,
+)
 from hca.memory.episodic_store import EpisodicStore
 from hca.meta.monitor import assess
 from hca.meta.self_model import capability_summary
@@ -154,6 +159,11 @@ class Runtime:
                 "action_id": candidate.action_id,
                 "action_kind": candidate.kind,
                 "arguments": candidate.arguments,
+                "binding": (
+                    candidate.binding.model_dump(mode="json")
+                    if candidate.binding is not None
+                    else None
+                ),
                 "status": receipt_payload.get("status"),
                 "artifacts": receipt_payload.get("artifacts") or [],
             },
@@ -195,7 +205,14 @@ class Runtime:
                             source_type="system",
                             trust_weight=0.9,
                         ),
-                        metadata={"action_id": candidate.action_id},
+                        metadata={
+                            "action_id": candidate.action_id,
+                            "action_fingerprint": (
+                                candidate.binding.action_fingerprint
+                                if candidate.binding is not None
+                                else None
+                            ),
+                        },
                     )
                 )
             except Exception:
@@ -363,19 +380,6 @@ class Runtime:
                 self._write_snapshot(context, [], None)
             raise ValueError(reason.replace("_", " "))
 
-        append_event(
-            context,
-            EventType.approval_granted,
-            "runtime",
-            {"approval_id": approval_id, "token": token},
-        )
-        append_approval_consumption(
-            run_id,
-            ApprovalConsumption(approval_id=approval_id, token=token),
-        )
-        context.pending_approval_id = None
-        self._persist_context(context)
-
         from hca.runtime.replay import reconstruct_state
 
         replayed = reconstruct_state(run_id)
@@ -391,8 +395,75 @@ class Runtime:
                 "Could not reconstruct selected action from events"
             )
 
-        candidate = ActionCandidate.model_validate(action_data)
-        return self._execute_and_complete(context, candidate, approved=True)
+        try:
+            candidate = canonicalize_action_candidate(
+                ActionCandidate.model_validate(action_data)
+            )
+        except (KeyError, ToolValidationError) as exc:
+            self._set_state(
+                context,
+                RuntimeState.failed,
+                {
+                    "reason": "selected_action_binding_invalid",
+                    "approval_id": approval_id,
+                },
+            )
+            self._write_snapshot(context, [], None)
+            raise ValueError(
+                "Could not validate selected action from events"
+            ) from exc
+
+        validation = validate_resume_approval(
+            run_id,
+            approval_id,
+            token,
+            candidate=candidate,
+        )
+        if not validation["ok"]:
+            reason = validation["reason"] or "invalid_approval"
+            if reason in {
+                "approved_action_mismatch",
+                "approval_binding_corrupted",
+            }:
+                self._set_state(
+                    context,
+                    RuntimeState.failed,
+                    {"reason": reason, "approval_id": approval_id},
+                )
+                self._write_snapshot(context, [], candidate)
+            raise ValueError(reason.replace("_", " "))
+
+        append_event(
+            context,
+            EventType.approval_granted,
+            "runtime",
+            {
+                "approval_id": approval_id,
+                "token": token,
+                "action_fingerprint": (
+                    candidate.binding.action_fingerprint
+                    if candidate.binding is not None
+                    else None
+                ),
+            },
+        )
+        append_approval_consumption(
+            run_id,
+            ApprovalConsumption(
+                approval_id=approval_id,
+                token=token,
+                binding=candidate.binding,
+            ),
+        )
+        context.pending_approval_id = None
+        self._persist_context(context)
+
+        return self._execute_and_complete(
+            context,
+            candidate,
+            approved=True,
+            approval_id=approval_id,
+        )
 
     def _step(self, context: RunContext) -> str:
         self._set_state(context, RuntimeState.initializing)
@@ -460,15 +531,45 @@ class Runtime:
             self._write_snapshot(context, workspace)
             return context.run_id
 
-        candidates = [
-            ActionCandidate(
-                kind=item.content.get("action"),
-                arguments=item.content.get("args", {}),
-                requires_approval=item.content.get("action") != "echo",
-                provenance=item.provenance,
+        candidates = []
+        invalid_candidates = []
+        for item in action_candidates:
+            try:
+                candidates.append(
+                    build_action_candidate(
+                        item.content.get("action"),
+                        item.content.get("args", {}),
+                        provenance=item.provenance,
+                    )
+                )
+            except (KeyError, ToolValidationError) as exc:
+                invalid_candidates.append(
+                    {
+                        "item_id": item.item_id,
+                        "message": str(exc),
+                    }
+                )
+
+        if invalid_candidates:
+            append_event(
+                context,
+                EventType.report_emitted,
+                "runtime",
+                {
+                    "reason_code": "invalid_action_candidates",
+                    "issues": invalid_candidates,
+                },
             )
-            for item in action_candidates
-        ]
+
+        if not candidates:
+            self._set_state(
+                context,
+                RuntimeState.failed,
+                {"reason": "no_valid_action_candidates"},
+            )
+            self._write_snapshot(context, workspace)
+            return context.run_id
+
         scored = score_actions(candidates)
         for candidate, score in scored:
             append_event(
@@ -507,11 +608,9 @@ class Runtime:
                 approval_id=approval_id,
                 run_id=context.run_id,
                 action_id=best_candidate.action_id,
-                action_class=(
-                    ActionClass.high
-                    if best_candidate.kind == "write_artifact"
-                    else ActionClass.medium
-                ),
+                action_kind=best_candidate.kind,
+                action_class=best_candidate.action_class or ActionClass.medium,
+                binding=best_candidate.binding,
                 reason="Action requires approval",
                 expires_at=utc_now() + timedelta(minutes=15),
             )
@@ -526,6 +625,16 @@ class Runtime:
                     "approval_id": approval_id,
                     "action_id": best_candidate.action_id,
                     "action_kind": best_candidate.kind,
+                    "action_fingerprint": (
+                        best_candidate.binding.action_fingerprint
+                        if best_candidate.binding is not None
+                        else None
+                    ),
+                    "policy_fingerprint": (
+                        best_candidate.binding.policy_fingerprint
+                        if best_candidate.binding is not None
+                        else None
+                    ),
                     "expires_at": (
                         request.expires_at.isoformat()
                         if request.expires_at
@@ -555,6 +664,7 @@ class Runtime:
         context: RunContext,
         candidate: ActionCandidate,
         approved: bool = False,
+        approval_id: Optional[str] = None,
         workspace: Optional[Workspace] = None,
     ) -> str:
         if context.state != RuntimeState.executing:
@@ -571,12 +681,21 @@ class Runtime:
                 "tool": candidate.kind,
                 "action_id": candidate.action_id,
                 "approved": approved,
+                "approval_id": approval_id,
                 "arguments": candidate.arguments,
+                "action_fingerprint": (
+                    candidate.binding.action_fingerprint
+                    if candidate.binding is not None
+                    else None
+                ),
             },
         )
 
         receipt = self.executor.execute(
-            context.run_id, candidate, approved=approved
+            context.run_id,
+            candidate,
+            approved=approved,
+            approval_id=approval_id,
         )
         receipt_payload = receipt.model_dump(mode="json")
         append_event(

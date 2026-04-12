@@ -25,7 +25,10 @@ from hca.common.types import (
     WorkspaceItem,
 )
 from hca.meta.conflict_detector import detect_conflicts
-from hca.meta.missing_info import detect_missing_information
+from hca.meta.missing_info import (
+    describe_missing_information,
+    detect_missing_information,
+)
 from hca.storage import load_run
 
 # Thread-local storage so concurrent requests each carry their own run_id.
@@ -124,12 +127,7 @@ def _format_conflict_issue(conflict: ConflictRecord) -> str:
 
 def _format_missing_info_issue(result: MissingInfoResult) -> str:
     """Render a stable, human-readable issue from a structured gap."""
-    if result.missing_fields:
-        fields = ", ".join(result.missing_fields)
-        return (
-            f"Action {result.action_kind} is missing required fields: {fields}"
-        )
-    return f"Action {result.action_kind} is missing required information"
+    return describe_missing_information(result)
 
 
 def _rule_based_critique(

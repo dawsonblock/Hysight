@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from typing import List, Union
+
 from hca.common.types import ModuleProposal, WorkspaceItem
+from hca.modules.workspace_intents import infer_workspace_action_from_text
 from hca.storage import load_run
 
 
@@ -48,6 +50,10 @@ class ToolReasoner:
         elif intent_class == "write_artifact":
             desired_action = "write_artifact"
             desired_args = dict(perceived_arguments)
+        elif intent_class == "general":
+            desired_action, desired_args = infer_workspace_action_from_text(
+                str(perceived_arguments.get("text", ""))
+            )
 
         if desired_action and not any(
             item.kind == "action_suggestion"
@@ -160,12 +166,25 @@ class ToolReasoner:
         elif intent_class == "write_artifact":
             action = "write_artifact"
             final_args = args
+        elif intent_class == "general":
+            inferred_action, inferred_args = infer_workspace_action_from_text(
+                str(args.get("text", ""))
+            )
+            if inferred_action is not None:
+                action = inferred_action
+                final_args = inferred_args
+            else:
+                action = "echo"
+                final_args = {"text": args.get("text", "hello")}
         else:
             action = "echo"
             final_args = {"text": args.get("text", "hello")}
 
         confidence = 1.0
-        if strategy == "single_action_dispatch":
+        if strategy in {
+            "single_action_dispatch",
+            "workspace_inspection_strategy",
+        }:
             confidence = 1.0
         elif strategy is None:
             confidence = 0.8

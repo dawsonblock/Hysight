@@ -11,41 +11,48 @@ import uuid
 from typing import List, Union
 
 from hca.common.types import ModuleProposal, WorkspaceItem
+from hca.executor.tool_registry import tool_prompt_catalog
+from hca.modules.workspace_intents import infer_workspace_action_from_text
 from hca.storage import load_run
 
-_SYSTEM_PROMPT = """\
-You are the Planner module of a Hybrid Cognitive Agent (HCA). Given a user goal and any \
-relevant memory context, produce a structured execution plan.
 
-Available strategies:
-  single_action_dispatch        — one-shot action
-  memory_persistence_strategy   — store information to memory
-  information_retrieval_strategy — retrieve information from memory
-  artifact_authoring_strategy   — write content to a file
-
-Available actions (and their required args):
-  echo           {"text": "<message>"}                          [no approval needed]
-  store_note     {"note": "<text to persist>"}                  [requires user approval]
-  write_artifact {"content": "<file body>", "path": "<name>"}  [requires user approval]
-
-Respond ONLY with valid JSON — no markdown fences, no extra keys:
-{
-  "strategy": "<strategy>",
-  "action": "<action>",
-  "action_args": {"<key>": "<value>"},
-  "confidence": 0.85,
-  "rationale": "<one concise sentence>"
-}"""
+def _system_prompt() -> str:
+    return (
+        "You are the Planner module of a Hybrid Cognitive Agent (HCA). "
+        "Given a user goal and any relevant memory context, produce a "
+        "structured execution plan.\n\n"
+        "Available strategies:\n"
+        "  single_action_dispatch         — one-shot action\n"
+        "  memory_persistence_strategy    — store information to memory\n"
+        "  information_retrieval_strategy — retrieve information "
+        "from memory\n"
+        "  artifact_authoring_strategy    — write content to a "
+        "bounded artifact path\n"
+        "  workspace_inspection_strategy  — inspect repository "
+        "files or directories\n\n"
+        f"Available actions:\n{tool_prompt_catalog()}\n\n"
+        "Respond ONLY with valid JSON — no markdown fences, no extra keys:\n"
+        "{\n"
+        '    "strategy": "<strategy>",\n'
+        '    "action": "<action>",\n'
+        '    "action_args": {"<key>": "<value>"},\n'
+        '    "confidence": 0.85,\n'
+        '    "rationale": "<one concise sentence>"\n'
+        "}"
+    )
 
 
 async def _llm_plan(goal: str, memory_context: str) -> dict:
-    from emergentintegrations.llm.chat import LlmChat, UserMessage  # type: ignore
+    from emergentintegrations.llm.chat import (  # type: ignore
+        LlmChat,
+        UserMessage,
+    )
 
     api_key = os.environ.get("EMERGENT_LLM_KEY", "")
     chat = LlmChat(
         api_key=api_key,
         session_id=f"planner-{uuid.uuid4().hex[:8]}",
-        system_message=_SYSTEM_PROMPT,
+        system_message=_system_prompt(),
     ).with_model("anthropic", "claude-sonnet-4-5-20250929")
 
     prompt = f"Goal: {goal}"
@@ -65,6 +72,8 @@ async def _llm_plan(goal: str, memory_context: str) -> dict:
 
 def _rule_based_plan(perceived_intent: str | None, goal: str) -> dict:
     """Deterministic fallback when LLM is unavailable."""
+    workspace_action, workspace_args = infer_workspace_action_from_text(goal)
+
     if perceived_intent == "store":
         return {
             "strategy": "memory_persistence_strategy",
@@ -80,6 +89,16 @@ def _rule_based_plan(perceived_intent: str | None, goal: str) -> dict:
             "action_args": {"text": f"Searching memory for: {goal}"},
             "confidence": 0.6,
             "rationale": "Rule-based: goal contains retrieval intent.",
+        }
+    if workspace_action is not None:
+        return {
+            "strategy": "workspace_inspection_strategy",
+            "action": workspace_action,
+            "action_args": workspace_args,
+            "confidence": 0.65,
+            "rationale": (
+                "Rule-based: goal requests bounded workspace inspection."
+            ),
         }
     return {
         "strategy": "single_action_dispatch",
@@ -98,11 +117,13 @@ class Planner:
 
     def on_broadcast(self, items: List[WorkspaceItem]):
         perceived_intent = None
+        raw_goal = ""
         current_strategy = None
         critiques: List[str] = []
         for item in items:
             if item.kind == "perceived_intent":
                 perceived_intent = item.content.get("intent")
+                raw_goal = item.content.get("raw_goal", "")
             elif item.kind == "task_plan":
                 current_strategy = item.content.get("strategy")
             elif item.kind == "action_critique":
@@ -119,6 +140,11 @@ class Planner:
         elif perceived_intent == "write":
             target_strategy = "artifact_authoring_strategy"
             target_action = "write_artifact"
+        else:
+            inferred_action, _ = infer_workspace_action_from_text(raw_goal)
+            if inferred_action is not None:
+                target_strategy = "workspace_inspection_strategy"
+                target_action = inferred_action
 
         revised_proposals = []
         if target_strategy != current_strategy:
@@ -143,15 +169,27 @@ class Planner:
             action = item.content.get("action")
             if target_action and action == target_action:
                 adjustments.append(
-                    {"target_item_id": item.item_id, "delta": 0.12, "reason": "plan_alignment"}
+                    {
+                        "target_item_id": item.item_id,
+                        "delta": 0.12,
+                        "reason": "plan_alignment",
+                    }
                 )
             elif target_action and action != target_action:
                 adjustments.append(
-                    {"target_item_id": item.item_id, "delta": -0.05, "reason": "plan_misalignment"}
+                    {
+                        "target_item_id": item.item_id,
+                        "delta": -0.05,
+                        "reason": "plan_misalignment",
+                    }
                 )
             if critiques:
                 adjustments.append(
-                    {"target_item_id": item.item_id, "delta": -0.04, "reason": "critic_feedback"}
+                    {
+                        "target_item_id": item.item_id,
+                        "delta": -0.04,
+                        "reason": "critic_feedback",
+                    }
                 )
 
         return {
@@ -160,8 +198,11 @@ class Planner:
             "critique_items": [],
         }
 
-    def propose(self, input_data: Union[str, List[WorkspaceItem]]) -> ModuleProposal:
-        """Build a plan using Claude Sonnet 4.5, falling back to rule-based on error."""
+    def propose(
+        self,
+        input_data: Union[str, List[WorkspaceItem]],
+    ) -> ModuleProposal:
+        """Build a plan using Claude Sonnet 4.5 with rule-based fallback."""
         current_items = input_data if isinstance(input_data, list) else []
 
         # Extract existing intent from workspace (if re-planning)
@@ -182,7 +223,9 @@ class Planner:
         memory_context = ""
         if goal:
             try:
-                from memory_service.singleton import get_controller  # type: ignore
+                from memory_service.singleton import (  # type: ignore
+                    get_controller,
+                )
                 from memory_service import RetrievalQuery  # type: ignore
 
                 hits = get_controller().retrieve(
