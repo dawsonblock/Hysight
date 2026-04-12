@@ -1,0 +1,408 @@
+"""Focused coverage for bounded operator-grade tools."""
+
+# mypy: ignore-errors
+# pyright: reportMissingImports=false, reportMissingTypeStubs=false
+
+import json
+from pathlib import Path
+
+import pytest
+
+import hca.executor.tool_registry as tool_registry
+import hca.modules.planner as planner_module
+from hca.common.enums import ReceiptStatus
+from hca.common.types import ActionCandidate, RunContext
+from hca.executor.executor import Executor
+from hca.paths import run_storage_path
+from hca.runtime.runtime import Runtime
+
+
+def _write_file(root: Path, relative_path: str, content: str) -> None:
+    path = root / relative_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _artifact_full_path(run_id: str, relative_path: str) -> Path:
+    parts = Path(relative_path).parts
+    artifact_parts = (
+        parts[4:]
+        if len(parts) >= 5
+        else (Path(relative_path).name,)
+    )
+    return run_storage_path(run_id, "artifacts", *artifact_parts)
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"),
+    [
+        (
+            "read_text_range",
+            {"path": "../escape.txt", "start_line": 1, "end_line": 2},
+        ),
+        (
+            "glob_workspace",
+            {"root": "../escape", "pattern": "**/*", "max_results": 5},
+        ),
+        (
+            "search_workspace",
+            {"query": "needle", "root": "../escape", "path_glob": "**/*"},
+        ),
+        (
+            "patch_text_file",
+            {"path": "../escape.txt", "old_text": "a", "new_text": "b"},
+        ),
+        ("create_run_report", {"path": "../escape.json"}),
+        (
+            "investigate_workspace_issue",
+            {"query": "needle", "root": "../escape", "path_glob": "**/*"},
+        ),
+    ],
+)
+def test_new_tools_reject_invalid_args(tool_name, arguments):
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(kind=tool_name, arguments=arguments),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert receipt.validation_status == "failed"
+
+
+def test_stat_and_glob_workspace_use_repo_root_bounds(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    _write_file(tmp_path, "src/example.py", "print('hello')\n")
+
+    executor = Executor()
+
+    stat_receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="stat_path",
+            arguments={"path": "src/example.py"},
+        ),
+    )
+    assert stat_receipt.status == ReceiptStatus.success
+    assert stat_receipt.validation_status == "validated"
+    assert stat_receipt.validated_arguments == {"path": "src/example.py"}
+    assert stat_receipt.outputs["exists"] is True
+    assert stat_receipt.outputs["kind"] == "file"
+    assert stat_receipt.outputs["sha256"]
+
+    glob_receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="glob_workspace",
+            arguments={
+                "root": "src",
+                "pattern": "**/*.py",
+                "max_results": 10,
+            },
+        ),
+    )
+    assert glob_receipt.status == ReceiptStatus.success
+    assert glob_receipt.outputs["entries"] == [
+        {"path": "src/example.py", "kind": "file"}
+    ]
+
+
+def test_read_text_range_reads_bounded_lines(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    _write_file(tmp_path, "notes/todo.txt", "one\ntwo\nthree\nfour\n")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="read_text_range",
+            arguments={
+                "path": "notes/todo.txt",
+                "start_line": 2,
+                "end_line": 3,
+            },
+        ),
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    assert receipt.outputs["text"] == "two\nthree"
+    assert receipt.outputs["line_span"] == {"start": 2, "end": 3}
+
+
+def test_read_text_range_rejects_binary(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    path = tmp_path / "bin" / "blob.dat"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"\x00\x01needle\x02")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="read_text_range",
+            arguments={"path": "bin/blob.dat", "start_line": 1, "end_line": 2},
+        ),
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert "text file" in receipt.error
+
+
+def test_search_workspace_finds_structured_matches(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    _write_file(tmp_path, "docs/notes.txt", "alpha\nneedle value\nomega\n")
+    _write_file(tmp_path, "src/app.py", "print('needle value')\n")
+    binary_path = tmp_path / "src" / "raw.bin"
+    binary_path.write_bytes(b"\x00needle value\x00")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="search_workspace",
+            arguments={
+                "query": "needle value",
+                "path_glob": "**/*",
+                "max_results": 5,
+                "max_files": 10,
+                "max_total_bytes": 100_000,
+            },
+        ),
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    assert receipt.outputs["returned"] == 2
+    assert receipt.outputs["total_match_count"] == 2
+    assert receipt.outputs["per_file_match_counts"] == [
+        {"path": "docs/notes.txt", "match_count": 1},
+        {"path": "src/app.py", "match_count": 1},
+    ]
+    assert receipt.outputs["skipped_binary_files"] == 1
+    assert receipt.outputs["matches"][0]["preview"] == "needle value"
+
+
+def test_search_workspace_enforces_file_budget(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    _write_file(tmp_path, "a.txt", "needle\n")
+    _write_file(tmp_path, "b.txt", "needle\n")
+    _write_file(tmp_path, "c.txt", "needle\n")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="search_workspace",
+            arguments={
+                "query": "needle",
+                "path_glob": "**/*.txt",
+                "max_results": 10,
+                "max_files": 1,
+                "max_total_bytes": 100_000,
+            },
+        ),
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    assert receipt.outputs["truncated"] is True
+    assert receipt.outputs["truncation_reasons"] == ["max_files"]
+
+
+def test_patch_text_file_preview_and_apply(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    _write_file(tmp_path, "notes/todo.txt", "hello world\n")
+
+    executor = Executor()
+
+    preview_receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="patch_text_file",
+            arguments={
+                "path": "notes/todo.txt",
+                "old_text": "world",
+                "new_text": "mars",
+                "apply": False,
+            },
+        ),
+        approved=True,
+    )
+    assert preview_receipt.status == ReceiptStatus.success
+    assert preview_receipt.outputs["applied"] is False
+    assert "-hello world" in preview_receipt.outputs["diff_preview"]
+    assert preview_receipt.artifacts == [
+        preview_receipt.outputs["diff_artifact_path"]
+    ]
+    preview_diff = _artifact_full_path(
+        "test_run",
+        preview_receipt.outputs["diff_artifact_path"],
+    )
+    assert preview_diff.exists()
+    assert (tmp_path / "notes/todo.txt").read_text(encoding="utf-8") == (
+        "hello world\n"
+    )
+
+    apply_receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="patch_text_file",
+            arguments={
+                "path": "notes/todo.txt",
+                "old_text": "world",
+                "new_text": "mars",
+                "apply": True,
+                "expected_hash": preview_receipt.outputs["before_hash"],
+            },
+        ),
+        approved=True,
+    )
+    assert apply_receipt.status == ReceiptStatus.success
+    assert apply_receipt.outputs["applied"] is True
+    assert apply_receipt.side_effects == ["modified:notes/todo.txt"]
+    assert apply_receipt.artifacts == [
+        apply_receipt.outputs["diff_artifact_path"]
+    ]
+    assert (tmp_path / "notes/todo.txt").read_text(encoding="utf-8") == (
+        "hello mars\n"
+    )
+
+
+def test_patch_text_file_rejects_hash_mismatch(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    _write_file(tmp_path, "notes/todo.txt", "hello world\n")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="patch_text_file",
+            arguments={
+                "path": "notes/todo.txt",
+                "old_text": "world",
+                "new_text": "mars",
+                "apply": True,
+                "expected_hash": "0" * 64,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert "expected_hash does not match" in receipt.error
+
+
+def test_investigate_workspace_issue_writes_report(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    _write_file(tmp_path, "contract/api.py", "class RuntimeState: pass\n")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="investigate_workspace_issue",
+            arguments={
+                "query": "RuntimeState",
+                "root": "contract",
+                "path_glob": "**/*.py",
+                "max_matches": 4,
+            },
+        ),
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    assert receipt.artifacts == [receipt.outputs["path"]]
+    report_path = _artifact_full_path("test_run", receipt.outputs["path"])
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["query"] == "RuntimeState"
+    assert report["evidence"][0]["path"] == "contract/api.py"
+
+
+def test_create_run_report_materializes_prior_run(monkeypatch, tmp_path):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    runtime = Runtime()
+    run_id = runtime.run("echo hello")
+
+    executor = Executor()
+    receipt = executor.execute(
+        run_id,
+        ActionCandidate(kind="create_run_report", arguments={}),
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    report_path = _artifact_full_path(run_id, receipt.outputs["path"])
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["run_id"] == run_id
+    assert report["final_status"] == "completed"
+    assert len(report["actions_executed"]) == 1
+
+
+def test_planner_fallback_emits_registered_tool(monkeypatch):
+    planner = planner_module.Planner()
+    monkeypatch.setattr(
+        planner_module,
+        "load_run",
+        lambda run_id: RunContext(run_id=run_id, goal="create run report"),
+    )
+
+    proposal = planner.propose("run-planner")
+    action = next(
+        item.content["action"]
+        for item in proposal.candidate_items
+        if item.kind == "action_suggestion"
+    )
+
+    assert action in tool_registry.list_tools()
+
+
+def test_run_command_executes_pytest(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    _write_file(
+        tmp_path,
+        "test_sample.py",
+        "def test_ok():\n    assert 2 + 2 == 4\n",
+    )
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="run_command",
+            arguments={
+                "argv": ["pytest", "-q", "test_sample.py"],
+                "cwd": ".",
+                "timeout_seconds": 10,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    assert receipt.outputs["ok"] is True
+    assert receipt.outputs["returncode"] == 0
+    assert "1 passed" in (
+        receipt.outputs["stdout"] + receipt.outputs["stderr"]
+    )
+
+
+def test_run_command_rejects_disallowed_command(monkeypatch, tmp_path):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="run_command",
+            arguments={
+                "argv": ["bash", "-lc", "pwd"],
+                "cwd": ".",
+                "timeout_seconds": 5,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert "not allowlisted" in receipt.error

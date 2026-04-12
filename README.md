@@ -31,9 +31,9 @@ Everything else below is full setup, configuration, and advanced use.
 
 ## Overview
 
-Hysight is an implementation of a **Hybrid Cognitive Agent (HCA)** — a software system that models bounded, human-like deliberation. Instead of a single monolithic prompt, the HCA is composed of specialized cognitive modules (Planner, Critic, Perception, ToolReasoner) that compete for space in a capacity-limited **Global Workspace**, just as neuroscience models suggest conscious processing works.
+Hysight is an implementation of a **Hybrid Cognitive Agent (HCA)** as a bounded operator runtime. Its authority path stays inside the existing runtime, approval, executor, and replay layers instead of handing control to an open-ended autonomous loop. The cognitive modules (Planner, Critic, Perception, ToolReasoner) still compete for space in a capacity-limited **Global Workspace**, but they can only propose actions that the registry and executor actually implement.
 
-The agent runs a structured lifecycle — gathering inputs, proposing actions, assessing conflicts, scoring candidates, awaiting human approval where required, executing tools, and committing to memory — all with a complete immutable event log for replay and audit.
+The runtime currently executes one canonical action per run through a single authority path in `hca/src/hca/runtime/runtime.py`, with approval-bound resume for mutating actions, immutable event logging, snapshots, receipts, artifacts, and replay reconstruction. Practical repo work comes from a small bounded tool catalog for inspection, reporting, and approved mutation rather than speculative autonomy.
 
 ---
 
@@ -69,7 +69,7 @@ The agent runs a structured lifecycle — gathering inputs, proposing actions, a
 │                          │                              │
 │          ┌───────────────▼───────────────┐             │
 │          │      Approval Gate            │             │
-│          │  low → auto  high → human     │             │
+│          │  registry policy + approval   │             │
 │          └───────────────┬───────────────┘             │
 │                          │                              │
 │               ┌──────────▼──────────┐                  │
@@ -102,13 +102,49 @@ The agent runs a structured lifecycle — gathering inputs, proposing actions, a
 | --- | --- |
 | **Global Workspace** | Capacity-limited (7 slots) item-ranked workspace inspired by Global Workspace Theory |
 | **Optional LLM Modules** | Planner, Critic, and TextPerception can use external LLMs when configured and fall back to deterministic behavior when unavailable |
-| **Approval Gate** | Risk-tiered authorization — `low` executes automatically, `high` halts and awaits human sign-off |
+| **Approval Gate** | Approval is defined centrally in the tool registry. Read-only workspace inspection tools execute directly; mutation and other configured side effects require explicit approval and resume with the same canonical action binding. |
 | **Immutable Event Log** | Every state transition, proposal, and execution is appended to an append-only JSONL log |
 | **Conflict Detection** | Automatic detection of contradicting action proposals across modules |
-| **Episodic Memory** | Per-run episodic memory with configurable retention policies (30d default) |
+| **Bounded Tool Catalog** | Repo-bounded tools now cover stat, glob, search, targeted text reads, investigation reports, run reports, approved text patching, artifact writes, and an allowlisted command path |
+| **Memory Outcomes** | Local episodic memory writes are authoritative. External memory-controller ingestion remains best-effort, but success and failure are now emitted explicitly in the event log. |
 | **Evaluation Harnesses** | Six built-in harnesses: audit, coordination, embodiment, memory, metacognition, proactivity |
 | **Portable Storage** | All paths resolve from repo root; override via `HCA_STORAGE_ROOT` env var |
 | **Memvid Sidecar** | Rust/Axum HTTP sidecar exposing the `ingest / retrieve / maintain` memory contract |
+
+## Bounded Tool Catalog
+
+The executor registry is the authoritative capability surface. The runtime and planner should only rely on tools that appear there.
+
+Current bounded tools:
+
+- `echo`
+- `list_dir`
+- `stat_path`
+- `glob_workspace`
+- `search_workspace`
+- `read_text_range`
+- `read_file` (legacy alias for `read_text_range`)
+- `investigate_workspace_issue`
+- `create_run_report`
+- `patch_text_file`
+- `replace_in_file` (legacy alias for `patch_text_file`)
+- `store_note`
+- `write_artifact`
+- `run_command` (allowlisted only; no shell)
+
+Mutation and reporting behavior:
+
+- `patch_text_file` binds approval to the canonical validated action plus a file-state hash before execution.
+- Successful patch actions emit before/after hashes, changed-line summaries, and a diff artifact.
+- `create_run_report` materializes a deterministic artifact from prior events, receipts, approvals, artifacts, and memory outcomes for a run.
+- `investigate_workspace_issue` is a bounded read-only workflow tool that searches, reads targeted ranges, and emits a structured evidence artifact.
+
+Replay and memory guarantees:
+
+- Replay and resume validate canonical action identity against approval bindings before consuming approval.
+- Local episodic memory writes are part of the normal runtime path.
+- External memory-controller ingestion is best-effort, but emits `external_memory_written` or `external_memory_write_failed` events instead of failing silently.
+- Command execution, when used, stays bounded to allowlisted argument arrays, repo-relative cwd, timeouts, and truncated output.
 
 ---
 
@@ -244,10 +280,10 @@ python -m pip install -e ./hca -r backend/requirements.txt
 ### 4. Configure environment variables
 
 ```bash
-cp .env.example .env   # fill in values before starting
+cp backend/.env.example backend/.env   # fill in values before starting
 ```
 
-Edit `.env`:
+Edit `backend/.env`:
 
 ```dotenv
 # Optional — MongoDB connection

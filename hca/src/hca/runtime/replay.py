@@ -171,6 +171,34 @@ def _memory_counts(run_id: str) -> Dict[str, int]:
     return count_memory_records(run_id)
 
 
+def _memory_outcomes_from_events(
+    events: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    episodic_writes = 0
+    external_writes = 0
+    external_failures: List[Dict[str, Any]] = []
+
+    for event in events:
+        event_type = event.get("event_type")
+        payload = event.get("payload")
+        if event_type == EventType.episodic_memory_written.value:
+            episodic_writes += 1
+        elif event_type == EventType.external_memory_written.value:
+            external_writes += 1
+        elif (
+            event_type == EventType.external_memory_write_failed.value
+            and isinstance(payload, dict)
+        ):
+            external_failures.append(payload)
+
+    return {
+        "episodic_memory_writes": episodic_writes,
+        "external_memory_writes": external_writes,
+        "external_memory_failures": len(external_failures),
+        "external_memory_failure_details": external_failures,
+    }
+
+
 def _detect_snapshot_discrepancies(
     snapshot: Optional[Dict[str, Any]],
     reconstructed: Dict[str, Any],
@@ -383,6 +411,7 @@ def reconstruct_state(run_id: str) -> Dict[str, Any]:
         "artifacts": artifacts,
         "artifacts_count": len(artifacts),
         "memory_counts": _memory_counts(run_id),
+        "memory_outcomes": _memory_outcomes_from_events(events),
         "event_count": len(events),
         "meta_signals_seen": meta_signals_seen,
         "discrepancies": [],

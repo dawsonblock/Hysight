@@ -41,12 +41,19 @@ class ToolReasoner:
                 )
             }
         elif intent_class == "retrieve_memory":
-            desired_action = "echo"
-            desired_args = {
-                "text": (
-                    f"Searching for: {perceived_arguments.get('query')}"
-                )
-            }
+            inferred_action, inferred_args = infer_workspace_action_from_text(
+                str(perceived_arguments.get("query", ""))
+            )
+            if inferred_action is not None:
+                desired_action = inferred_action
+                desired_args = inferred_args
+            else:
+                desired_action = "echo"
+                desired_args = {
+                    "text": (
+                        f"Searching for: {perceived_arguments.get('query')}"
+                    )
+                }
         elif intent_class == "write_artifact":
             desired_action = "write_artifact"
             desired_args = dict(perceived_arguments)
@@ -71,34 +78,40 @@ class ToolReasoner:
             )
 
         adjustments = []
+        strategy_target_map = {
+            "memory_persistence_strategy": {"store_note"},
+            "artifact_authoring_strategy": {"write_artifact"},
+            "workspace_mutation_strategy": {
+                "patch_text_file",
+                "replace_in_file",
+            },
+            "investigation_strategy": {"investigate_workspace_issue"},
+            "run_reporting_strategy": {"create_run_report"},
+            "workspace_inspection_strategy": {
+                "list_dir",
+                "glob_workspace",
+                "search_workspace",
+                "read_text_range",
+                "read_file",
+                "stat_path",
+            },
+        }
         for item in items:
             if item.kind != "action_suggestion":
                 continue
             action = item.content.get("action")
             delta = 0.0
             reasons: List[str] = []
-            if intent_class == "store_note" and action == "store_note":
+            if desired_action and action == desired_action:
                 delta += 0.12
                 reasons.append("perception_alignment")
-            elif (
-                intent_class == "write_artifact"
-                and action == "write_artifact"
-            ):
-                delta += 0.12
-                reasons.append("perception_alignment")
-            elif intent_class == "retrieve_memory" and action == "echo":
-                delta += 0.05
-                reasons.append("perception_alignment")
+            elif desired_action and action != desired_action:
+                delta -= 0.03
+                reasons.append("perception_misalignment")
 
             if (
-                strategy == "memory_persistence_strategy"
-                and action == "store_note"
-            ):
-                delta += 0.08
-                reasons.append("plan_alignment")
-            elif (
-                strategy == "artifact_authoring_strategy"
-                and action == "write_artifact"
+                strategy in strategy_target_map
+                and action in strategy_target_map[strategy]
             ):
                 delta += 0.08
                 reasons.append("plan_alignment")
@@ -107,7 +120,12 @@ class ToolReasoner:
                 delta -= 0.08
                 reasons.append("critique")
 
-            if action == "write_artifact" and intent_class != "write_artifact":
+            if action in {
+                "write_artifact",
+                "patch_text_file",
+                "replace_in_file",
+                "run_command",
+            } and desired_action != action:
                 delta -= 0.2
                 reasons.append("proactive_risk")
 
@@ -161,8 +179,15 @@ class ToolReasoner:
             action = "store_note"
             final_args = {"note": args.get("text", args.get("note", ""))}
         elif intent_class == "retrieve_memory":
-            action = "echo"
-            final_args = {"text": f"Searching for: {args.get('query')}"}
+            inferred_action, inferred_args = infer_workspace_action_from_text(
+                str(args.get("query", ""))
+            )
+            if inferred_action is not None:
+                action = inferred_action
+                final_args = inferred_args
+            else:
+                action = "echo"
+                final_args = {"text": f"Searching for: {args.get('query')}"}
         elif intent_class == "write_artifact":
             action = "write_artifact"
             final_args = args

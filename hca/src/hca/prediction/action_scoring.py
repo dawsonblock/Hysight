@@ -1,24 +1,32 @@
 """Action scoring logic."""
 
-from typing import List, Tuple, Dict, Any
+from typing import Dict, List, Tuple
 
 from hca.common.types import ActionCandidate
 
 
-def score_actions(candidates: List[ActionCandidate]) -> List[Tuple[ActionCandidate, Dict[str, float]]]:
-    """Return a list of (candidate, scores) sorted from highest to lowest overall score.
+def score_actions(
+    candidates: List[ActionCandidate],
+) -> List[Tuple[ActionCandidate, Dict[str, float]]]:
+    """Return scored candidates sorted from highest to lowest total."""
 
-    The overall score is a weighted sum of the candidate's fields.  For the MVP,
-    equal weights are used for expected progress, uncertainty reduction, reversibility, and policy alignment,
-    minus weights for risk and cost.  Negative values reduce the total.
-    """
     results: List[Tuple[ActionCandidate, Dict[str, float]]] = []
     for cand in candidates:
+        feasibility = max(
+            0.0,
+            1.0
+            - (
+                (cand.risk * 0.5)
+                + (cand.cost * 0.3)
+                + (cand.user_interruption_burden * 0.2)
+            ),
+        )
         scores = {
             "progress": cand.expected_progress,
             "uncertainty_reduction": cand.expected_uncertainty_reduction,
             "reversibility": cand.reversibility,
             "policy_alignment": cand.policy_alignment,
+            "feasibility": feasibility,
             "risk": -cand.risk,
             "cost": -cand.cost,
             "interruption": -cand.user_interruption_burden,

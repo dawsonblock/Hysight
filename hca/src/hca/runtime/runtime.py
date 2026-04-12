@@ -175,7 +175,34 @@ class Runtime:
                 else 0.5
             ),
         )
-        EpisodicStore(context.run_id).append(record)
+        try:
+            EpisodicStore(context.run_id).append(record)
+        except Exception as exc:
+            append_event(
+                context,
+                EventType.report_emitted,
+                "runtime",
+                {
+                    "reason_code": "episodic_memory_write_failed",
+                    "action_id": candidate.action_id,
+                    "error_type": exc.__class__.__name__,
+                    "error": str(exc),
+                },
+            )
+            raise
+
+        episodic_payload = {
+            "record_id": record.record_id,
+            "memory_type": MemoryType.episodic.value,
+            "subject": record.subject,
+            "action_id": candidate.action_id,
+        }
+        append_event(
+            context,
+            EventType.episodic_memory_written,
+            "runtime",
+            episodic_payload,
+        )
 
         # Also ingest into the authoritative memory service (contract boundary)
         (
@@ -194,7 +221,7 @@ class Runtime:
                     + _json.dumps(candidate.arguments, default=str)[:200]
                     + f" → {receipt_payload.get('status', 'unknown')}"
                 )
-                get_mem_controller().ingest(
+                memory_id = get_mem_controller().ingest(
                     candidate_memory_cls(
                         raw_text=raw_text,
                         memory_type="episode",
@@ -215,18 +242,34 @@ class Runtime:
                         },
                     )
                 )
-            except Exception:
-                pass  # Memory service failure is non-fatal
+                append_event(
+                    context,
+                    EventType.external_memory_written,
+                    "runtime",
+                    {
+                        "action_id": candidate.action_id,
+                        "subject": record.subject,
+                        "memory_id": memory_id,
+                    },
+                )
+            except Exception as exc:
+                append_event(
+                    context,
+                    EventType.external_memory_write_failed,
+                    "runtime",
+                    {
+                        "action_id": candidate.action_id,
+                        "subject": record.subject,
+                        "error_type": exc.__class__.__name__,
+                        "error": str(exc),
+                    },
+                )
 
         append_event(
             context,
             EventType.memory_written,
             "runtime",
-            {
-                "record_id": record.record_id,
-                "memory_type": MemoryType.episodic.value,
-                "subject": record.subject,
-            },
+            episodic_payload,
         )
 
     def _halt_run(self, context: RunContext, reason: str) -> str:
@@ -707,7 +750,41 @@ class Runtime:
 
         self._set_state(context, RuntimeState.observing)
         self._set_state(context, RuntimeState.memory_commit)
-        self._record_execution_memory(context, candidate, receipt_payload)
+        try:
+            self._record_execution_memory(
+                context,
+                candidate,
+                receipt_payload,
+            )
+        except Exception as exc:
+            self._execution_failure_count += 1
+            append_event(
+                context,
+                EventType.report_emitted,
+                "runtime",
+                {
+                    "reason_code": "memory_commit_failed",
+                    "action_id": candidate.action_id,
+                    "failure_count": self._execution_failure_count,
+                    "error_type": exc.__class__.__name__,
+                    "error": str(exc),
+                },
+            )
+            self._set_state(
+                context,
+                RuntimeState.failed,
+                {
+                    "reason": "memory_commit_failed",
+                    "failure_count": self._execution_failure_count,
+                },
+            )
+            self._write_snapshot(
+                context,
+                workspace or [],
+                selected_action=candidate,
+                latest_receipt_id=receipt.receipt_id,
+            )
+            return context.run_id
 
         if receipt.status == ReceiptStatus.success:
             self._set_state(context, RuntimeState.reporting)

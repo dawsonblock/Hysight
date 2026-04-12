@@ -1,3 +1,6 @@
+# mypy: ignore-errors
+# pyright: reportMissingImports=false, reportMissingTypeStubs=false
+
 import json
 import os
 import shutil
@@ -5,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import hca.executor.tool_registry as tool_registry
 from hca.runtime.runtime import Runtime
 from hca.runtime.replay import reconstruct_state
 from hca.common.enums import RuntimeState, ApprovalDecision
@@ -117,6 +121,54 @@ def test_resume_rejects_tampered_selected_action():
         issue == "Approval request does not match selected action"
         for issue in replayed_failed["discrepancies"]
     )
+
+
+def test_resume_patch_action_preserves_binding(monkeypatch, tmp_path):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+
+    target_path = tmp_path / "notes" / "todo.txt"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text("hello world\n", encoding="utf-8")
+
+    rt = Runtime()
+    run_id = rt.run("replace `world` with `mars` in `notes/todo.txt`")
+
+    replayed = reconstruct_state(run_id)
+    assert replayed["state"] == RuntimeState.awaiting_approval.value
+    assert replayed["selected_action_kind"] == "patch_text_file"
+    app_id = replayed["pending_approval_id"]
+    assert app_id is not None
+    assert replayed["selected_action"]["binding"]["action_fingerprint"] == (
+        replayed["approval"]["request"]["binding"]["action_fingerprint"]
+    )
+
+    append_decision(
+        run_id,
+        ApprovalDecisionRecord(
+            approval_id=app_id,
+            decision=ApprovalDecision.granted,
+        ),
+    )
+    append_grant(run_id, ApprovalGrant(approval_id=app_id, token="t1"))
+
+    rt.resume(run_id, app_id, "t1")
+
+    replayed_final = reconstruct_state(run_id)
+    assert replayed_final["state"] == RuntimeState.completed.value
+    assert (
+        replayed_final["latest_receipt"]["binding"][
+            "action_fingerprint"
+        ]
+        == replayed_final["selected_action"]["binding"][
+            "action_fingerprint"
+        ]
+    )
+    assert replayed_final["latest_receipt"]["side_effects"] == [
+        "modified:notes/todo.txt"
+    ]
+    assert replayed_final["latest_receipt"]["artifacts"]
+    assert target_path.read_text(encoding="utf-8") == "hello mars\n"
 
 
 if __name__ == "__main__":

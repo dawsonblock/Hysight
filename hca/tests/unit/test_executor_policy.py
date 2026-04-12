@@ -1,3 +1,6 @@
+# mypy: ignore-errors
+# pyright: reportMissingImports=false, reportMissingTypeStubs=false
+
 from hca.executor.executor import Executor
 from hca.executor.tool_registry import build_action_candidate
 from hca.common.types import ActionCandidate
@@ -83,6 +86,23 @@ def test_executor_reads_repo_file():
     assert receipt.status == ReceiptStatus.success
     assert receipt.outputs["path"] == "README.md"
     assert receipt.outputs["content"]
+
+
+def test_receipt_preserves_validated_arguments_and_binding():
+    executor = Executor()
+    candidate = ActionCandidate(
+        kind="list_dir",
+        arguments={"path": "./"},
+    )
+
+    receipt = executor.execute("test_run", candidate)
+
+    assert receipt.status == ReceiptStatus.success
+    assert receipt.validation_status == "validated"
+    assert receipt.validated_arguments == {"path": "."}
+    assert receipt.binding is not None
+    assert receipt.binding.action_fingerprint
+    assert receipt.binding.policy_fingerprint
 
 
 def test_write_artifact_uses_bounded_requested_path(monkeypatch, tmp_path):

@@ -184,6 +184,8 @@ class ExecutionReceipt(BaseModel):
     approval_id: Optional[str] = None
     status: ReceiptStatus
     binding: Optional[ActionBinding] = None
+    validation_status: str = "validated"
+    validated_arguments: Optional[Dict[str, Any]] = None
     started_at: UtcDateTime = Field(default_factory=utc_now)
     finished_at: Optional[UtcDateTime] = None
     outputs: Optional[Any] = None

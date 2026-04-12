@@ -47,6 +47,41 @@ def test_run_lists_repo_root(monkeypatch, tmp_path):
     )
 
 
+def test_run_searches_workspace(monkeypatch, tmp_path):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    runtime = Runtime()
+    run_id = runtime.run(
+        "search for `RuntimeState` in `hca/src/hca/common/enums.py`"
+    )
+
+    replay = reconstruct_state(run_id)
+    assert replay["state"] == RuntimeState.completed.value
+    assert replay["selected_action_kind"] == "search_workspace"
+    assert replay["latest_receipt"]["status"] == "success"
+    assert replay["latest_receipt"]["outputs"]["returned"] >= 1
+    assert replay["latest_receipt"]["outputs"]["matches"][0]["path"] == (
+        "hca/src/hca/common/enums.py"
+    )
+
+
+def test_run_investigates_workspace_issue(monkeypatch, tmp_path):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    runtime = Runtime()
+    run_id = runtime.run(
+        "investigate contract mismatch for `RuntimeState` in "
+        "`hca/src/hca/common/enums.py`"
+    )
+
+    replay = reconstruct_state(run_id)
+    assert replay["state"] == RuntimeState.completed.value
+    assert replay["selected_action_kind"] == "investigate_workspace_issue"
+    assert replay["latest_receipt"]["status"] == "success"
+    assert replay["artifacts_count"] == 1
+    assert replay["latest_receipt"]["outputs"]["returned_evidence_count"] >= 1
+
+
 def test_critic_broadcast_falls_back_without_optional_llm(monkeypatch):
     workspace = Workspace(capacity=3)
     workspace.admit(
