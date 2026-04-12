@@ -1,5 +1,3 @@
-import os
-import shutil
 from datetime import timedelta
 
 from hca.common.types import MemoryRecord
@@ -8,11 +6,6 @@ from hca.common.time import utc_now
 from hca.memory.retrieval import retrieve, calculate_staleness
 from hca.memory.contradiction_check import check_contradictions
 from hca.memory.episodic_store import EpisodicStore
-
-
-def setup_module():
-    if os.path.exists("storage/runs/test_memory_v5"):
-        shutil.rmtree("storage/runs/test_memory_v5")
 
 
 def test_staleness_logic():
@@ -50,7 +43,9 @@ def test_contradiction_detection():
     assert "blue" in (contradictions.reason or "")
 
 
-def test_retrieval_integration():
+def test_retrieval_integration(monkeypatch, tmp_path):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
     run_id = "test_memory_v5"
     store = EpisodicStore(run_id)
 
@@ -80,10 +75,4 @@ def test_retrieval_integration():
 
 
 if __name__ == "__main__":
-    setup_module()
-    test_staleness_logic()
-    print("test_staleness_logic passed")
-    test_contradiction_detection()
-    print("test_contradiction_detection passed")
-    test_retrieval_integration()
-    print("test_retrieval_integration passed")
+    raise SystemExit("Run this module with pytest")

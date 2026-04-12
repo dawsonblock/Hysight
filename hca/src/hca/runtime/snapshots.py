@@ -6,7 +6,16 @@ from collections import Counter
 from typing import Any, Dict, List, Optional
 
 from hca.common.enums import MemoryType, RuntimeState
-from hca.common.types import ActionCandidate, SnapshotRecord, WorkspaceItem
+from hca.common.types import (
+    ActionCandidate,
+    ArtifactSummary,
+    SnapshotRecord,
+    WorkflowBudget,
+    WorkflowCheckpoint,
+    WorkflowPlan,
+    WorkflowStepRecord,
+    WorkspaceItem,
+)
 from hca.memory.episodic_store import EpisodicStore
 from hca.memory.identity_store import IdentityStore
 from hca.memory.procedural_store import ProceduralStore
@@ -56,6 +65,11 @@ def build_runtime_snapshot(
     latest_receipt_id: Optional[str] = None,
     memory_counts: Optional[Dict[str, int]] = None,
     promotion_candidates: Optional[List[Dict[str, Any]]] = None,
+    active_workflow: Optional[WorkflowPlan] = None,
+    workflow_budget: Optional[WorkflowBudget] = None,
+    workflow_checkpoint: Optional[WorkflowCheckpoint] = None,
+    workflow_step_history: Optional[List[WorkflowStepRecord]] = None,
+    workflow_artifacts: Optional[List[ArtifactSummary]] = None,
 ) -> Dict[str, Any]:
     items = _workspace_items(workspace_or_items)
     snapshot = SnapshotRecord(
@@ -72,6 +86,11 @@ def build_runtime_snapshot(
             if selected_action is not None
             else None
         ),
+        active_workflow=active_workflow,
+        workflow_budget=workflow_budget,
+        workflow_checkpoint=workflow_checkpoint,
+        workflow_step_history=workflow_step_history or [],
+        workflow_artifacts=workflow_artifacts or [],
     )
     data = snapshot.model_dump(mode="json")
     if promotion_candidates:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -92,6 +93,29 @@ def _validate_cwd(cwd: Path, repo_root: Path) -> Path:
     return resolved_cwd
 
 
+def _sandbox_env() -> dict[str, str]:
+    allowed_keys = {
+        "PATH",
+        "HOME",
+        "USER",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "LANG",
+        "LC_ALL",
+        "TERM",
+    }
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key in allowed_keys
+    }
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return env
+
+
 def run_in_sandbox(
     argv: Sequence[str],
     *,
@@ -104,24 +128,38 @@ def run_in_sandbox(
     validated_cwd = _validate_cwd(cwd, repo_root)
 
     started = time.monotonic()
+    process: subprocess.Popen[str] | None = None
+    stdout_raw: Any = ""
+    stderr_raw: Any = ""
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             validated_argv,
             cwd=str(validated_cwd),
-            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             shell=False,
-            timeout=timeout_seconds,
-            env={**os.environ, "PYTHONUTF8": "1"},
-            check=False,
+            env=_sandbox_env(),
+            start_new_session=True,
         )
+        assert process is not None
+        stdout_raw, stderr_raw = process.communicate(timeout=timeout_seconds)
     except subprocess.TimeoutExpired as exc:
+        if process is not None:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout_raw, stderr_raw = process.communicate()
+        else:
+            stdout_raw, stderr_raw = exc.stdout, exc.stderr
         stdout, stdout_truncated = _truncate_output(
-            _normalize_output(exc.stdout),
+            _normalize_output(stdout_raw),
             max_output_chars,
         )
         stderr, stderr_truncated = _truncate_output(
-            _normalize_output(exc.stderr),
+            _normalize_output(stderr_raw),
             max_output_chars,
         )
         raise CommandTimeoutError(
@@ -132,21 +170,21 @@ def run_in_sandbox(
 
     duration_seconds = round(time.monotonic() - started, 3)
     stdout, stdout_truncated = _truncate_output(
-        _normalize_output(completed.stdout),
+        _normalize_output(stdout_raw),
         max_output_chars,
     )
     stderr, stderr_truncated = _truncate_output(
-        _normalize_output(completed.stderr),
+        _normalize_output(stderr_raw),
         max_output_chars,
     )
 
     return {
         "argv": validated_argv,
         "cwd": str(validated_cwd),
-        "returncode": completed.returncode,
+        "returncode": 0 if process is None else process.returncode,
         "stdout": stdout,
         "stderr": stderr,
-        "ok": completed.returncode == 0,
+        "ok": False if process is None else process.returncode == 0,
         "truncated": stdout_truncated or stderr_truncated,
         "duration_seconds": duration_seconds,
     }

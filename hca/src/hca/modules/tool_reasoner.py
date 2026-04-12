@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import List, Union
 
 from hca.common.types import ModuleProposal, WorkspaceItem
+from hca.modules.workflow_chains import (
+    build_workflow_plan,
+    resolve_step_arguments,
+)
 from hca.modules.workspace_intents import infer_workspace_action_from_text
 from hca.storage import load_run
 
@@ -33,6 +37,7 @@ class ToolReasoner:
         revised_proposals = []
         desired_action = None
         desired_args = {}
+        desired_workflow = None
         if intent_class == "store_note":
             desired_action = "store_note"
             desired_args = {
@@ -60,6 +65,25 @@ class ToolReasoner:
         elif intent_class == "general":
             desired_action, desired_args = infer_workspace_action_from_text(
                 str(perceived_arguments.get("text", ""))
+            )
+            desired_workflow = build_workflow_plan(
+                str(perceived_arguments.get("text", ""))
+            )
+
+        if desired_workflow is not None and not any(
+            item.kind == "workflow_plan"
+            and item.content.get("workflow_id")
+            == desired_workflow.workflow_id
+            for item in items
+        ):
+            revised_proposals.append(
+                WorkspaceItem(
+                    source_module=self.name,
+                    kind="workflow_plan",
+                    content=desired_workflow.model_dump(mode="json"),
+                    salience=0.92,
+                    confidence=max(0.78, desired_workflow.confidence),
+                )
             )
 
         if desired_action and not any(
@@ -172,47 +196,78 @@ class ToolReasoner:
                 intent_class = "general"
                 args = {"text": goal}
 
-        action = "echo"
-        final_args = {}
+        workflow_plan = build_workflow_plan(
+            str(args.get("text", args.get("query", "")))
+        )
 
-        if intent_class == "store_note":
-            action = "store_note"
-            final_args = {"note": args.get("text", args.get("note", ""))}
-        elif intent_class == "retrieve_memory":
-            inferred_action, inferred_args = infer_workspace_action_from_text(
-                str(args.get("query", ""))
+        candidate_items: list[WorkspaceItem] = []
+        if workflow_plan is not None:
+            candidate_items.append(
+                WorkspaceItem(
+                    source_module=self.name,
+                    kind="workflow_plan",
+                    content=workflow_plan.model_dump(mode="json"),
+                    salience=0.93,
+                    confidence=max(0.8, workflow_plan.confidence),
+                )
             )
-            if inferred_action is not None:
-                action = inferred_action
-                final_args = inferred_args
-            else:
-                action = "echo"
-                final_args = {"text": f"Searching for: {args.get('query')}"}
-        elif intent_class == "write_artifact":
-            action = "write_artifact"
-            final_args = args
-        elif intent_class == "general":
-            inferred_action, inferred_args = infer_workspace_action_from_text(
-                str(args.get("text", ""))
+            action = workflow_plan.steps[0].tool_name
+            final_args = resolve_step_arguments(
+                workflow_plan,
+                workflow_plan.steps[0],
+                step_history=[],
             )
-            if inferred_action is not None:
-                action = inferred_action
-                final_args = inferred_args
+            confidence = max(0.8, workflow_plan.confidence)
+        else:
+            action = "echo"
+            final_args = {}
+
+            if intent_class == "store_note":
+                action = "store_note"
+                final_args = {
+                    "note": args.get("text", args.get("note", ""))
+                }
+            elif intent_class == "retrieve_memory":
+                inferred_action, inferred_args = (
+                    infer_workspace_action_from_text(
+                        str(args.get("query", ""))
+                    )
+                )
+                if inferred_action is not None:
+                    action = inferred_action
+                    final_args = inferred_args
+                else:
+                    action = "echo"
+                    final_args = {
+                        "text": f"Searching for: {args.get('query')}"
+                    }
+            elif intent_class == "write_artifact":
+                action = "write_artifact"
+                final_args = args
+            elif intent_class == "general":
+                inferred_action, inferred_args = (
+                    infer_workspace_action_from_text(
+                        str(args.get("text", ""))
+                    )
+                )
+                if inferred_action is not None:
+                    action = inferred_action
+                    final_args = inferred_args
+                else:
+                    action = "echo"
+                    final_args = {"text": args.get("text", "hello")}
             else:
                 action = "echo"
                 final_args = {"text": args.get("text", "hello")}
-        else:
-            action = "echo"
-            final_args = {"text": args.get("text", "hello")}
 
-        confidence = 1.0
-        if strategy in {
-            "single_action_dispatch",
-            "workspace_inspection_strategy",
-        }:
             confidence = 1.0
-        elif strategy is None:
-            confidence = 0.8
+            if strategy in {
+                "single_action_dispatch",
+                "workspace_inspection_strategy",
+            }:
+                confidence = 1.0
+            elif strategy is None:
+                confidence = 0.8
 
         item = WorkspaceItem(
             source_module=self.name,
@@ -221,10 +276,11 @@ class ToolReasoner:
             salience=0.9,
             confidence=confidence,
         )
+        candidate_items.append(item)
 
         return ModuleProposal(
             source_module=self.name,
-            candidate_items=[item],
+            candidate_items=candidate_items,
             rationale=(
                 f"Selected {action} with confidence {confidence} "
                 f"based on strategy {strategy}."

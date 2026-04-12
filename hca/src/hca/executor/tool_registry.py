@@ -232,6 +232,15 @@ def _sha256_text(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+def _normalize_sha256_digest(value: str, *, field_name: str) -> str:
+    normalized = value.strip().lower()
+    if len(normalized) != 64 or any(
+        character not in "0123456789abcdef" for character in normalized
+    ):
+        raise ValueError(f"{field_name} must be a sha256 hex digest")
+    return normalized
+
+
 def _read_text_file(full_path: Path) -> str:
     if not _is_probably_text_file(full_path):
         raise ValueError("path must refer to a text file")
@@ -442,12 +451,10 @@ class ReplaceInFileArgs(ToolArgsModel):
     ) -> Optional[str]:
         if value is None:
             return None
-        normalized = value.strip().lower()
-        if len(normalized) != 64 or any(
-            character not in "0123456789abcdef" for character in normalized
-        ):
-            raise ValueError("expected_hash must be a sha256 hex digest")
-        return normalized
+        return _normalize_sha256_digest(
+            value,
+            field_name="expected_hash",
+        )
 
 
 class PatchTextFileArgs(ReplaceInFileArgs):
@@ -466,10 +473,58 @@ class PatchTextFileArgs(ReplaceInFileArgs):
 
 class CreateRunReportArgs(ToolArgsModel):
     path: Optional[StrictStr] = None
+    projected_final_status: Optional[StrictStr] = None
 
     @field_validator("path")
     @classmethod
     def _validate_path(
+        cls,
+        value: Optional[str],
+    ) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        return _normalize_relative_path(value)
+
+
+class SummarizeSearchResultsArgs(ToolArgsModel):
+    query: StrictStr = Field(min_length=1)
+    search_result: Dict[str, Any]
+    excerpt: Optional[Dict[str, Any]] = None
+    path: Optional[StrictStr] = None
+
+    @field_validator("path")
+    @classmethod
+    def _validate_path(
+        cls,
+        value: Optional[str],
+    ) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        return _normalize_relative_path(value)
+
+
+class CreateDiffReportArgs(ToolArgsModel):
+    target_path: StrictStr
+    before_hash: StrictStr
+    after_hash: StrictStr
+    changed_lines: list[Dict[str, int]] = Field(default_factory=list)
+    diff_artifact_path: Optional[StrictStr] = None
+    approval_id: Optional[StrictStr] = None
+    path: Optional[StrictStr] = None
+
+    @field_validator("target_path")
+    @classmethod
+    def _validate_target_path(cls, value: str) -> str:
+        return _normalize_relative_path(value)
+
+    @field_validator("before_hash", "after_hash")
+    @classmethod
+    def _validate_hashes(cls, value: str, info: Any) -> str:
+        return _normalize_sha256_digest(value, field_name=str(info.field_name))
+
+    @field_validator("diff_artifact_path", "path")
+    @classmethod
+    def _validate_optional_paths(
         cls,
         value: Optional[str],
     ) -> Optional[str]:
@@ -515,6 +570,7 @@ class RunCommandArgs(ToolArgsModel):
     argv: list[StrictStr]
     cwd: StrictStr = "."
     timeout_seconds: int = Field(default=10, ge=1, le=20)
+    require_zero_exit: bool = True
 
     @field_validator("argv")
     @classmethod
@@ -622,12 +678,53 @@ def _fingerprint(payload: Any) -> str:
     return hashlib.sha256(_stable_json(payload).encode("utf-8")).hexdigest()
 
 
-def _policy_snapshot(tool: ToolMetadata) -> Dict[str, Any]:
-    return {
-        "tool_name": tool.name,
-        "action_class": tool.action_class.value,
+def _effective_tool_policy(
+    tool: ToolMetadata,
+    arguments: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "action_class": tool.action_class,
         "requires_approval": tool.requires_approval,
         "reversibility": tool.reversibility,
+        "risk": tool.risk,
+        "cost": tool.cost,
+        "user_interruption_burden": tool.user_interruption_burden,
+    }
+    if tool.name in {"patch_text_file", "replace_in_file"} and not (
+        arguments or {}
+    ).get("apply", False):
+        policy.update(
+            {
+                "action_class": ActionClass.low,
+                "requires_approval": False,
+                "risk": min(tool.risk, 0.08),
+                "cost": min(tool.cost, 0.08),
+                "user_interruption_burden": 0.0,
+            }
+        )
+    if tool.name == "run_command":
+        policy.update(
+            {
+                "action_class": ActionClass.low,
+                "requires_approval": False,
+                "risk": min(tool.risk, 0.18),
+                "cost": min(tool.cost, 0.18),
+                "user_interruption_burden": 0.0,
+            }
+        )
+    return policy
+
+
+def _policy_snapshot(
+    tool: ToolMetadata,
+    arguments: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    effective_policy = _effective_tool_policy(tool, arguments)
+    return {
+        "tool_name": tool.name,
+        "action_class": effective_policy["action_class"].value,
+        "requires_approval": effective_policy["requires_approval"],
+        "reversibility": effective_policy["reversibility"],
         "timeout": tool.timeout,
         "artifact_behavior": tool.artifact_behavior,
         "side_effect_class": tool.side_effect_class,
@@ -639,9 +736,11 @@ def _policy_snapshot(tool: ToolMetadata) -> Dict[str, Any]:
         "expected_uncertainty_reduction": (
             tool.expected_uncertainty_reduction
         ),
-        "risk": tool.risk,
-        "cost": tool.cost,
-        "user_interruption_burden": tool.user_interruption_burden,
+        "risk": effective_policy["risk"],
+        "cost": effective_policy["cost"],
+        "user_interruption_burden": (
+            effective_policy["user_interruption_burden"]
+        ),
         "required_fields": tool.required_fields(),
     }
 
@@ -965,15 +1064,33 @@ def _patch_text_file(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
             "applied": applied,
             "occurrence_count": occurrences,
         },
+        "mutation_result": {
+            "target_path": normalized_path,
+            "status": "applied" if applied else "preview",
+            "changed_lines": changed_lines,
+            "before_hash": before_hash,
+            "after_hash": after_hash,
+            "hash_delta": {
+                "before_hash": before_hash,
+                "after_hash": after_hash,
+            },
+            "artifact_path": str(diff_relative_path),
+        },
         "diff_preview": diff_text[:_PATCH_DIFF_PREVIEW_CHARS],
         "diff_artifact_path": str(diff_relative_path),
         "applied": applied,
+        "touched_paths": [normalized_path] if applied else [],
     }
     result["_artifact_records"] = [
         {
             "path": str(diff_relative_path),
             "kind": "patch_diff",
             "metadata": {
+                "file_paths": [normalized_path],
+                "hashes": {
+                    "before_hash": before_hash,
+                    "after_hash": after_hash,
+                },
                 "target_path": normalized_path,
                 "before_hash": before_hash,
                 "after_hash": after_hash,
@@ -1073,7 +1190,7 @@ def _create_run_report(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
 
-    final_status = (
+    final_status = args.get("projected_final_status") or (
         context.state.value
         if context is not None
         else (
@@ -1106,6 +1223,40 @@ def _create_run_report(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
         "memory_outcomes": memory_outcomes,
         "event_count": len(events),
         "receipt_count": len(receipts),
+        "workflow": {
+            "active_workflow": (
+                context.active_workflow.model_dump(mode="json")
+                if context is not None and context.active_workflow is not None
+                else None
+            ),
+            "budget": (
+                context.workflow_budget.model_dump(mode="json")
+                if context is not None and context.workflow_budget is not None
+                else None
+            ),
+            "checkpoint": (
+                context.workflow_checkpoint.model_dump(mode="json")
+                if context is not None
+                and context.workflow_checkpoint is not None
+                else None
+            ),
+            "step_history": (
+                [
+                    record.model_dump(mode="json")
+                    for record in context.workflow_step_history
+                ]
+                if context is not None
+                else []
+            ),
+            "artifacts": (
+                [
+                    artifact.model_dump(mode="json")
+                    for artifact in context.workflow_artifacts
+                ]
+                if context is not None
+                else []
+            ),
+        },
     }
 
     relative_path, full_path = _artifact_paths(
@@ -1127,6 +1278,111 @@ def _create_run_report(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
         "approval_count": len(approvals),
         "artifact_count": len(artifacts),
         "memory_outcomes": memory_outcomes,
+        "workflow_id": (
+            context.active_workflow.workflow_id
+            if context is not None and context.active_workflow is not None
+            else None
+        ),
+    }
+
+
+def _summarize_search_results(
+    run_id: str,
+    args: Dict[str, Any],
+) -> Dict[str, Any]:
+    search_result = args["search_result"]
+    excerpt = args.get("excerpt") or {}
+    matches = search_result.get("matches")
+    if not isinstance(matches, list):
+        raise ValueError("search_result.matches must be a list")
+
+    top_matches = []
+    file_paths: list[str] = []
+    for match in matches[:3]:
+        if not isinstance(match, dict):
+            continue
+        path = match.get("path")
+        if isinstance(path, str):
+            file_paths.append(path)
+        top_matches.append(
+            {
+                "path": path,
+                "line_number": match.get("line_number"),
+                "preview": match.get("preview"),
+            }
+        )
+
+    report = {
+        "run_id": run_id,
+        "query": args["query"],
+        "searched_scope": search_result.get("searched_scope"),
+        "returned": search_result.get("returned"),
+        "total_match_count": search_result.get("total_match_count"),
+        "top_matches": top_matches,
+        "excerpt": excerpt,
+        "summary": (
+            f"Found {search_result.get('total_match_count', 0)} bounded "
+            f"matches for '{args['query']}'."
+        ),
+    }
+
+    relative_path, full_path = _artifact_paths(
+        run_id,
+        args.get("path"),
+        prefix="search_summary",
+        default_suffix=".json",
+    )
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return {
+        "path": str(relative_path),
+        "query": args["query"],
+        "top_match_count": len(top_matches),
+        "total_match_count": search_result.get("total_match_count", 0),
+        "file_paths": file_paths,
+    }
+
+
+def _create_diff_report(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    report = {
+        "run_id": run_id,
+        "target_path": args["target_path"],
+        "before_hash": args["before_hash"],
+        "after_hash": args["after_hash"],
+        "changed_lines": args.get("changed_lines") or [],
+        "diff_artifact_path": args.get("diff_artifact_path"),
+        "approval_id": args.get("approval_id"),
+        "certified_mutation": (
+            args["before_hash"] != args["after_hash"]
+        ),
+    }
+    relative_path, full_path = _artifact_paths(
+        run_id,
+        args.get("path"),
+        prefix="diff_report",
+        default_suffix=".json",
+    )
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return {
+        "path": str(relative_path),
+        "target_path": args["target_path"],
+        "before_hash": args["before_hash"],
+        "after_hash": args["after_hash"],
+        "changed_lines": args.get("changed_lines") or [],
+        "diff_artifact_path": args.get("diff_artifact_path"),
+        "approval_id": args.get("approval_id"),
+        "file_paths": [args["target_path"]],
+        "hashes": {
+            "before_hash": args["before_hash"],
+            "after_hash": args["after_hash"],
+        },
     }
 
 
@@ -1209,7 +1465,19 @@ def _run_command(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
     except CommandPolicyError as exc:
         raise ValueError(str(exc)) from exc
 
-    return {
+    artifact_relative_path, artifact_full_path = _artifact_paths(
+        run_id,
+        None,
+        prefix="command_result",
+        default_suffix=".json",
+    )
+    artifact_full_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_full_path.write_text(
+        json.dumps(result, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    payload = {
         "argv": result["argv"],
         "cwd": normalized_cwd,
         "returncode": result["returncode"],
@@ -1218,7 +1486,26 @@ def _run_command(run_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
         "ok": result["ok"],
         "truncated": result["truncated"],
         "duration_seconds": result["duration_seconds"],
+        "artifact_path": str(artifact_relative_path),
     }
+    payload["_artifact_records"] = [
+        {
+            "path": str(artifact_relative_path),
+            "kind": "command_result",
+            "metadata": {
+                "argv": result["argv"],
+                "cwd": normalized_cwd,
+                "returncode": result["returncode"],
+                "ok": result["ok"],
+            },
+        }
+    ]
+    if not result["ok"] and args.get("require_zero_exit", True):
+        payload["_failure_message"] = (
+            "Command exited with non-zero status "
+            f"{result['returncode']}"
+        )
+    return payload
 
 
 _REGISTRY: Dict[str, ToolMetadata] = {
@@ -1360,6 +1647,27 @@ _REGISTRY: Dict[str, ToolMetadata] = {
         expected_uncertainty_reduction=0.95,
         cost=0.12,
     ),
+    "summarize_search_results": ToolMetadata(
+        name="summarize_search_results",
+        description=(
+            "Create a deterministic investigation summary artifact from "
+            "bounded search outputs and an optional excerpt."
+        ),
+        prompt_signature=(
+            '{"query": "RuntimeState", "search_result": {...}, '
+            '"excerpt": {...}}'
+        ),
+        func=_summarize_search_results,
+        args_model=SummarizeSearchResultsArgs,
+        action_class=ActionClass.low,
+        requires_approval=False,
+        artifact_behavior="create_file",
+        side_effect_class="artifact_write",
+        path_scope="run_artifacts",
+        expected_progress=0.25,
+        expected_uncertainty_reduction=0.35,
+        cost=0.05,
+    ),
     "store_note": ToolMetadata(
         name="store_note",
         description="Persist a note inside run-scoped artifact storage.",
@@ -1403,7 +1711,10 @@ _REGISTRY: Dict[str, ToolMetadata] = {
             "Create a deterministic run evidence report artifact from "
             "events, receipts, approvals, artifacts, and memory outcomes."
         ),
-        prompt_signature='{"path": "reports/run-summary.json"}',
+        prompt_signature=(
+            '{"path": "reports/run-summary.json", '
+            '"projected_final_status": "completed"}'
+        ),
         func=_create_run_report,
         args_model=CreateRunReportArgs,
         action_class=ActionClass.low,
@@ -1414,6 +1725,27 @@ _REGISTRY: Dict[str, ToolMetadata] = {
         expected_progress=0.3,
         expected_uncertainty_reduction=0.4,
         cost=0.05,
+    ),
+    "create_diff_report": ToolMetadata(
+        name="create_diff_report",
+        description=(
+            "Create a structured diff certification artifact from a "
+            "bounded patch result."
+        ),
+        prompt_signature=(
+            '{"target_path": "README.md", "before_hash": "<sha256>", '
+            '"after_hash": "<sha256>"}'
+        ),
+        func=_create_diff_report,
+        args_model=CreateDiffReportArgs,
+        action_class=ActionClass.low,
+        requires_approval=False,
+        artifact_behavior="create_file",
+        side_effect_class="artifact_write",
+        path_scope="run_artifacts",
+        expected_progress=0.2,
+        expected_uncertainty_reduction=0.25,
+        cost=0.04,
     ),
     "patch_text_file": ToolMetadata(
         name="patch_text_file",
@@ -1569,7 +1901,8 @@ def build_action_binding(
         name,
         normalized_arguments,
     )
-    policy_snapshot = _policy_snapshot(tool)
+    effective_policy = _effective_tool_policy(tool, normalized_arguments)
+    policy_snapshot = _policy_snapshot(tool, normalized_arguments)
     policy_fingerprint = _fingerprint(policy_snapshot)
     action_fingerprint = _fingerprint(
         {
@@ -1583,8 +1916,8 @@ def build_action_binding(
         tool_name=tool.name,
         target=target,
         normalized_arguments=normalized_arguments,
-        action_class=tool.action_class,
-        requires_approval=tool.requires_approval,
+        action_class=effective_policy["action_class"],
+        requires_approval=effective_policy["requires_approval"],
         policy_snapshot=policy_snapshot,
         policy_fingerprint=policy_fingerprint,
         action_fingerprint=action_fingerprint,
@@ -1600,20 +1933,26 @@ def canonicalize_action_candidate(
         candidate.arguments,
         target=candidate.target,
     )
+    effective_policy = _effective_tool_policy(
+        tool,
+        binding.normalized_arguments,
+    )
     return candidate.model_copy(
         update={
             "arguments": binding.normalized_arguments,
             "action_class": binding.action_class,
             "requires_approval": binding.requires_approval,
             "binding": binding,
-            "reversibility": tool.reversibility,
+            "reversibility": effective_policy["reversibility"],
             "expected_progress": tool.expected_progress,
             "expected_uncertainty_reduction": (
                 tool.expected_uncertainty_reduction
             ),
-            "risk": tool.risk,
-            "cost": tool.cost,
-            "user_interruption_burden": tool.user_interruption_burden,
+            "risk": effective_policy["risk"],
+            "cost": effective_policy["cost"],
+            "user_interruption_burden": (
+                effective_policy["user_interruption_burden"]
+            ),
         }
     )
 
@@ -1624,6 +1963,8 @@ def build_action_candidate(
     *,
     provenance: Optional[list[str]] = None,
     target: Optional[str] = None,
+    workflow_id: Optional[str] = None,
+    workflow_step_id: Optional[str] = None,
 ) -> ActionCandidate:
     if not isinstance(kind, str) or not kind:
         raise ToolValidationError(
@@ -1633,22 +1974,30 @@ def build_action_candidate(
 
     tool = get_tool(kind)
     binding = build_action_binding(kind, arguments, target=target)
+    effective_policy = _effective_tool_policy(
+        tool,
+        binding.normalized_arguments,
+    )
     return ActionCandidate(
         kind=tool.name,
         target=target,
         arguments=binding.normalized_arguments,
         action_class=binding.action_class,
         binding=binding,
-        reversibility=tool.reversibility,
+        reversibility=effective_policy["reversibility"],
         expected_progress=tool.expected_progress,
         expected_uncertainty_reduction=(
             tool.expected_uncertainty_reduction
         ),
-        risk=tool.risk,
-        cost=tool.cost,
-        user_interruption_burden=tool.user_interruption_burden,
+        risk=effective_policy["risk"],
+        cost=effective_policy["cost"],
+        user_interruption_burden=(
+            effective_policy["user_interruption_burden"]
+        ),
         requires_approval=binding.requires_approval,
         provenance=provenance or [],
+        workflow_id=workflow_id,
+        workflow_step_id=workflow_step_id,
     )
 
 

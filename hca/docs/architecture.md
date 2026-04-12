@@ -24,12 +24,14 @@ The runtime orchestrates the agent loop and manages persistence through an autho
 - **Pause/Resume**: Supports asynchronous human-in-the-loop approvals with token-based consumption.
 - **Replay**: Can reconstruct the exact state of any run by replaying its event log from scratch.
 - **Bounded Replanning**: The runtime supports a configurable replan budget to resolve contradictions without infinite loops.
+- **Workflow Execution**: The runtime can select bounded workflow plans and advance them step-by-step while preserving the same approval, receipt, snapshot, and replay guarantees as single-action runs.
 
 ### 4. Hardened Executor (`hca.executor`)
 The executor is the single point of contact for external side effects.
 - **Tool Registry**: Maintains metadata, input schemas, and policy constraints for all tools.
 - **Policy Enforcement**: Checks for required approvals and risk levels before execution.
 - **Artifact Management**: Automatically records files produced by tools.
+- **Evidence Preservation**: Execution receipts preserve workflow step IDs, typed artifact summaries, touched paths, and structured mutation results so evidence survives failure, resume, and reporting.
 
 ### 5. Memory System (`hca.memory`)
 A multi-store memory system for long-term knowledge and short-term context.
@@ -48,13 +50,17 @@ A multi-store memory system for long-term knowledge and short-term context.
 5. **Admit**: Workspace selects items based on salience and confidence.
 6. **Recur**: Workspace resolves internal conflicts via bounded recurrence.
 7. **Assess**: Meta-monitor evaluates the workspace and issues a control signal (e.g., `replan`).
-8. **Select**: Runtime picks the best action candidate.
-9. **Approve**: If risky or required by policy, the runtime pauses for user approval.
+8. **Select**: Runtime picks the best executable candidate, which may be a single action or the first step of a bounded workflow plan.
+9. **Approve**: If the current step is risky or required by policy, the runtime pauses for user approval.
 10. **Execute**: Executor runs the tool, enforcing safety policies and recording receipts.
-11. **Observe**: Results are committed to episodic memory.
-12. **Report**: Final summary is emitted to the user.
+11. **Continue**: If a workflow is active and the step succeeded, the runtime resolves the next bounded step arguments and continues within the same run.
+12. **Observe**: Results are committed to episodic memory.
+13. **Report**: Final summary is emitted to the user, often through a terminal `create_run_report` step for workflow runs.
 
 ## Current Status (v5)
+- **Bounded Workflow Chains**: Investigation and mutation-verification workflows now execute inside the existing runtime authority path with persisted workflow checkpoints, step history, and workflow artifacts.
+- **Evidence Tools**: Added deterministic `summarize_search_results` and `create_diff_report` tools so workflows can emit explicit investigation summaries and mutation certification artifacts.
+- **Terminal Run Reports**: Workflow runs commonly end on `create_run_report`; replay and tests must inspect workflow history when they need the mutating or verification receipt rather than the final receipt.
 - **Self-Model & Missing Info**: Operationalized the `SelfModel` and `MissingInfo` modules for more robust meta-control.
 - **Memory Consolidation**: Implemented background consolidation logic for cleaning and summarizing episodic memory.
 - **Harden Replay & Approvals**: Stateful reconstruction handles approval denials, expirations, and richer snapshots.

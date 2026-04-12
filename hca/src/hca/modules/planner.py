@@ -8,10 +8,14 @@ import asyncio
 import json
 import os
 import uuid
-from typing import List, Union
+from typing import Any, List, Union
 
-from hca.common.types import ModuleProposal, WorkspaceItem
+from hca.common.types import ModuleProposal, WorkspaceItem, WorkflowPlan
 from hca.executor.tool_registry import tool_prompt_catalog
+from hca.modules.workflow_chains import (
+    build_workflow_plan,
+    resolve_step_arguments,
+)
 from hca.modules.workspace_intents import infer_workspace_action_from_text
 from hca.storage import load_run
 
@@ -23,6 +27,7 @@ def _system_prompt() -> str:
         "structured execution plan.\n\n"
         "Available strategies:\n"
         "  single_action_dispatch         — one-shot action\n"
+        "  bounded_workflow_chain         — bounded multi-step chain\n"
         "  memory_persistence_strategy    — store information to memory\n"
         "  information_retrieval_strategy — retrieve information "
         "from memory\n"
@@ -33,13 +38,16 @@ def _system_prompt() -> str:
         "  workspace_mutation_strategy    — patch one bounded text file\n"
         "  investigation_strategy         — gather evidence and emit "
         "a structured report\n"
+        "  mutation_verification_strategy — inspect, patch, verify, "
+        "and report within a bounded chain\n"
         "  run_reporting_strategy         — summarize the current run\n\n"
         f"Available actions:\n{tool_prompt_catalog()}\n\n"
         "Respond ONLY with valid JSON — no markdown fences, no extra keys:\n"
         "{\n"
         '    "strategy": "<strategy>",\n'
-        '    "action": "<action>",\n'
+        '    "action": "<action or null>",\n'
         '    "action_args": {"<key>": "<value>"},\n'
+        '    "workflow_class": "<workflow_class or null>",\n'
         '    "confidence": 0.85,\n'
         '    "rationale": "<one concise sentence>"\n'
         "}"
@@ -76,6 +84,21 @@ async def _llm_plan(goal: str, memory_context: str) -> dict:
 
 def _rule_based_plan(perceived_intent: str | None, goal: str) -> dict:
     """Deterministic fallback when LLM is unavailable."""
+    workflow_plan = build_workflow_plan(goal)
+    if workflow_plan is not None:
+        return {
+            "strategy": workflow_plan.strategy,
+            "workflow_plan": workflow_plan,
+            "action": workflow_plan.steps[0].tool_name,
+            "action_args": resolve_step_arguments(
+                workflow_plan,
+                workflow_plan.steps[0],
+                step_history=[],
+            ),
+            "confidence": max(0.7, workflow_plan.confidence),
+            "rationale": workflow_plan.rationale,
+        }
+
     workspace_action, workspace_args = infer_workspace_action_from_text(goal)
 
     def _strategy_for_action(action: str) -> str:
@@ -263,48 +286,105 @@ class Planner:
             except Exception:
                 pass
 
-        # LLM planning
-        plan = None
-        plan_from_llm = False
-        if goal:
-            try:
-                plan = asyncio.run(_llm_plan(goal, memory_context))
-                plan_from_llm = True
-            except Exception:
-                pass
+        plan: dict[str, Any] | None
+        workflow_plan = build_workflow_plan(goal) if goal else None
+        if workflow_plan is not None:
+            plan = {
+                "strategy": workflow_plan.strategy,
+                "workflow_plan": workflow_plan,
+                "action": workflow_plan.steps[0].tool_name,
+                "action_args": resolve_step_arguments(
+                    workflow_plan,
+                    workflow_plan.steps[0],
+                    step_history=[],
+                ),
+                "confidence": max(0.72, workflow_plan.confidence),
+                "rationale": workflow_plan.rationale,
+            }
+            plan_from_llm = False
+        else:
+            # LLM planning
+            plan = None
+            plan_from_llm = False
+            if goal:
+                try:
+                    plan = asyncio.run(_llm_plan(goal, memory_context))
+                    plan_from_llm = True
+                except Exception:
+                    pass
 
-        if not plan:
-            plan = _rule_based_plan(perceived_intent, goal)
+            if plan is None:
+                plan = _rule_based_plan(perceived_intent, goal)
+
+        assert plan is not None
+
+        workflow_plan_payload = plan.get("workflow_plan")
+        workflow_class = None
+        workflow_id = None
+        if isinstance(workflow_plan_payload, WorkflowPlan):
+            workflow_class = workflow_plan_payload.workflow_class.value
+            workflow_id = workflow_plan_payload.workflow_id
+
+        action_args = plan.get("action_args", {})
+        if not isinstance(action_args, dict):
+            action_args = {}
+
+        strategy = str(plan.get("strategy", "single_action_dispatch"))
+        action = plan.get("action")
+        if not isinstance(action, str) or not action:
+            action = "echo"
+        confidence_value = plan.get("confidence", 0.8)
+        if isinstance(confidence_value, (int, float)):
+            confidence = float(confidence_value)
+        else:
+            confidence = 0.8
+        rationale = str(plan.get("rationale", "LLM-generated plan."))
 
         plan_item = WorkspaceItem(
             source_module=self.name,
             kind="task_plan",
             content={
-                "strategy": plan.get("strategy", "single_action_dispatch"),
-                "action": plan.get("action"),
-                "action_args": plan.get("action_args", {}),
-                "rationale": plan.get("rationale", ""),
+                "strategy": strategy,
+                "action": action,
+                "action_args": action_args,
+                "workflow_class": workflow_class,
+                "workflow_id": workflow_id,
+                "rationale": rationale,
                 "llm_planned": plan_from_llm,
                 "memory_context_used": bool(memory_context),
             },
             salience=0.7,
-            confidence=plan.get("confidence", 0.8),
+            confidence=confidence,
         )
+
+        candidate_items = [plan_item]
+
+        if isinstance(workflow_plan_payload, WorkflowPlan):
+            candidate_items.append(
+                WorkspaceItem(
+                    source_module=self.name,
+                    kind="workflow_plan",
+                    content=workflow_plan_payload.model_dump(mode="json"),
+                    salience=0.9,
+                    confidence=confidence,
+                )
+            )
 
         action_item = WorkspaceItem(
             source_module=self.name,
             kind="action_suggestion",
             content={
-                "action": plan.get("action", "echo"),
-                "args": plan.get("action_args", {}),
+                "action": action,
+                "args": action_args,
             },
             salience=0.85,
-            confidence=plan.get("confidence", 0.8),
+            confidence=confidence,
         )
+        candidate_items.append(action_item)
 
         return ModuleProposal(
             source_module=self.name,
-            candidate_items=[plan_item, action_item],
-            rationale=plan.get("rationale", "LLM-generated plan."),
-            confidence=plan.get("confidence", 0.8),
+            candidate_items=candidate_items,
+            rationale=rationale,
+            confidence=confidence,
         )

@@ -51,6 +51,11 @@ class EventType(str, Enum):
     report_emitted = "report_emitted"
     run_failed = "run_failed"
     run_completed = "run_completed"
+    workflow_selected = "workflow_selected"
+    workflow_step_started = "workflow_step_started"
+    workflow_step_finished = "workflow_step_finished"
+    workflow_budget_exhausted = "workflow_budget_exhausted"
+    workflow_terminated = "workflow_terminated"
 
 
 class MemoryType(str, Enum):
@@ -86,3 +91,28 @@ class ReceiptStatus(str, Enum):
     success = "success"
     failure = "failure"
     pending = "pending"
+
+
+class WorkflowClass(str, Enum):
+    investigation = "investigation"
+    contract_api_drift = "contract_api_drift"
+    targeted_mutation = "targeted_mutation"
+    mutation_with_verification = "mutation_with_verification"
+    report_generation = "report_generation"
+
+
+class WorkflowStepStatus(str, Enum):
+    pending = "pending"
+    awaiting_approval = "awaiting_approval"
+    completed = "completed"
+    failed = "failed"
+    skipped = "skipped"
+
+
+class ArtifactType(str, Enum):
+    generic_file = "generic_file"
+    investigation_summary = "investigation_summary"
+    patch_diff = "patch_diff"
+    diff_report = "diff_report"
+    run_report = "run_report"
+    command_result = "command_result"

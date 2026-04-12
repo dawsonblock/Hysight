@@ -31,9 +31,9 @@ Everything else below is full setup, configuration, and advanced use.
 
 ## Overview
 
-Hysight is an implementation of a **Hybrid Cognitive Agent (HCA)** as a bounded operator runtime. Its authority path stays inside the existing runtime, approval, executor, and replay layers instead of handing control to an open-ended autonomous loop. The cognitive modules (Planner, Critic, Perception, ToolReasoner) still compete for space in a capacity-limited **Global Workspace**, but they can only propose actions that the registry and executor actually implement.
+Hysight is an implementation of a **Hybrid Cognitive Agent (HCA)** as a bounded operator runtime. Its authority path stays inside the existing runtime, approval, executor, and replay layers instead of handing control to an open-ended autonomous loop. The cognitive modules (Planner, Critic, Perception, ToolReasoner) still compete for space in a capacity-limited **Global Workspace**, but they can only propose actions and workflow plans that the registry and executor actually implement.
 
-The runtime currently executes one canonical action per run through a single authority path in `hca/src/hca/runtime/runtime.py`, with approval-bound resume for mutating actions, immutable event logging, snapshots, receipts, artifacts, and replay reconstruction. Practical repo work comes from a small bounded tool catalog for inspection, reporting, and approved mutation rather than speculative autonomy.
+The runtime executes through one canonical authority path in `hca/src/hca/runtime/runtime.py`. A run may execute either a single validated action or a bounded workflow plan that chains inspection, approval-bound mutation, verification, and deterministic reporting steps inside the same run context. Approvals, snapshots, receipts, artifacts, and replay all remain anchored to that single path, and workflow runs commonly terminate on `create_run_report` rather than the mutating step itself.
 
 ---
 
@@ -105,6 +105,7 @@ The runtime currently executes one canonical action per run through a single aut
 | **Approval Gate** | Approval is defined centrally in the tool registry. Read-only workspace inspection tools execute directly; mutation and other configured side effects require explicit approval and resume with the same canonical action binding. |
 | **Immutable Event Log** | Every state transition, proposal, and execution is appended to an append-only JSONL log |
 | **Conflict Detection** | Automatic detection of contradicting action proposals across modules |
+| **Bounded Workflow Plans** | The planner/runtime can select explicit investigation and mutation-verification workflow templates that execute step-by-step without bypassing the executor, approval, or replay layers. |
 | **Bounded Tool Catalog** | Repo-bounded tools now cover stat, glob, search, targeted text reads, investigation reports, run reports, approved text patching, artifact writes, and an allowlisted command path |
 | **Memory Outcomes** | Local episodic memory writes are authoritative. External memory-controller ingestion remains best-effort, but success and failure are now emitted explicitly in the event log. |
 | **Evaluation Harnesses** | Six built-in harnesses: audit, coordination, embodiment, memory, metacognition, proactivity |
@@ -125,7 +126,9 @@ Current bounded tools:
 - `read_text_range`
 - `read_file` (legacy alias for `read_text_range`)
 - `investigate_workspace_issue`
+- `summarize_search_results`
 - `create_run_report`
+- `create_diff_report`
 - `patch_text_file`
 - `replace_in_file` (legacy alias for `patch_text_file`)
 - `store_note`
@@ -134,14 +137,19 @@ Current bounded tools:
 
 Mutation and reporting behavior:
 
+- Workflow plans persist `active_workflow`, workflow checkpoints, step history, and workflow artifacts in the run context, snapshots, and replay output.
 - `patch_text_file` binds approval to the canonical validated action plus a file-state hash before execution.
 - Successful patch actions emit before/after hashes, changed-line summaries, and a diff artifact.
+- `summarize_search_results` writes a deterministic investigation artifact from bounded search output and targeted file excerpts.
+- `create_diff_report` certifies an applied mutation with hashes, changed lines, diff-artifact linkage, and approval provenance.
 - `create_run_report` materializes a deterministic artifact from prior events, receipts, approvals, artifacts, and memory outcomes for a run.
+- In workflow runs, the terminal selected action and latest receipt may be `create_run_report`, so mutation and verification evidence should be read from workflow step history or the relevant receipt rather than assuming the last receipt is the mutating step.
 - `investigate_workspace_issue` is a bounded read-only workflow tool that searches, reads targeted ranges, and emits a structured evidence artifact.
 
 Replay and memory guarantees:
 
 - Replay and resume validate canonical action identity against approval bindings before consuming approval.
+- Replay reconstructs workflow state, including active workflow metadata, workflow checkpoints, step history, and workflow artifacts.
 - Local episodic memory writes are part of the normal runtime path.
 - External memory-controller ingestion is best-effort, but emits `external_memory_written` or `external_memory_write_failed` events instead of failing silently.
 - Command execution, when used, stays bounded to allowlisted argument arrays, repo-relative cwd, timeouts, and truncated output.

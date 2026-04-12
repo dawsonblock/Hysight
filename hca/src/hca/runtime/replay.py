@@ -14,6 +14,7 @@ from hca.runtime.snapshots import (
     count_memory_records,
     summarize_workspace_items,
 )
+from hca.storage import load_run
 from hca.storage.approvals import (
     get_approval_status,
     get_consumption,
@@ -342,6 +343,7 @@ def reconstruct_state(run_id: str) -> Dict[str, Any]:
     """Reconstruct the run state using events as source of truth."""
     events = list(iter_events(run_id))
     snapshot = load_latest_valid_snapshot(run_id)
+    context = load_run(run_id)
     history = _transition_history(events)
     selected_action = _selected_action_from_events(events, snapshot=snapshot)
     workspace_summary = _workspace_summary_from_events(
@@ -414,6 +416,57 @@ def reconstruct_state(run_id: str) -> Dict[str, Any]:
         "memory_outcomes": _memory_outcomes_from_events(events),
         "event_count": len(events),
         "meta_signals_seen": meta_signals_seen,
+        "active_workflow": (
+            context.active_workflow.model_dump(mode="json")
+            if context is not None and context.active_workflow is not None
+            else (
+                snapshot.get("active_workflow")
+                if isinstance(snapshot, dict)
+                else None
+            )
+        ),
+        "workflow_budget": (
+            context.workflow_budget.model_dump(mode="json")
+            if context is not None and context.workflow_budget is not None
+            else (
+                snapshot.get("workflow_budget")
+                if isinstance(snapshot, dict)
+                else None
+            )
+        ),
+        "workflow_checkpoint": (
+            context.workflow_checkpoint.model_dump(mode="json")
+            if context is not None and context.workflow_checkpoint is not None
+            else (
+                snapshot.get("workflow_checkpoint")
+                if isinstance(snapshot, dict)
+                else None
+            )
+        ),
+        "workflow_step_history": (
+            [
+                record.model_dump(mode="json")
+                for record in context.workflow_step_history
+            ]
+            if context is not None
+            else (
+                snapshot.get("workflow_step_history")
+                if isinstance(snapshot, dict)
+                else []
+            )
+        ),
+        "workflow_artifacts": (
+            [
+                artifact.model_dump(mode="json")
+                for artifact in context.workflow_artifacts
+            ]
+            if context is not None
+            else (
+                snapshot.get("workflow_artifacts")
+                if isinstance(snapshot, dict)
+                else []
+            )
+        ),
         "discrepancies": [],
     }
     discrepancies = _detect_snapshot_discrepancies(

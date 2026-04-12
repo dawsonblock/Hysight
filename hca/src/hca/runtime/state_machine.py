@@ -26,7 +26,12 @@ _TRANSITIONS: Dict[RuntimeState, Set[RuntimeState]] = {
     },
     RuntimeState.executing: {RuntimeState.observing},
     RuntimeState.observing: {RuntimeState.memory_commit},
-    RuntimeState.memory_commit: {RuntimeState.proposing, RuntimeState.reporting},
+    RuntimeState.memory_commit: {
+        RuntimeState.proposing,
+        RuntimeState.awaiting_approval,
+        RuntimeState.executing,
+        RuntimeState.reporting,
+    },
     RuntimeState.reporting: {RuntimeState.completed},
     RuntimeState.completed: set(),
     RuntimeState.failed: set(),
@@ -38,7 +43,11 @@ def can_transition(current: RuntimeState, target: RuntimeState) -> bool:
     """Return True if a state transition is allowed."""
     # Any active state can transition to failed or halted
     if target in {RuntimeState.failed, RuntimeState.halted}:
-        return current not in {RuntimeState.completed, RuntimeState.failed, RuntimeState.halted}
+        return current not in {
+            RuntimeState.completed,
+            RuntimeState.failed,
+            RuntimeState.halted,
+        }
     allowed = _TRANSITIONS.get(current)
     return allowed is not None and target in allowed
 
@@ -48,7 +57,11 @@ def assert_transition(current: RuntimeState, target: RuntimeState) -> None:
     if not can_transition(current, target):
         allowed = _TRANSITIONS.get(current, set())
         # Add the common states allowed from any active state
-        if current not in {RuntimeState.completed, RuntimeState.failed, RuntimeState.halted}:
+        if current not in {
+            RuntimeState.completed,
+            RuntimeState.failed,
+            RuntimeState.halted,
+        }:
             allowed = allowed.union({RuntimeState.failed, RuntimeState.halted})
         allowed_names = ", ".join(s.value for s in allowed)
         raise ValueError(

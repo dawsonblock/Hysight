@@ -339,6 +339,81 @@ def test_create_run_report_materializes_prior_run(monkeypatch, tmp_path):
     assert len(report["actions_executed"]) == 1
 
 
+def test_summarize_search_results_writes_artifact(monkeypatch, tmp_path):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="summarize_search_results",
+            arguments={
+                "query": "RuntimeState",
+                "search_result": {
+                    "searched_scope": "hca",
+                    "returned": 1,
+                    "total_match_count": 1,
+                    "matches": [
+                        {
+                            "path": "hca/src/hca/common/enums.py",
+                            "line_number": 6,
+                            "preview": "class RuntimeState(str, Enum):",
+                        }
+                    ],
+                },
+                "excerpt": {
+                    "path": "hca/src/hca/common/enums.py",
+                    "text": "class RuntimeState(str, Enum):",
+                },
+            },
+        ),
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    assert receipt.artifacts == [receipt.outputs["path"]]
+    report_path = _artifact_full_path("test_run", receipt.outputs["path"])
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["query"] == "RuntimeState"
+    assert report["top_matches"][0]["path"] == "hca/src/hca/common/enums.py"
+
+
+def test_create_diff_report_writes_certification_artifact(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="create_diff_report",
+            arguments={
+                "target_path": "notes/todo.txt",
+                "before_hash": "1" * 64,
+                "after_hash": "2" * 64,
+                "changed_lines": [
+                    {
+                        "start_line": 1,
+                        "removed_lines": 1,
+                        "added_lines": 1,
+                    }
+                ],
+                "diff_artifact_path": (
+                    "storage/runs/test_run/artifacts/patch.diff"
+                ),
+                "approval_id": "approval-1",
+            },
+        ),
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    report_path = _artifact_full_path("test_run", receipt.outputs["path"])
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["target_path"] == "notes/todo.txt"
+    assert report["certified_mutation"] is True
+
+
 def test_planner_fallback_emits_registered_tool(monkeypatch):
     planner = planner_module.Planner()
     monkeypatch.setattr(
@@ -359,6 +434,7 @@ def test_planner_fallback_emits_registered_tool(monkeypatch):
 
 def test_run_command_executes_pytest(monkeypatch, tmp_path):
     monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
     _write_file(
         tmp_path,
         "test_sample.py",
@@ -385,6 +461,45 @@ def test_run_command_executes_pytest(monkeypatch, tmp_path):
     assert "1 passed" in (
         receipt.outputs["stdout"] + receipt.outputs["stderr"]
     )
+
+
+def test_run_command_nonzero_exit_preserves_artifact(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    _write_file(
+        tmp_path,
+        "test_sample.py",
+        "def test_fail():\n    assert False\n",
+    )
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="run_command",
+            arguments={
+                "argv": ["pytest", "-q", "test_sample.py"],
+                "cwd": ".",
+                "timeout_seconds": 10,
+            },
+        ),
+        approved=True,
+    )
+
+    assert receipt.status == ReceiptStatus.failure
+    assert receipt.validation_status == "validated"
+    assert receipt.outputs["ok"] is False
+    assert receipt.artifacts == [receipt.outputs["artifact_path"]]
+    command_artifact = _artifact_full_path(
+        "test_run",
+        receipt.outputs["artifact_path"],
+    )
+    assert command_artifact.exists()
+    payload = json.loads(command_artifact.read_text(encoding="utf-8"))
+    assert payload["returncode"] != 0
 
 
 def test_run_command_rejects_disallowed_command(monkeypatch, tmp_path):

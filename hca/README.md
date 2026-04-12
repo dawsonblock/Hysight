@@ -10,12 +10,13 @@ This project implements a small, bounded cognitive agent runtime.  It is inspire
 * **Optional LLM integrations** – Planner, Critic and TextPerception can call external LLM providers when configured, but each path degrades to deterministic fallback logic when the integration is unavailable.
 * **Typed memory stores** – episodic, semantic, procedural and identity records are stored separately with provenance.  Local episodic writes are authoritative; external memory-controller ingestion is best-effort but now emits explicit success or failure events.
 * **Execution authority** – all external side effects are performed through a single executor which enforces registry-defined validation, policy, approval, and artifact handling.  Mutating tools require explicit approval and resume with the same canonical action binding.
+* **Bounded workflow plans** – the runtime can select explicit workflow templates for investigation and mutation-with-verification tasks.  Those workflows run step-by-step through the same executor, approval, snapshot, and replay path instead of introducing a separate autonomous loop.
 * **Logging and replay** – every significant event is appended to a JSONL log.  Runs can be reconstructed from this log and associated artifacts, and approval-bound resume validates the same canonical action identity before execution.
 * **API and CLI** – a minimal FastAPI application exposes endpoints to create runs, inspect state and grant approvals.  CLI entry points provide smoke, evaluation and replay commands.
 
 ## Bounded tool surface
 
-The package is intentionally small and bounded.  The current registry covers repo inspection (`list_dir`, `stat_path`, `glob_workspace`, `search_workspace`, `read_text_range`), evidence/report generation (`investigate_workspace_issue`, `create_run_report`, `write_artifact`), approval-bound mutation (`patch_text_file`), memory/note persistence (`store_note`), and one allowlisted command path (`run_command`).
+The package is intentionally small and bounded.  The current registry covers repo inspection (`list_dir`, `stat_path`, `glob_workspace`, `search_workspace`, `read_text_range`), evidence/report generation (`investigate_workspace_issue`, `summarize_search_results`, `create_run_report`, `create_diff_report`, `write_artifact`), approval-bound mutation (`patch_text_file`), memory/note persistence (`store_note`), and one allowlisted command path (`run_command`).
 
 ## Running the project
 
@@ -41,4 +42,4 @@ The evaluation CLI exercises coordination, metacognition, memory, proactivity, e
 
 ## Limitations
 
-This codebase is still a bounded runtime intended as a foundation for further work.  Several modules support optional external LLM integrations, but those paths only activate when the relevant dependencies and credentials are configured.  The runtime still executes one canonical action per run rather than an autonomous multi-step loop, so more complex workflows are composed through bounded tools and explicit follow-up runs.  Persistence is still primarily local-filesystem based unless you pair the package with the surrounding backend and memory sidecar.  The package therefore remains unsuitable as a standalone production deployment without additional operational hardening.
+This codebase is still a bounded runtime intended as a foundation for further work.  Several modules support optional external LLM integrations, but those paths only activate when the relevant dependencies and credentials are configured.  The runtime now supports bounded multi-step workflow chains, but those chains are template-driven and registry-backed rather than open-ended autonomy.  Workflow runs often end on a generated run-report receipt, so downstream consumers must inspect workflow step history when they need the mutating or verification receipt specifically.  Persistence is still primarily local-filesystem based unless you pair the package with the surrounding backend and memory sidecar.  The package therefore remains unsuitable as a standalone production deployment without additional operational hardening.

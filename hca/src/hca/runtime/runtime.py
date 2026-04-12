@@ -14,15 +14,23 @@ from hca.common.enums import (
     MemoryType,
     ReceiptStatus,
     RuntimeState,
+    WorkflowStepStatus,
 )
 from hca.common.time import utc_now
 from hca.common.types import (
     ActionCandidate,
+    ArtifactSummary,
     ApprovalConsumption,
     MetaAssessment,
     ApprovalRequest,
     MemoryRecord,
+    MutationResult,
     RunContext,
+    WorkflowBudget,
+    WorkflowCheckpoint,
+    WorkflowPlan,
+    WorkflowStep,
+    WorkflowStepRecord,
 )
 from hca.executor.approvals import validate_resume_approval
 from hca.executor.executor import Executor
@@ -35,8 +43,9 @@ from hca.memory.episodic_store import EpisodicStore
 from hca.meta.monitor import assess
 from hca.meta.self_model import capability_summary
 from hca.modules import Planner, Critic, TextPerception, ToolReasoner
+from hca.modules.workflow_chains import resolve_step_arguments
 from hca.paths import ensure_repo_root_on_sys_path
-from hca.prediction.action_scoring import score_actions
+from hca.prediction.action_scoring import score_actions, score_workflow_plans
 from hca.runtime.snapshots import build_runtime_snapshot
 from hca.runtime.state_machine import assert_transition
 from hca.storage import (
@@ -131,6 +140,11 @@ class Runtime:
             pending_approval_id=context.pending_approval_id,
             latest_receipt_id=latest_receipt_id,
             promotion_candidates=promotion_candidates,
+            active_workflow=context.active_workflow,
+            workflow_budget=context.workflow_budget,
+            workflow_checkpoint=context.workflow_checkpoint,
+            workflow_step_history=context.workflow_step_history,
+            workflow_artifacts=context.workflow_artifacts,
         )
         append_snapshot(context.run_id, snapshot)
         append_event(
@@ -143,6 +157,465 @@ class Runtime:
             },
         )
         return snapshot
+
+    @staticmethod
+    def _workflow_step_index(
+        workflow: WorkflowPlan,
+        step_id: str,
+    ) -> int:
+        for index, step in enumerate(workflow.steps):
+            if step.step_id == step_id:
+                return index
+        raise ValueError(f"Workflow step not found: {step_id}")
+
+    def _select_action(
+        self,
+        context: RunContext,
+        candidate: ActionCandidate,
+    ) -> None:
+        append_event(
+            context,
+            EventType.action_selected,
+            "runtime",
+            candidate.model_dump(mode="json"),
+        )
+
+    def _candidate_for_workflow_step(
+        self,
+        context: RunContext,
+        workflow: WorkflowPlan,
+        step: WorkflowStep,
+        *,
+        provenance: Optional[list[str]] = None,
+        step_history: Optional[list[WorkflowStepRecord]] = None,
+    ) -> ActionCandidate:
+        arguments = resolve_step_arguments(
+            workflow,
+            step,
+            step_history=(
+                context.workflow_step_history
+                if step_history is None
+                else step_history
+            ),
+        )
+        return build_action_candidate(
+            step.tool_name,
+            arguments,
+            provenance=provenance
+            or [
+                f"workflow:{workflow.workflow_id}",
+                step.step_key or step.step_id,
+            ],
+            workflow_id=workflow.workflow_id,
+            workflow_step_id=step.step_id,
+        )
+
+    def _activate_workflow(
+        self,
+        context: RunContext,
+        workflow: WorkflowPlan,
+        *,
+        score: Optional[Dict[str, float]] = None,
+    ) -> None:
+        context.active_workflow = workflow
+        context.workflow_budget = WorkflowBudget(
+            max_steps=max(workflow.max_steps, len(workflow.steps)),
+            consumed_steps=0,
+        )
+        context.workflow_checkpoint = WorkflowCheckpoint(
+            workflow_id=workflow.workflow_id,
+            current_step_index=0,
+            current_step_id=(
+                workflow.steps[0].step_id if workflow.steps else None
+            ),
+        )
+        context.workflow_step_history = []
+        context.workflow_artifacts = []
+        self._persist_context(context)
+        append_event(
+            context,
+            EventType.workflow_selected,
+            "runtime",
+            {
+                "workflow_id": workflow.workflow_id,
+                "workflow_class": workflow.workflow_class.value,
+                "strategy": workflow.strategy,
+                "step_count": len(workflow.steps),
+                "score": score,
+            },
+        )
+
+    def _request_approval(
+        self,
+        context: RunContext,
+        candidate: ActionCandidate,
+        *,
+        workspace: Optional[Workspace] = None,
+    ) -> str:
+        approval_id = str(uuid.uuid4())
+        request = ApprovalRequest(
+            approval_id=approval_id,
+            run_id=context.run_id,
+            action_id=candidate.action_id,
+            action_kind=candidate.kind,
+            action_class=candidate.action_class or ActionClass.medium,
+            binding=candidate.binding,
+            reason="Action requires approval",
+            expires_at=utc_now() + timedelta(minutes=15),
+        )
+        append_approval_request(context.run_id, request)
+        context.pending_approval_id = approval_id
+        self._persist_context(context)
+        append_event(
+            context,
+            EventType.approval_requested,
+            "runtime",
+            {
+                "approval_id": approval_id,
+                "action_id": candidate.action_id,
+                "action_kind": candidate.kind,
+                "workflow_id": candidate.workflow_id,
+                "workflow_step_id": candidate.workflow_step_id,
+                "action_fingerprint": (
+                    candidate.binding.action_fingerprint
+                    if candidate.binding is not None
+                    else None
+                ),
+                "policy_fingerprint": (
+                    candidate.binding.policy_fingerprint
+                    if candidate.binding is not None
+                    else None
+                ),
+                "expires_at": (
+                    request.expires_at.isoformat()
+                    if request.expires_at
+                    else None
+                ),
+            },
+        )
+        self._set_state(context, RuntimeState.awaiting_approval)
+        self._write_snapshot(
+            context,
+            workspace or [],
+            selected_action=candidate,
+        )
+        return context.run_id
+
+    def _record_workflow_step(
+        self,
+        context: RunContext,
+        candidate: ActionCandidate,
+        receipt_payload: Dict[str, Any],
+    ) -> Optional[WorkflowStepRecord]:
+        workflow = context.active_workflow
+        step_id = candidate.workflow_step_id
+        if workflow is None or candidate.workflow_id != workflow.workflow_id:
+            return None
+        if step_id is None:
+            return None
+
+        step = next(
+            (
+                current
+                for current in workflow.steps
+                if current.step_id == step_id
+            ),
+            None,
+        )
+        if step is None:
+            return None
+
+        status = (
+            WorkflowStepStatus.completed
+            if receipt_payload.get("status") == ReceiptStatus.success.value
+            else WorkflowStepStatus.failed
+        )
+        artifact_summaries = [
+            ArtifactSummary.model_validate(summary)
+            for summary in receipt_payload.get("artifact_summaries") or []
+        ]
+        mutation_payload = receipt_payload.get("mutation_result")
+        record = WorkflowStepRecord(
+            step_id=step.step_id,
+            step_key=step.step_key,
+            tool_name=step.tool_name,
+            status=status,
+            action_id=candidate.action_id,
+            receipt_id=receipt_payload.get("receipt_id"),
+            approval_id=receipt_payload.get("approval_id"),
+            outputs=receipt_payload.get("outputs"),
+            touched_paths=receipt_payload.get("touched_paths") or [],
+            artifacts=receipt_payload.get("artifacts") or [],
+            artifact_summaries=artifact_summaries,
+            mutation_result=(
+                None
+                if mutation_payload is None
+                else MutationResult.model_validate(mutation_payload)
+            ),
+        )
+
+        context.workflow_step_history.append(record)
+        if artifact_summaries:
+            seen_paths = {
+                artifact.path for artifact in context.workflow_artifacts
+            }
+            for artifact in artifact_summaries:
+                if artifact.path not in seen_paths:
+                    context.workflow_artifacts.append(artifact)
+                    seen_paths.add(artifact.path)
+
+        if context.workflow_budget is not None:
+            context.workflow_budget.consumed_steps += 1
+
+        if context.workflow_checkpoint is not None:
+            step_index = self._workflow_step_index(workflow, step.step_id)
+            context.workflow_checkpoint.latest_receipt_id = (
+                receipt_payload.get("receipt_id")
+            )
+            context.workflow_checkpoint.latest_artifact_paths = list(
+                dict.fromkeys(
+                    context.workflow_checkpoint.latest_artifact_paths
+                    + (receipt_payload.get("artifacts") or [])
+                )
+            )
+            if status == WorkflowStepStatus.completed:
+                context.workflow_checkpoint.completed_step_ids = list(
+                    dict.fromkeys(
+                        context.workflow_checkpoint.completed_step_ids
+                        + [step.step_id]
+                    )
+                )
+                next_index = step_index + 1
+            else:
+                next_index = step_index
+            context.workflow_checkpoint.current_step_index = next_index
+            context.workflow_checkpoint.current_step_id = (
+                workflow.steps[next_index].step_id
+                if next_index < len(workflow.steps)
+                else None
+            )
+
+        self._persist_context(context)
+        append_event(
+            context,
+            EventType.workflow_step_finished,
+            "runtime",
+            {
+                "workflow_id": workflow.workflow_id,
+                "workflow_step_id": step.step_id,
+                "step_key": step.step_key,
+                "tool_name": step.tool_name,
+                "status": status.value,
+                "receipt_id": receipt_payload.get("receipt_id"),
+                "approval_id": receipt_payload.get("approval_id"),
+                "artifacts": receipt_payload.get("artifacts") or [],
+                "touched_paths": receipt_payload.get("touched_paths") or [],
+            },
+        )
+        return record
+
+    def _continue_workflow(
+        self,
+        context: RunContext,
+        candidate: ActionCandidate,
+        receipt_payload: Dict[str, Any],
+        *,
+        workspace: Optional[Workspace] = None,
+    ) -> str:
+        workflow = context.active_workflow
+        if workflow is None or candidate.workflow_id != workflow.workflow_id:
+            raise ValueError(
+                "workflow continuation requires an active workflow"
+            )
+
+        self._record_workflow_step(context, candidate, receipt_payload)
+
+        if receipt_payload.get("status") != ReceiptStatus.success.value:
+            self._execution_failure_count += 1
+            append_event(
+                context,
+                EventType.workflow_terminated,
+                "runtime",
+                {
+                    "workflow_id": workflow.workflow_id,
+                    "reason": "step_failed",
+                    "workflow_step_id": candidate.workflow_step_id,
+                    "receipt_id": receipt_payload.get("receipt_id"),
+                },
+            )
+            self._set_state(
+                context,
+                RuntimeState.failed,
+                {
+                    "reason": "workflow_step_failed",
+                    "workflow_id": workflow.workflow_id,
+                    "workflow_step_id": candidate.workflow_step_id,
+                    "failure_count": self._execution_failure_count,
+                },
+            )
+            append_event(
+                context,
+                EventType.report_emitted,
+                "runtime",
+                {
+                    "action_id": candidate.action_id,
+                    "status": receipt_payload.get("status"),
+                    "failure_count": self._execution_failure_count,
+                    "workflow_id": workflow.workflow_id,
+                },
+            )
+            append_event(
+                context,
+                EventType.run_failed,
+                "runtime",
+                {
+                    "receipt_id": receipt_payload.get("receipt_id"),
+                    "failure_count": self._execution_failure_count,
+                    "workflow_id": workflow.workflow_id,
+                },
+            )
+            self._write_snapshot(
+                context,
+                workspace or [],
+                selected_action=candidate,
+                latest_receipt_id=receipt_payload.get("receipt_id"),
+            )
+            return context.run_id
+
+        checkpoint = context.workflow_checkpoint
+        next_index = (
+            checkpoint.current_step_index
+            if checkpoint is not None
+            else len(workflow.steps)
+        )
+        if next_index >= len(workflow.steps):
+            self._set_state(context, RuntimeState.reporting)
+            append_event(
+                context,
+                EventType.report_emitted,
+                "runtime",
+                {
+                    "action_id": candidate.action_id,
+                    "status": receipt_payload.get("status"),
+                    "failure_count": self._execution_failure_count,
+                    "workflow_id": workflow.workflow_id,
+                },
+            )
+            append_event(
+                context,
+                EventType.workflow_terminated,
+                "runtime",
+                {
+                    "workflow_id": workflow.workflow_id,
+                    "reason": "completed",
+                    "receipt_id": receipt_payload.get("receipt_id"),
+                },
+            )
+            self._set_state(context, RuntimeState.completed)
+            append_event(
+                context,
+                EventType.run_completed,
+                "runtime",
+                {
+                    "receipt_id": receipt_payload.get("receipt_id"),
+                    "workflow_id": workflow.workflow_id,
+                },
+            )
+            self._write_snapshot(
+                context,
+                workspace or [],
+                selected_action=candidate,
+                latest_receipt_id=receipt_payload.get("receipt_id"),
+            )
+            return context.run_id
+
+        if (
+            context.workflow_budget is not None
+            and context.workflow_budget.remaining_steps <= 0
+        ):
+            append_event(
+                context,
+                EventType.workflow_budget_exhausted,
+                "runtime",
+                {
+                    "workflow_id": workflow.workflow_id,
+                    "max_steps": context.workflow_budget.max_steps,
+                },
+            )
+            append_event(
+                context,
+                EventType.workflow_terminated,
+                "runtime",
+                {
+                    "workflow_id": workflow.workflow_id,
+                    "reason": "budget_exhausted",
+                },
+            )
+            self._set_state(
+                context,
+                RuntimeState.failed,
+                {
+                    "reason": "workflow_budget_exhausted",
+                    "workflow_id": workflow.workflow_id,
+                },
+            )
+            self._write_snapshot(
+                context,
+                workspace or [],
+                selected_action=candidate,
+                latest_receipt_id=receipt_payload.get("receipt_id"),
+            )
+            return context.run_id
+
+        next_step = workflow.steps[next_index]
+        try:
+            next_candidate = self._candidate_for_workflow_step(
+                context,
+                workflow,
+                next_step,
+                provenance=candidate.provenance,
+            )
+        except (KeyError, ToolValidationError, ValueError) as exc:
+            append_event(
+                context,
+                EventType.workflow_terminated,
+                "runtime",
+                {
+                    "workflow_id": workflow.workflow_id,
+                    "reason": "next_step_unbuildable",
+                    "workflow_step_id": next_step.step_id,
+                    "error": str(exc),
+                },
+            )
+            self._set_state(
+                context,
+                RuntimeState.failed,
+                {
+                    "reason": "workflow_next_step_unbuildable",
+                    "workflow_id": workflow.workflow_id,
+                    "workflow_step_id": next_step.step_id,
+                },
+            )
+            self._write_snapshot(
+                context,
+                workspace or [],
+                selected_action=candidate,
+                latest_receipt_id=receipt_payload.get("receipt_id"),
+            )
+            return context.run_id
+        self._select_action(context, next_candidate)
+        if next_candidate.requires_approval:
+            return self._request_approval(
+                context,
+                next_candidate,
+                workspace=workspace,
+            )
+        return self._execute_and_complete(
+            context,
+            next_candidate,
+            approved=False,
+            workspace=workspace,
+        )
 
     def _record_execution_memory(
         self,
@@ -565,15 +1038,9 @@ class Runtime:
             for item in workspace.items
             if item.kind == "action_suggestion"
         ]
-        if not action_candidates:
-            self._set_state(
-                context,
-                RuntimeState.failed,
-                {"reason": "no_actionable_candidates"},
-            )
-            self._write_snapshot(context, workspace)
-            return context.run_id
-
+        workflow_items = [
+            item for item in workspace.items if item.kind == "workflow_plan"
+        ]
         candidates = []
         invalid_candidates = []
         for item in action_candidates:
@@ -585,7 +1052,7 @@ class Runtime:
                         provenance=item.provenance,
                     )
                 )
-            except (KeyError, ToolValidationError) as exc:
+            except (KeyError, ToolValidationError, ValueError) as exc:
                 invalid_candidates.append(
                     {
                         "item_id": item.item_id,
@@ -603,6 +1070,93 @@ class Runtime:
                     "issues": invalid_candidates,
                 },
             )
+
+        workflow_plans: list[WorkflowPlan] = []
+        invalid_workflows = []
+        for item in workflow_items:
+            try:
+                workflow_plans.append(
+                    WorkflowPlan.model_validate(item.content)
+                )
+            except Exception as exc:
+                invalid_workflows.append(
+                    {
+                        "item_id": item.item_id,
+                        "message": str(exc),
+                    }
+                )
+
+        if invalid_workflows:
+            append_event(
+                context,
+                EventType.report_emitted,
+                "runtime",
+                {
+                    "reason_code": "invalid_workflow_plans",
+                    "issues": invalid_workflows,
+                },
+            )
+
+        if not candidates and not workflow_plans:
+            self._set_state(
+                context,
+                RuntimeState.failed,
+                {"reason": "no_actionable_candidates"},
+            )
+            self._write_snapshot(context, workspace)
+            return context.run_id
+
+        if workflow_plans:
+            scored_workflows = score_workflow_plans(workflow_plans)
+            best_workflow = None
+            best_workflow_score: Optional[Dict[str, float]] = None
+            best_candidate = None
+            for workflow, workflow_score in scored_workflows:
+                if not workflow.steps:
+                    continue
+                try:
+                    candidate = self._candidate_for_workflow_step(
+                        context,
+                        workflow,
+                        workflow.steps[0],
+                        provenance=[f"workflow_plan:{workflow.workflow_id}"],
+                        step_history=[],
+                    )
+                except (KeyError, ToolValidationError, ValueError) as exc:
+                    invalid_workflows.append(
+                        {
+                            "workflow_id": workflow.workflow_id,
+                            "message": str(exc),
+                        }
+                    )
+                    continue
+                best_workflow = workflow
+                best_workflow_score = workflow_score
+                best_candidate = candidate
+                break
+
+            if best_workflow is not None and best_candidate is not None:
+                self._activate_workflow(
+                    context,
+                    best_workflow,
+                    score=best_workflow_score,
+                )
+                self._select_action(context, best_candidate)
+                if best_candidate.requires_approval:
+                    return self._request_approval(
+                        context,
+                        best_candidate,
+                        workspace=workspace,
+                    )
+
+                context.pending_approval_id = None
+                self._persist_context(context)
+                return self._execute_and_complete(
+                    context,
+                    best_candidate,
+                    approved=False,
+                    workspace=workspace,
+                )
 
         if not candidates:
             self._set_state(
@@ -638,60 +1192,14 @@ class Runtime:
             )
 
         best_candidate, _ = scored[selected_index]
-        append_event(
-            context,
-            EventType.action_selected,
-            "runtime",
-            best_candidate.model_dump(mode="json"),
-        )
+        self._select_action(context, best_candidate)
 
         if best_candidate.requires_approval:
-            approval_id = str(uuid.uuid4())
-            request = ApprovalRequest(
-                approval_id=approval_id,
-                run_id=context.run_id,
-                action_id=best_candidate.action_id,
-                action_kind=best_candidate.kind,
-                action_class=best_candidate.action_class or ActionClass.medium,
-                binding=best_candidate.binding,
-                reason="Action requires approval",
-                expires_at=utc_now() + timedelta(minutes=15),
-            )
-            append_approval_request(context.run_id, request)
-            context.pending_approval_id = approval_id
-            self._persist_context(context)
-            append_event(
+            return self._request_approval(
                 context,
-                EventType.approval_requested,
-                "runtime",
-                {
-                    "approval_id": approval_id,
-                    "action_id": best_candidate.action_id,
-                    "action_kind": best_candidate.kind,
-                    "action_fingerprint": (
-                        best_candidate.binding.action_fingerprint
-                        if best_candidate.binding is not None
-                        else None
-                    ),
-                    "policy_fingerprint": (
-                        best_candidate.binding.policy_fingerprint
-                        if best_candidate.binding is not None
-                        else None
-                    ),
-                    "expires_at": (
-                        request.expires_at.isoformat()
-                        if request.expires_at
-                        else None
-                    ),
-                },
+                best_candidate,
+                workspace=workspace,
             )
-            self._set_state(context, RuntimeState.awaiting_approval)
-            self._write_snapshot(
-                context,
-                workspace,
-                selected_action=best_candidate,
-            )
-            return context.run_id
 
         context.pending_approval_id = None
         self._persist_context(context)
@@ -715,6 +1223,32 @@ class Runtime:
                 context,
                 RuntimeState.executing,
                 {"tool": candidate.kind, "action_id": candidate.action_id},
+            )
+        if (
+            context.active_workflow is not None
+            and candidate.workflow_id == context.active_workflow.workflow_id
+            and candidate.workflow_step_id is not None
+        ):
+            step = next(
+                (
+                    current
+                    for current in context.active_workflow.steps
+                    if current.step_id == candidate.workflow_step_id
+                ),
+                None,
+            )
+            append_event(
+                context,
+                EventType.workflow_step_started,
+                "runtime",
+                {
+                    "workflow_id": candidate.workflow_id,
+                    "workflow_step_id": candidate.workflow_step_id,
+                    "step_key": step.step_key if step is not None else None,
+                    "tool_name": candidate.kind,
+                    "action_id": candidate.action_id,
+                    "approval_id": approval_id,
+                },
             )
         append_event(
             context,
@@ -785,6 +1319,17 @@ class Runtime:
                 latest_receipt_id=receipt.receipt_id,
             )
             return context.run_id
+
+        if (
+            context.active_workflow is not None
+            and candidate.workflow_id == context.active_workflow.workflow_id
+        ):
+            return self._continue_workflow(
+                context,
+                candidate,
+                receipt_payload,
+                workspace=workspace,
+            )
 
         if receipt.status == ReceiptStatus.success:
             self._set_state(context, RuntimeState.reporting)

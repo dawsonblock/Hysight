@@ -1,5 +1,3 @@
-import os
-import shutil
 from hca.common.types import (
     ApprovalConsumption,
     ApprovalDecisionRecord,
@@ -20,12 +18,9 @@ from hca.storage.approvals import (
 from hca.executor.approvals import validate_resume_approval
 
 
-def setup_module():
-    if os.path.exists("storage/runs/test_v5"):
-        shutil.rmtree("storage/runs/test_v5")
+def test_approval_lifecycle(monkeypatch, tmp_path):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
 
-
-def test_approval_lifecycle():
     run_id = "test_v5"
     app_id = "app-1"
 
@@ -114,6 +109,4 @@ def test_approval_lifecycle():
 
 
 if __name__ == "__main__":
-    setup_module()
-    test_approval_lifecycle()
-    print("test_approval_lifecycle passed")
+    raise SystemExit("Run this module with pytest")

@@ -4,16 +4,17 @@
 import json
 import os
 import shutil
-from pathlib import Path
 
 import pytest
 
 import hca.executor.tool_registry as tool_registry
+from hca.paths import run_storage_path
 from hca.runtime.runtime import Runtime
 from hca.runtime.replay import reconstruct_state
 from hca.common.enums import RuntimeState, ApprovalDecision
 from hca.common.types import ApprovalDecisionRecord, ApprovalGrant
 from hca.storage.approvals import append_decision, append_grant
+from hca.storage.receipts import iter_receipts
 
 
 def setup_module():
@@ -62,7 +63,7 @@ def test_resume_from_events_only():
     )
     append_grant(run_id, ApprovalGrant(approval_id=app_id, token="t1"))
 
-    snap_path = f"storage/runs/{run_id}/snapshots.jsonl"
+    snap_path = run_storage_path(run_id, "snapshots.jsonl")
     if os.path.exists(snap_path):
         os.remove(snap_path)
 
@@ -96,7 +97,7 @@ def test_resume_rejects_tampered_selected_action():
     )
     append_grant(run_id, ApprovalGrant(approval_id=app_id, token="t1"))
 
-    events_path = Path(f"storage/runs/{run_id}/events.jsonl")
+    events_path = run_storage_path(run_id, "events.jsonl")
     events = [
         json.loads(line)
         for line in events_path.read_text(encoding="utf-8").splitlines()
@@ -156,18 +157,22 @@ def test_resume_patch_action_preserves_binding(monkeypatch, tmp_path):
 
     replayed_final = reconstruct_state(run_id)
     assert replayed_final["state"] == RuntimeState.completed.value
+    patch_receipt = next(
+        receipt
+        for receipt in iter_receipts(run_id)
+        if receipt.get("approval_id") == app_id
+        and receipt.get("action_kind") == "patch_text_file"
+    )
     assert (
-        replayed_final["latest_receipt"]["binding"][
-            "action_fingerprint"
-        ]
-        == replayed_final["selected_action"]["binding"][
+        patch_receipt["binding"]["action_fingerprint"]
+        == replayed["approval"]["request"]["binding"][
             "action_fingerprint"
         ]
     )
-    assert replayed_final["latest_receipt"]["side_effects"] == [
+    assert patch_receipt["side_effects"] == [
         "modified:notes/todo.txt"
     ]
-    assert replayed_final["latest_receipt"]["artifacts"]
+    assert patch_receipt["artifacts"]
     assert target_path.read_text(encoding="utf-8") == "hello mars\n"
 
 

@@ -15,6 +15,9 @@ from hca.common.enums import (
     ApprovalDecision,
     ControlSignal,
     ReceiptStatus,
+    WorkflowClass,
+    WorkflowStepStatus,
+    ArtifactType,
 )
 from hca.common.time import ensure_utc, utc_now
 
@@ -37,6 +40,15 @@ class RunContext(BaseModel):
     replan_budget: int = 3
     current_replan_count: int = 0
     pending_approval_id: Optional[str] = None
+    active_workflow: Optional["WorkflowPlan"] = None
+    workflow_budget: Optional["WorkflowBudget"] = None
+    workflow_checkpoint: Optional["WorkflowCheckpoint"] = None
+    workflow_step_history: List["WorkflowStepRecord"] = Field(
+        default_factory=list
+    )
+    workflow_artifacts: List["ArtifactSummary"] = Field(
+        default_factory=list
+    )
 
 
 class WorkspaceItem(BaseModel):
@@ -101,6 +113,87 @@ class ActionCandidate(BaseModel):
     policy_alignment: float = 1.0
     requires_approval: bool = False
     provenance: List[str] = Field(default_factory=list)
+    workflow_id: Optional[str] = None
+    workflow_step_id: Optional[str] = None
+
+
+class WorkflowBudget(BaseModel):
+    max_steps: int = 0
+    consumed_steps: int = 0
+
+    @property
+    def remaining_steps(self) -> int:
+        return max(0, self.max_steps - self.consumed_steps)
+
+
+class WorkflowStep(BaseModel):
+    step_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    step_key: Optional[str] = None
+    tool_name: str
+    arguments_template: Dict[str, Any] = Field(default_factory=dict)
+    description: Optional[str] = None
+    optional: bool = False
+
+
+class WorkflowPlan(BaseModel):
+    workflow_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    workflow_class: WorkflowClass
+    strategy: str
+    steps: List[WorkflowStep] = Field(default_factory=list)
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    rationale: Optional[str] = None
+    confidence: float = 0.0
+    max_steps: int = 0
+    termination_condition: str = "all_steps_completed"
+
+
+class ArtifactSummary(BaseModel):
+    artifact_id: Optional[str] = None
+    artifact_type: ArtifactType
+    run_id: str
+    path: str
+    source_action_ids: List[str] = Field(default_factory=list)
+    file_paths: List[str] = Field(default_factory=list)
+    hashes: Dict[str, str] = Field(default_factory=dict)
+    approval_id: Optional[str] = None
+    workflow_id: Optional[str] = None
+    created_at: UtcDateTime = Field(default_factory=utc_now)
+
+
+class MutationResult(BaseModel):
+    target_path: str
+    status: str
+    changed_lines: List[Dict[str, int]] = Field(default_factory=list)
+    before_hash: str
+    after_hash: str
+    hash_delta: Dict[str, str] = Field(default_factory=dict)
+    artifact_id: Optional[str] = None
+    artifact_path: Optional[str] = None
+
+
+class WorkflowCheckpoint(BaseModel):
+    workflow_id: str
+    current_step_index: int = 0
+    current_step_id: Optional[str] = None
+    completed_step_ids: List[str] = Field(default_factory=list)
+    latest_receipt_id: Optional[str] = None
+    latest_artifact_paths: List[str] = Field(default_factory=list)
+
+
+class WorkflowStepRecord(BaseModel):
+    step_id: str
+    step_key: Optional[str] = None
+    tool_name: str
+    status: WorkflowStepStatus
+    action_id: Optional[str] = None
+    receipt_id: Optional[str] = None
+    approval_id: Optional[str] = None
+    outputs: Optional[Any] = None
+    touched_paths: List[str] = Field(default_factory=list)
+    artifacts: List[str] = Field(default_factory=list)
+    artifact_summaries: List[ArtifactSummary] = Field(default_factory=list)
+    mutation_result: Optional[MutationResult] = None
+    completed_at: UtcDateTime = Field(default_factory=utc_now)
 
 
 class MetaAssessment(BaseModel):
@@ -186,11 +279,16 @@ class ExecutionReceipt(BaseModel):
     binding: Optional[ActionBinding] = None
     validation_status: str = "validated"
     validated_arguments: Optional[Dict[str, Any]] = None
+    workflow_id: Optional[str] = None
+    workflow_step_id: Optional[str] = None
     started_at: UtcDateTime = Field(default_factory=utc_now)
     finished_at: Optional[UtcDateTime] = None
     outputs: Optional[Any] = None
     side_effects: Optional[List[str]] = None
+    touched_paths: Optional[List[str]] = None
     artifacts: Optional[List[str]] = None
+    artifact_summaries: Optional[List[ArtifactSummary]] = None
+    mutation_result: Optional[MutationResult] = None
     error: Optional[str] = None
     audit_hash: Optional[str] = None
 
@@ -250,6 +348,11 @@ class ArtifactRecord(BaseModel):
     action_id: str
     kind: str
     path: str
+    source_action_ids: List[str] = Field(default_factory=list)
+    file_paths: List[str] = Field(default_factory=list)
+    hashes: Dict[str, str] = Field(default_factory=dict)
+    approval_id: Optional[str] = None
+    workflow_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     created_at: UtcDateTime = Field(default_factory=utc_now)
 
@@ -268,3 +371,12 @@ class SnapshotRecord(BaseModel):
     workspace_summary: Dict[str, Any] = Field(default_factory=dict)
     pending_approval_id: Optional[str] = None
     selected_action: Optional[Dict[str, Any]] = None
+    active_workflow: Optional[WorkflowPlan] = None
+    workflow_budget: Optional[WorkflowBudget] = None
+    workflow_checkpoint: Optional[WorkflowCheckpoint] = None
+    workflow_step_history: List[WorkflowStepRecord] = Field(
+        default_factory=list
+    )
+    workflow_artifacts: List[ArtifactSummary] = Field(
+        default_factory=list
+    )
