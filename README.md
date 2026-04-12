@@ -1,17 +1,28 @@
-# Hysight — Hybrid Cognitive Agent
+# Hysight
 
-*A bounded cognitive runtime that thinks, plans, critiques, and acts — with human approval built in.*
+A proof-first Hybrid Cognitive Agent runtime with bounded authority, replay-backed operations, and human approval for side effects.
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Motor%203.3-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![Rust](https://img.shields.io/badge/Rust-Axum%200.7-CE412B?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Verification](https://img.shields.io/badge/verification-proof--first-0f172a)](#testing)
+[![Operator Surface](https://img.shields.io/badge/operator-replay--backed-0f766e)](#api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
 ## Quick start
+
+| I want to... | Command |
+| --- | --- |
+| Verify the default local proof surface | `python scripts/run_tests.py` |
+| Start the backend | `./scripts/run_backend.sh` |
+| Start the frontend | `cd frontend && yarn start` |
+| Run the optional memvid sidecar | `./memvid_service/target/release/memvid-sidecar` |
+
+If you only do one thing, run the proof surface first. Hysight treats local verification as the default entry point, not an afterthought.
 
 ```bash
 # 1. Install backend test dependencies
@@ -24,12 +35,22 @@ python scripts/run_tests.py
 RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
 ```
 
-That is the only command you need to verify the system locally.
-Everything else below is full setup, configuration, and advanced use.
+That is the shortest path to prove the system locally. Everything else below covers setup, configuration, operator workflows, and advanced usage.
+
+## Jump to
+
+- [Why Hysight](#why-hysight)
+- [Architecture](#architecture)
+- [Bounded Tool Catalog](#bounded-tool-catalog)
+- [Running the Application](#running-the-application)
+- [API](#api)
+- [Testing](#testing)
+
+Hysight is built for teams who want agentic behavior without surrendering control: bounded tools, explicit approvals, replayable execution, and a default workflow that starts with proof instead of promises.
 
 ---
 
-## Overview
+## Why Hysight
 
 Hysight is an implementation of a **Hybrid Cognitive Agent (HCA)** as a bounded operator runtime. Its authority path stays inside the existing runtime, approval, executor, and replay layers instead of handing control to an open-ended autonomous loop. The cognitive modules (Planner, Critic, Perception, ToolReasoner) still compete for space in a capacity-limited **Global Workspace**, but they can only propose actions and workflow plans that the registry and executor actually implement.
 
@@ -37,9 +58,49 @@ The runtime executes through one canonical authority path in `hca/src/hca/runtim
 
 The frontend also exposes a replay-backed operator console beside the live chat surface. Recent run summaries, per-run event history, and artifact previews all come from the same bounded backend replay and storage surface rather than a second UI-only state model.
 
+### What makes it different
+
+- Bounded authority: proposals are cheap, but execution only happens through canonical action binding, approval policy, and the executor.
+- Replay-backed operations: the operator UI and HTTP APIs read from the same stored run history, receipts, approvals, artifacts, and snapshots that the runtime writes.
+- Proof-first workflow: the shortest supported path is to verify the repo locally before starting services.
+- Graceful degradation: LLM-assisted modules can fall back to deterministic behavior when external model dependencies are unavailable.
+
+### At a glance
+
+| Layer | Role | Where to look |
+| --- | --- | --- |
+| Runtime | Deterministic orchestration, workflow execution, state transitions, replay | `hca/src/hca/runtime/` |
+| Executor | Canonical binding, approvals, bounded tool dispatch | `hca/src/hca/executor/` |
+| Workspace | Capacity-limited proposal competition and ranking | `hca/src/hca/workspace/` |
+| Backend | FastAPI operator surface and memory/status endpoints | `backend/` |
+| Frontend | Live chat plus replay-backed operator console | `frontend/` |
+| Contracts | JSON schema and runtime/operator reference docs | `contract/`, `hca/docs/` |
+
 ---
 
 ## Architecture
+
+### Authority path
+
+```mermaid
+flowchart LR
+    Goal[Goal] --> Runtime[Runtime]
+    Runtime --> Modules[Planner / Critic / Perception / ToolReasoner]
+    Modules --> Workspace[Global Workspace]
+    Workspace --> Scoring[Meta monitor + action scoring]
+    Scoring --> Binding[Canonical action binding]
+    Binding --> Approval[Approval gate]
+    Approval --> Executor[Executor]
+    Executor --> Tools[Bounded registry tools]
+    Tools --> Storage[Events / receipts / artifacts / snapshots]
+    Storage --> Replay[Replay]
+    Replay --> Operator[Backend APIs + operator console]
+```
+
+### Expanded system layout
+
+<details>
+<summary>Show full module layout</summary>
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -47,7 +108,7 @@ The frontend also exposes a replay-backed operator console beside the live chat 
 │                                                         │
 │  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌──────┐  │
 │  │ Planner  │  │  Critic  │  │Perception │  │ Tool │  │
-│  │ (LLM)   │  │(LLM+Rule)│  │  (Text)   │  │Rsner │  │
+│  │ (LLM)    │  │(LLM+Rule)│  │  (Text)   │  │Rsner │  │
 │  └────┬─────┘  └────┬─────┘  └─────┬─────┘  └──┬───┘  │
 │       │             │              │             │      │
 │       └─────────────┴──────────────┴─────────────┘      │
@@ -84,17 +145,19 @@ The frontend also exposes a replay-backed operator console beside the live chat 
 │               │  episodic / semantic│                  │
 │               └─────────────────────┘                  │
 └─────────────────────────────────────────────────────────┘
-         │                            │
+    │                            │
   ┌──────▼──────┐            ┌────────▼────────┐
-  │  FastAPI    │            │  memvid-sidecar  │
-  │  Backend    │            │  (Rust / Axum)   │
+  │  FastAPI    │            │  memvid-sidecar │
+  │  Backend    │            │  (Rust / Axum)  │
   └──────┬──────┘            └─────────────────┘
-         │
+    │
   ┌──────▼──────┐
   │  React 19   │
   │  Frontend   │
   └─────────────┘
 ```
+
+</details>
 
 ---
 
@@ -465,12 +528,13 @@ curl "http://localhost:8000/api/hca/run/<run-id>/artifacts/<artifact-id>"
 
 ### Runtime reference docs
 
-- `hca/docs/operator-runtime-contract.md` freezes the current bounded
-  operator/runtime contract from code reality.
-- `hca/docs/runtime-contracts.md` describes the runtime types, workflow
-  semantics, and state-machine guarantees.
-- `contract/schema.json` is the authoritative HTTP payload contract used by
-  the backend contract-conformance proof.
+- [hca/docs/operator-runtime-contract.md](hca/docs/operator-runtime-contract.md)
+  freezes the current bounded operator/runtime contract from code reality.
+- [hca/docs/runtime-contracts.md](hca/docs/runtime-contracts.md)
+  describes the runtime types, workflow semantics, and state-machine
+  guarantees.
+- [contract/schema.json](contract/schema.json) is the authoritative HTTP
+  payload contract used by the backend contract-conformance proof.
 
 ---
 
