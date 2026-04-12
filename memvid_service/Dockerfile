@@ -50,6 +50,12 @@ COPY --from=builder /app/target/release/memvid-sidecar /app/memvid-sidecar
 # Writable data directory; bind-mount or volume in compose
 RUN mkdir -p /app/data
 
+# Non-root runtime user; only /app/data needs write access
+RUN addgroup --system hysight \
+ && adduser --system --ingroup hysight --no-create-home hysight \
+ && chown -R hysight:hysight /app/data
+USER hysight
+
 ENV RUST_LOG=info
 ENV MEMORY_SERVICE_PORT=3031
 

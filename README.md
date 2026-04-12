@@ -244,10 +244,10 @@ python -m pip install -e ./hca -r backend/requirements.txt
 ### 4. Configure environment variables
 
 ```bash
-cp backend/.env.example backend/.env   # if it doesn't exist, create it
+cp .env.example .env   # fill in values before starting
 ```
 
-Edit `backend/.env`:
+Edit `.env`:
 
 ```dotenv
 # Optional — MongoDB connection
@@ -308,10 +308,10 @@ fails fast if the service is unreachable.
 ### Start the backend
 
 ```bash
-cd backend
-uvicorn server:app --reload --port 8000
+./scripts/run_backend.sh
 ```
 
+The script loads `.env`, validates prerequisites and mode, and starts uvicorn.
 The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
 ### Start the frontend

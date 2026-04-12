@@ -117,6 +117,24 @@ docker build -f memvid_service/Dockerfile -t hysight-sidecar .
 
 ## 7 — Common failure cases
 
+### Container user and volume permissions
+
+Both containers run as a non-root system user (`hysight`). The only directory
+that requires write access is mounted as a named volume:
+
+| Container | Mount path | Volume name |
+|---|---|---|
+| `backend` | `/app/storage` | `hca-storage` |
+| `memvid-sidecar` | `/app/data` | `sidecar-data` |
+
+Docker initialises named volumes by copying the container's existing directory
+content (which is already owned by `hysight`), so no manual `chown` step is
+needed for compose-managed deployments.
+
+If you bind-mount a host directory instead of using a named volume, ensure the
+host directory is writable by UID/GID 65534 (the system user Docker assigns by
+default) or create a user with a matching UID.
+
 ### `BackendConfigurationError: Mongo configuration is partial`
 Set **both** `MONGO_URL` and `DB_NAME`, or unset both. Mixed state is rejected at startup.
 

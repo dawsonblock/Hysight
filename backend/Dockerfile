@@ -37,6 +37,12 @@ COPY hca/           /app/hca/
 # Writable storage directory (bind-mount or volume in compose)
 RUN mkdir -p /app/storage/memory /app/storage/runs
 
+# Non-root runtime user; storage is the only directory that needs write access
+RUN addgroup --system hysight \
+ && adduser --system --ingroup hysight --no-create-home hysight \
+ && chown -R hysight:hysight /app/storage
+USER hysight
+
 EXPOSE 8000
 
 # health-friendly startup: uvicorn serves on 0.0.0.0 so Docker/compose
