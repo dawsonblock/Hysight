@@ -203,7 +203,10 @@ def require_pending_approval_selection(run_id: str, approval_id: str):
     context = require_run_context(run_id)
     pending_approval_id = context.pending_approval_id
     if pending_approval_id is None:
-        raise HTTPException(status_code=400, detail="Run has no pending approval")
+        raise HTTPException(
+            status_code=400,
+            detail="Run has no pending approval",
+        )
     if pending_approval_id != approval_id:
         raise HTTPException(
             status_code=400,
@@ -336,7 +339,9 @@ def _latency_summary(samples: List[float]) -> RunLatencySummaryResponse:
     )
 
 
-def _recorded_memory_hits(payload: Dict[str, Any]) -> List[RunMemoryHitResponse]:
+def _recorded_memory_hits(
+    payload: Dict[str, Any],
+) -> List[RunMemoryHitResponse]:
     hits: List[RunMemoryHitResponse] = []
     for raw_hit in payload.get("memory_hits", []):
         if not isinstance(raw_hit, dict):
@@ -415,16 +420,14 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
         if event_type == "approval_requested" and approval_id is None:
             approval_id = safe_payload.get("approval_id")
 
-        if (
-            event_type == "execution_finished"
-            and replay.get("latest_receipt") is None
-        ):
-            action_result = RunResultResponse(
-                status=safe_payload.get("status"),
-                outputs=safe_payload.get("outputs"),
-                artifacts=safe_payload.get("artifacts") or [],
-                error=safe_payload.get("error"),
-            )
+        if event_type == "execution_finished":
+            if replay.get("latest_receipt") is None:
+                action_result = RunResultResponse(
+                    status=safe_payload.get("status"),
+                    outputs=safe_payload.get("outputs"),
+                    artifacts=safe_payload.get("artifacts") or [],
+                    error=safe_payload.get("error"),
+                )
             duration_ms = _duration_ms(
                 safe_payload.get("started_at"),
                 safe_payload.get("finished_at"),

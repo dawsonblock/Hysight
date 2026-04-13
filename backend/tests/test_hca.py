@@ -178,7 +178,11 @@ def test_run_summary_uses_recorded_memory_hits_and_metrics(
     app_client,
     monkeypatch,
 ):
-    from hca.common.enums import EventType, ReceiptStatus, RuntimeState  # type: ignore
+    from hca.common.enums import (  # type: ignore
+        EventType,
+        ReceiptStatus,
+        RuntimeState,
+    )
     from hca.common.types import ExecutionReceipt, RunContext  # type: ignore
     from hca.storage.event_log import append_event  # type: ignore
     from hca.storage.receipts import append_receipt  # type: ignore
@@ -278,7 +282,10 @@ def test_run_summary_uses_recorded_memory_hits_and_metrics(
     data = response.json()
     assert data["plan"]["planning_mode"] == "rule_based_fallback"
     assert data["plan"]["fallback_reason"] == "llm_error:RuntimeError"
-    assert data["memory_hits"][0]["text"] == "The API key expires on March 1st."
+    assert (
+        data["memory_hits"][0]["text"]
+        == "The API key expires on March 1st."
+    )
     assert data["metrics"]["memory_retrieval_latency"]["count"] == 1
     assert data["metrics"]["memory_retrieval_latency"]["total_ms"] == 4.5
     assert data["metrics"]["tool_latency"]["count"] == 1
@@ -286,10 +293,15 @@ def test_run_summary_uses_recorded_memory_hits_and_metrics(
     assert data["metrics"]["run_duration_ms"] is not None
 
 
-def test_approve_rejects_non_pending_approval_without_writing_grant(app_client):
+def test_approve_rejects_non_pending_approval_without_writing_grant(
+    app_client,
+):
     from hca.common.enums import ActionClass, RuntimeState  # type: ignore
     from hca.common.types import ApprovalRequest, RunContext  # type: ignore
-    from hca.storage.approvals import append_request, iter_records  # type: ignore
+    from hca.storage.approvals import (  # type: ignore
+        append_request,
+        iter_records,
+    )
     from hca.storage.runs import save_run  # type: ignore
 
     context = RunContext(
@@ -316,7 +328,10 @@ def test_approve_rejects_non_pending_approval_without_writing_grant(app_client):
         json={"approval_id": "approval-other"},
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Approval id does not match pending approval"
+    assert (
+        response.json()["detail"]
+        == "Approval id does not match pending approval"
+    )
     records = list(iter_records(context.run_id))
     assert [record["record_type"] for record in records] == ["request"]
 
@@ -324,7 +339,10 @@ def test_approve_rejects_non_pending_approval_without_writing_grant(app_client):
 def test_deny_rejects_non_pending_approval(app_client):
     from hca.common.enums import ActionClass, RuntimeState  # type: ignore
     from hca.common.types import ApprovalRequest, RunContext  # type: ignore
-    from hca.storage.approvals import append_request, iter_records  # type: ignore
+    from hca.storage.approvals import (  # type: ignore
+        append_request,
+        iter_records,
+    )
     from hca.storage.runs import save_run  # type: ignore
 
     context = RunContext(
@@ -351,7 +369,10 @@ def test_deny_rejects_non_pending_approval(app_client):
         json={"approval_id": "approval-other"},
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Approval id does not match pending approval"
+    assert (
+        response.json()["detail"]
+        == "Approval id does not match pending approval"
+    )
     records = list(iter_records(context.run_id))
     assert [record["record_type"] for record in records] == ["request"]
 

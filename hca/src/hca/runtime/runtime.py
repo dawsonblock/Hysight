@@ -688,8 +688,8 @@ class Runtime:
                 else "single_action"
             ),
         }
+        episodic_started_at = perf_counter()
         try:
-            episodic_started_at = perf_counter()
             EpisodicStore(context.run_id).append(record)
         except Exception as exc:
             episodic_latency_ms = round(
@@ -742,8 +742,8 @@ class Runtime:
             and candidate_memory_cls is not None
             and provenance_cls is not None
         ):
+            external_started_at = perf_counter()
             try:
-                external_started_at = perf_counter()
                 raw_text = (
                     f"{candidate.kind}: "
                     + _json.dumps(candidate.arguments, default=str)[:200]
