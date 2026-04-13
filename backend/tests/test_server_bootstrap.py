@@ -196,3 +196,134 @@ def test_backend_proof_workflow_runs_documented_proof_script():
     ).read_text(encoding="utf-8")
     assert "Documented Proof Surface" in workflow
     assert "python scripts/run_tests.py" in workflow
+
+
+def test_fastapi_entrypoints_are_limited_to_authorized_surfaces():
+    fastapi_apps = []
+    for path in ROOT.rglob("*.py"):
+        relative_path = path.relative_to(ROOT).as_posix()
+        content = path.read_text(encoding="utf-8")
+        if re.search(r"^\s*\w+\s*=\s*FastAPI\(", content, re.MULTILINE):
+            fastapi_apps.append(relative_path)
+
+    assert sorted(fastapi_apps) == [
+        "backend/server.py",
+        "hca/src/hca/api/app.py",
+    ]
+
+    internal_app = (
+        ROOT / "hca" / "src" / "hca" / "api" / "app.py"
+    ).read_text(encoding="utf-8")
+    assert "internal runtime tests" in internal_app
+
+
+def test_run_view_models_delegate_to_canonical_api_models():
+    api_models = import_module("hca.api.models")
+    run_views = import_module("hca.api.run_views")
+
+    shared_models = [
+        "RunPlanResponse",
+        "RunActionResponse",
+        "RunResultResponse",
+        "RunMemoryHitResponse",
+        "RunKeyEventResponse",
+        "RunLatencySummaryResponse",
+        "RunMetricsResponse",
+        "RunSummaryResponse",
+        "RunListResponse",
+        "RunEventResponse",
+        "RunEventListResponse",
+        "RunArtifactResponse",
+        "RunArtifactListResponse",
+        "RunArtifactDetailResponse",
+    ]
+
+    for model_name in shared_models:
+        assert getattr(run_views, model_name) is getattr(
+            api_models,
+            model_name,
+        )
+
+
+def test_non_test_code_does_not_append_grants_directly():
+    offenders = []
+    allowed_paths = {
+        "hca/src/hca/storage/approvals.py",
+    }
+
+    for path in ROOT.rglob("*.py"):
+        relative_path = path.relative_to(ROOT).as_posix()
+        if (
+            "/tests/" in relative_path
+            or relative_path.startswith("backend/tests/")
+        ):
+            continue
+        if relative_path in allowed_paths:
+            continue
+        content = path.read_text(encoding="utf-8")
+        if "append_grant(" in content:
+            offenders.append(relative_path)
+
+    assert offenders == []
+
+
+def test_run_backend_script_sets_explicit_storage_defaults():
+    script = (ROOT / "scripts" / "run_backend.sh").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        'HCA_STORAGE_ROOT="${HCA_STORAGE_ROOT:-$REPO_ROOT/storage}"'
+        in script
+    )
+    assert (
+        'MEMORY_STORAGE_DIR="${MEMORY_STORAGE_DIR:-$HCA_STORAGE_ROOT/memory}"'
+        in script
+    )
+
+
+def test_proof_wrapper_delegates_to_canonical_proof_runner():
+    script = (ROOT / "scripts" / "proof_local.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'exec python scripts/run_tests.py "$@"' in script
+
+
+def test_non_test_python_code_keeps_process_and_network_calls_bounded():
+    allowed_paths = {
+        "hca/src/hca/executor/sandbox.py",
+        "memory_service/config.py",
+        "memory_service/controller.py",
+        "scripts/run_tests.py",
+    }
+    forbidden_patterns = [
+        re.compile(r"^\s*import\s+subprocess\b"),
+        re.compile(r"^\s*from\s+subprocess\b"),
+        re.compile(r"^\s*import\s+requests\b"),
+        re.compile(r"^\s*from\s+requests\b"),
+        re.compile(r"urllib\.request\."),
+        re.compile(r"httpx\."),
+        re.compile(r"os\.system\("),
+        re.compile(r"os\.popen\("),
+        re.compile(r"subprocess\.Popen\("),
+    ]
+    offenders = []
+
+    for path in ROOT.rglob("*.py"):
+        relative_path = path.relative_to(ROOT).as_posix()
+        if (
+            "/tests/" in relative_path
+            or relative_path.startswith("backend/tests/")
+        ):
+            continue
+        if relative_path in allowed_paths:
+            continue
+
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            if any(pattern.search(line) for pattern in forbidden_patterns):
+                offenders.append(relative_path)
+                break
+
+    assert offenders == []

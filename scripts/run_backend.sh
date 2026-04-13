@@ -28,11 +28,19 @@ set +a
 
 PORT="${BACKEND_PORT:-8000}"
 MEMORY_BACKEND="${MEMORY_BACKEND:-python}"
+HCA_STORAGE_ROOT="${HCA_STORAGE_ROOT:-$REPO_ROOT/storage}"
+MEMORY_STORAGE_DIR="${MEMORY_STORAGE_DIR:-$HCA_STORAGE_ROOT/memory}"
+
+export MEMORY_BACKEND
+export HCA_STORAGE_ROOT
+export MEMORY_STORAGE_DIR
 
 echo ""
 echo "═══════════════════════════════════════════════"
 echo "  Hysight backend"
 echo "  memory backend : $MEMORY_BACKEND"
+echo "  run storage    : $HCA_STORAGE_ROOT"
+echo "  memory storage : $MEMORY_STORAGE_DIR"
 echo "  port           : $PORT"
 echo "═══════════════════════════════════════════════"
 echo ""

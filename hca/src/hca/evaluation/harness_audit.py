@@ -4,27 +4,20 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from hca.common.types import ApprovalGrant
+from hca.api.runtime_actions import auto_grant_pending_approval
 from hca.runtime.replay import reconstruct_state
 from hca.runtime.runtime import Runtime
-from hca.storage import append_grant, load_latest_valid_snapshot, load_run
+from hca.storage import load_latest_valid_snapshot, load_run
 
 
 def run() -> dict:
     runtime = Runtime()
     run_id = runtime.run("remember to archive this note")
-    context = load_run(run_id)
-    if context and context.pending_approval_id:
-        token = f"audit-{context.pending_approval_id}"
-        append_grant(
-            run_id,
-            ApprovalGrant(
-                approval_id=context.pending_approval_id,
-                token=token,
-                actor="audit",
-            ),
-        )
-        runtime.resume(run_id, context.pending_approval_id, token)
+    run_id = auto_grant_pending_approval(
+        run_id,
+        actor="audit",
+        token_prefix="audit",
+    )
 
     replay = reconstruct_state(run_id)
     latest_snapshot = load_latest_valid_snapshot(run_id) or {}

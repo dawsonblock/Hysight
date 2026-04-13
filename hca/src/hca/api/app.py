@@ -16,14 +16,18 @@ from hca.api.models import (
     ApprovalSummaryItem,
     CreateRunRequest,
     CreateRunResponse,
-    HealthResponse,
     MemoryResponse,
     ReplayResponse,
-)
-from hca.api.run_views import (
     RunArtifactDetailResponse,
     RunArtifactListResponse,
     RunListResponse,
+)
+from hca.api.runtime_actions import (
+    deny_pending_approval,
+    grant_pending_approval,
+    run_goal,
+)
+from hca.api.run_views import (
     extract_run_summary,
     get_run_artifact_detail,
     list_run_artifacts,
@@ -33,21 +37,17 @@ from hca.api.run_views import (
     require_run_context,
 )
 from hca.common.enums import MemoryType
-from hca.common.types import ApprovalGrant
 from hca.memory.episodic_store import EpisodicStore
 from hca.memory.identity_store import IdentityStore
 from hca.memory.procedural_store import ProceduralStore
 from hca.memory.semantic_store import SemanticStore
-from hca.runtime.runtime import Runtime
 from hca.storage.approvals import (
-    append_grant,
     get_approval_status,
     get_pending_requests,
     iter_records,
 )
 
 app = FastAPI(title="Hybrid Cognitive Agent API")
-runtime_engine = Runtime()
 
 
 def _require_run(run_id: str) -> None:
@@ -94,7 +94,7 @@ def _memory_store(memory_type: MemoryType):
 
 @app.post("/runs", response_model=CreateRunResponse)
 def create_run(req: CreateRunRequest) -> CreateRunResponse:
-    run_id = runtime_engine.run(req.goal, req.user_id)
+    run_id = run_goal(req.goal, req.user_id)
     return CreateRunResponse(run_id=run_id)
 
 
@@ -106,11 +106,6 @@ def get_run(run_id: str) -> ReplayResponse:
     )
 
 
-@app.get("/runs/{run_id}/state", response_model=ReplayResponse)
-def get_run_state(run_id: str) -> ReplayResponse:
-    return get_run(run_id)
-
-
 @app.get("/runs/{run_id}/events", response_model=List[Dict[str, Any]])
 def get_events(run_id: str) -> List[Dict[str, Any]]:
     _require_run(run_id)
@@ -118,11 +113,6 @@ def get_events(run_id: str) -> List[Dict[str, Any]]:
         record.model_dump(mode="json")
         for record in list_run_events(run_id, limit=100, offset=0).records
     ]
-
-
-@app.get("/runs/{run_id}/replay", response_model=ReplayResponse)
-def get_replay(run_id: str) -> ReplayResponse:
-    return get_run(run_id)
 
 
 @app.get(
@@ -171,11 +161,7 @@ def get_pending_approvals(run_id: str) -> List[Dict[str, Any]]:
     ]
 
 
-@app.post(
-    "/runs/{run_id}/approvals/{approval_id}/grant",
-    response_model=ApprovalActionResponse,
-)
-def grant_approval(
+def _grant_approval_action(
     run_id: str,
     approval_id: str,
     req: ApprovalGrantRequest,
@@ -183,16 +169,13 @@ def grant_approval(
     require_pending_approval_selection(run_id, approval_id)
     token = req.token or str(uuid.uuid4())
     try:
-        append_grant(
+        grant_pending_approval(
             run_id,
-            ApprovalGrant(
-                approval_id=approval_id,
-                token=token,
-                actor=req.actor or "user",
-                expires_at=req.expires_at,
-            ),
+            approval_id,
+            token=token,
+            actor=req.actor or "user",
+            expires_at=req.expires_at,
         )
-        runtime_engine.resume(run_id, approval_id, token)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -209,11 +192,7 @@ def grant_approval(
     )
 
 
-@app.post(
-    "/runs/{run_id}/approvals/{approval_id}/deny",
-    response_model=ApprovalActionResponse,
-)
-def deny_approval(
+def _deny_approval_action(
     run_id: str,
     approval_id: str,
     req: Optional[ApprovalDenyRequest] = None,
@@ -221,7 +200,7 @@ def deny_approval(
     require_pending_approval_selection(run_id, approval_id)
     deny_request = req or ApprovalDenyRequest()
     try:
-        runtime_engine.deny_approval(
+        deny_pending_approval(
             run_id,
             approval_id,
             reason=deny_request.reason or "User denied via API",
@@ -251,7 +230,7 @@ def decide_approval(
     req: ApprovalDecisionRequest,
 ) -> ApprovalActionResponse:
     if req.decision == "grant":
-        return grant_approval(
+        return _grant_approval_action(
             run_id,
             approval_id,
             ApprovalGrantRequest(
@@ -261,7 +240,7 @@ def decide_approval(
             ),
         )
     if req.decision == "deny":
-        return deny_approval(
+        return _deny_approval_action(
             run_id,
             approval_id,
             ApprovalDenyRequest(actor=req.actor, reason=req.reason),
@@ -284,17 +263,3 @@ def get_memory(run_id: str, memory_type: MemoryType) -> MemoryResponse:
             for record in store.iter_records()
         ],
     )
-
-
-@app.get("/memory/search")
-def search_memory(run_id: str, query: str, limit: int = 5):
-    _require_run(run_id)
-    from hca.memory.retrieval import retrieve
-
-    results = retrieve(run_id, query, limit)
-    return [r.model_dump(mode="json") for r in results]
-
-
-@app.get("/admin/health", response_model=HealthResponse)
-def health() -> HealthResponse:
-    return HealthResponse(status="ok")

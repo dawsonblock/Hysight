@@ -1,3 +1,5 @@
+import pytest
+
 from hca.common.types import (
     ApprovalConsumption,
     ApprovalDecisionRecord,
@@ -22,7 +24,8 @@ def test_approval_lifecycle(monkeypatch, tmp_path):
     monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
 
     run_id = "test_v5"
-    app_id = "app-1"
+    denied_approval_id = "app-1"
+    granted_approval_id = "app-2"
 
     candidate = build_action_candidate(
         "store_note",
@@ -33,7 +36,7 @@ def test_approval_lifecycle(monkeypatch, tmp_path):
     # 1. Request
     req = ApprovalRequest(
         run_id=run_id,
-        approval_id=app_id,
+        approval_id=denied_approval_id,
         action_id=candidate.action_id,
         action_kind=candidate.kind,
         action_class=ActionClass.medium,
@@ -41,28 +44,46 @@ def test_approval_lifecycle(monkeypatch, tmp_path):
         reason="test",
     )
     append_request(run_id, req)
-    assert resolve_status(run_id, app_id) == "pending"
+    assert resolve_status(run_id, denied_approval_id) == "pending"
 
     # 2. Deny
     dec = ApprovalDecisionRecord(
-        approval_id=app_id,
+        approval_id=denied_approval_id,
         decision=ApprovalDecision.denied,
         reason="rejected",
     )
     append_decision(run_id, dec)
-    assert resolve_status(run_id, app_id) == "denied"
+    assert resolve_status(run_id, denied_approval_id) == "denied"
 
-    # 3. Re-decide (Grant) - Multiple decisions resolve to latest
-    dec2 = ApprovalDecisionRecord(
-        approval_id=app_id,
-        decision=ApprovalDecision.granted,
+    # 3. A denied approval id stays terminal; a new approval request is needed.
+    with pytest.raises(ValueError, match="approval already denied"):
+        append_grant(
+            run_id,
+            ApprovalGrant(
+                approval_id=denied_approval_id,
+                token="denied-token",
+            ),
+        )
+
+    req2 = ApprovalRequest(
+        run_id=run_id,
+        approval_id=granted_approval_id,
+        action_id=candidate.action_id,
+        action_kind=candidate.kind,
+        action_class=ActionClass.medium,
+        binding=candidate.binding,
+        reason="retry",
     )
-    append_decision(run_id, dec2)
-    grant = ApprovalGrant(approval_id=app_id, token="token-123")
-    append_grant(run_id, grant)
-    assert resolve_status(run_id, app_id) == "granted"
+    append_request(run_id, req2)
 
-    stored_grant = get_grant(run_id, app_id)
+    grant = ApprovalGrant(
+        approval_id=granted_approval_id,
+        token="token-123",
+    )
+    append_grant(run_id, grant)
+    assert resolve_status(run_id, granted_approval_id) == "granted"
+
+    stored_grant = get_grant(run_id, granted_approval_id)
     assert stored_grant is not None
     assert stored_grant.binding is not None
     assert stored_grant.binding.matches(candidate.binding)
@@ -70,13 +91,13 @@ def test_approval_lifecycle(monkeypatch, tmp_path):
     # 4. Validate
     v = validate_resume_approval(
         run_id,
-        app_id,
+        granted_approval_id,
         "token-123",
         candidate=candidate,
     )
     assert v["ok"] is True
 
-    v_wrong = validate_resume_approval(run_id, app_id, "wrong")
+    v_wrong = validate_resume_approval(run_id, granted_approval_id, "wrong")
     assert v_wrong["ok"] is False
     assert v_wrong["reason"] == "token_mismatch"
 
@@ -86,7 +107,7 @@ def test_approval_lifecycle(monkeypatch, tmp_path):
     )
     v_wrong_action = validate_resume_approval(
         run_id,
-        app_id,
+        granted_approval_id,
         "token-123",
         candidate=wrong_candidate,
     )
@@ -94,16 +115,27 @@ def test_approval_lifecycle(monkeypatch, tmp_path):
     assert v_wrong_action["reason"] == "approved_action_mismatch"
 
     # 5. Consume
-    cons = ApprovalConsumption(approval_id=app_id, token="token-123")
+    cons = ApprovalConsumption(
+        approval_id=granted_approval_id,
+        token="token-123",
+    )
     append_consumption(run_id, cons)
-    assert resolve_status(run_id, app_id) == "consumed"
+    assert resolve_status(run_id, granted_approval_id) == "consumed"
 
-    stored_consumption = get_consumption(run_id, app_id, token="token-123")
+    stored_consumption = get_consumption(
+        run_id,
+        granted_approval_id,
+        token="token-123",
+    )
     assert stored_consumption is not None
     assert stored_consumption.binding is not None
     assert stored_consumption.binding.matches(candidate.binding)
 
-    v_cons = validate_resume_approval(run_id, app_id, "token-123")
+    v_cons = validate_resume_approval(
+        run_id,
+        granted_approval_id,
+        "token-123",
+    )
     assert v_cons["ok"] is False
     assert v_cons["reason"] == "already_consumed"
 

@@ -631,6 +631,12 @@ python -m pip install -r backend/requirements-dev.txt   # or: make dev-bootstrap
 The fastest correct path — runs all four proof modes in order:
 
 ```bash
+./scripts/proof_local.sh
+```
+
+Equivalent direct invocation:
+
+```bash
 python scripts/run_tests.py
 ```
 
@@ -667,6 +673,8 @@ CI job name: **Backend Live Sidecar Proof** (opt-in via `workflow_dispatch`).
   and HCA runtime behavior without external services.
 - The backend full proof adds mock-backed memvid boundary coverage.
 - The live sidecar proof is the separate opt-in path for the real Rust sidecar.
+- `./scripts/proof_local.sh` is the no-logic wrapper around the canonical
+  proof authority `python scripts/run_tests.py`.
 - GitHub Actions mirrors these proof modes in `.github/workflows/backend-proof.yml`.
 - The backend rejects the legacy `{"query": ...}` memory retrieve body;
   use `{"query_text": ...}` everywhere.

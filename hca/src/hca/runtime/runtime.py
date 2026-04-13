@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import lru_cache
 from time import perf_counter
 from typing import Any, Dict, Optional
@@ -22,6 +22,7 @@ from hca.common.types import (
     ActionCandidate,
     ArtifactSummary,
     ApprovalConsumption,
+    ApprovalGrant,
     MetaAssessment,
     ApprovalRequest,
     MemoryRecord,
@@ -51,6 +52,7 @@ from hca.runtime.snapshots import build_runtime_snapshot
 from hca.runtime.state_machine import assert_transition
 from hca.storage import (
     append_consumption as append_approval_consumption,
+    append_grant as append_approval_grant,
     append_denial as append_approval_denial,
     append_event,
     append_request as append_approval_request,
@@ -920,6 +922,32 @@ class Runtime:
         self._remaining_replan = self.replan_budget
         self._execution_failure_count = 0
         return self._step(context)
+
+    def grant_approval(
+        self,
+        run_id: str,
+        approval_id: str,
+        token: str,
+        *,
+        actor: str = "user",
+        expires_at: Optional[datetime] = None,
+    ) -> str:
+        context = load_run(run_id)
+        if not context:
+            raise ValueError(f"Run {run_id} not found")
+
+        self._current_state = context.state
+        self._require_matching_pending_approval(context, approval_id)
+        append_approval_grant(
+            run_id,
+            ApprovalGrant(
+                approval_id=approval_id,
+                token=token,
+                actor=actor,
+                expires_at=expires_at,
+            ),
+        )
+        return self.resume(run_id, approval_id, token)
 
     def deny_approval(
         self, run_id: str, approval_id: str, reason: str = "Denied by user"

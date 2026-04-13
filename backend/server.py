@@ -41,14 +41,20 @@ for path in (str(REPO_ROOT), str(HCA_SRC_DIR)):
 from hca.api.models import (  # type: ignore[import-untyped]  # noqa: E402
     ApprovalSelectionRequest,
     CreateRunRequest,
+    RunArtifactDetailResponse as HCARunArtifactDetailResponse,
+    RunArtifactListResponse as HCARunArtifactListResponse,
+    RunEventListResponse as HCARunEventListResponse,
+    RunListResponse as HCARunListResponse,
+    RunSummaryResponse as HCARunSummaryResponse,
 )
+from hca.api.runtime_actions import (  # noqa: E402
+    deny_pending_approval,
+    grant_pending_approval,
+    run_goal,
+)
+from hca.paths import storage_root  # noqa: E402
 
 _run_views = import_module("hca.api.run_views")
-HCARunArtifactDetailResponse = _run_views.RunArtifactDetailResponse
-HCARunArtifactListResponse = _run_views.RunArtifactListResponse
-HCARunEventListResponse = _run_views.RunEventListResponse
-HCARunListResponse = _run_views.RunListResponse
-HCARunSummaryResponse = _run_views.RunSummaryResponse
 _extract_run_summary = _run_views.extract_run_summary
 get_run_artifact_detail = _run_views.get_run_artifact_detail
 list_run_artifacts = _run_views.list_run_artifacts
@@ -252,11 +258,8 @@ async def list_hca_runs(
 @api_router.post("/hca/run", response_model=HCARunSummaryResponse)
 async def run_hca(body: CreateRunRequest):
     """Submit a goal to the HCA and return the run result."""
-    from hca.runtime.runtime import Runtime  # type: ignore
-
     def _execute():
-        rt = Runtime()
-        return rt.run(body.goal, user_id=body.user_id)
+        return run_goal(body.goal, user_id=body.user_id)
 
     run_id = await asyncio.to_thread(_execute)
     return _extract_run_summary(run_id)
@@ -283,7 +286,7 @@ def _stream_label(ev: Dict[str, Any]) -> str:
     et = ev.get("event_type", "")
     actor = ev.get("actor", "")
     payload = ev.get("payload", {})
-    base = _STREAM_LABELS.get(et, et.replace("_", " "))
+    base = str(_STREAM_LABELS.get(et, et.replace("_", " ")))
     if et == "module_proposed":
         src = payload.get("source_module") or actor
         ci = payload.get("candidate_items", [])
@@ -331,8 +334,8 @@ async def stream_hca_run(body: CreateRunRequest):
 
         class _StreamingRuntime(Runtime):
             """Captures run_id as early as possible via _step_create hook."""
-            def _step_create(self, goal, user_id=None):
-                ctx = super()._step_create(goal, user_id)
+            def create_run(self, goal, user_id=None):
+                ctx = super().create_run(goal, user_id)
                 result_holder["run_id"] = ctx.run_id
                 return ctx
 
@@ -491,22 +494,17 @@ async def approve_hca_action(
     body: ApprovalSelectionRequest,
 ):
     """Grant approval for a pending HCA action and resume execution."""
-    from hca.runtime.runtime import Runtime  # type: ignore
-    from hca.storage.approvals import append_grant  # type: ignore
-    from hca.common.types import ApprovalGrant  # type: ignore
-
     token = str(uuid.uuid4())
     approval_id = body.approval_id
-    context = _require_pending_approval_selection(run_id, approval_id)
+    _require_pending_approval_selection(run_id, approval_id)
 
     def _approve_and_resume():
-        append_grant(
+        return grant_pending_approval(
             run_id,
-            ApprovalGrant(approval_id=approval_id, token=token),
+            approval_id,
+            token=token,
+            actor="user",
         )
-        rt = Runtime()
-        rt._current_state = context.state
-        return rt.resume(run_id, approval_id, token)
 
     try:
         new_run_id = await asyncio.to_thread(_approve_and_resume)
@@ -524,13 +522,10 @@ async def deny_hca_action(
     body: ApprovalSelectionRequest,
 ):
     """Deny a pending HCA action."""
-    from hca.runtime.runtime import Runtime  # type: ignore
-    context = _require_pending_approval_selection(run_id, body.approval_id)
+    _require_pending_approval_selection(run_id, body.approval_id)
 
     def _deny():
-        rt = Runtime()
-        rt._current_state = context.state
-        return rt.deny_approval(
+        return deny_pending_approval(
             run_id,
             body.approval_id,
             reason="Denied by user",
@@ -610,7 +605,17 @@ async def delete_memory(memory_id: str):
 async def _lifespan(app: FastAPI):
     global client, db
     settings = _load_settings()
-    validate_memory_backend_startup()
+    memory_settings = validate_memory_backend_startup()
+    logger.info(
+        (
+            "Memory authority configured — backend=%s storage_dir=%s "
+            "service_url=%s run_storage_root=%s"
+        ),
+        memory_settings.backend,
+        memory_settings.storage_dir,
+        memory_settings.service_url or "disabled",
+        storage_root(),
+    )
     await _initialize_database(settings)
     yield
     if client is not None:

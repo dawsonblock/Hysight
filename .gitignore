@@ -29,7 +29,6 @@ next-env.d.ts
 /build
 frontend/build/
 dist/
-dist
 
 # Environment files (comprehensive coverage)
 
@@ -56,6 +55,9 @@ venv/
 # Development tools
 chainlit.md
 .chainlit
+.emergent/
+.mypy_cache/
+.pytest_cache/
 .ipynb_checkpoints/
 .ac
 

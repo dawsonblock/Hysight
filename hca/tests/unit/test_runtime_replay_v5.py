@@ -11,9 +11,9 @@ import hca.executor.tool_registry as tool_registry
 from hca.paths import run_storage_path
 from hca.runtime.runtime import Runtime
 from hca.runtime.replay import reconstruct_state
-from hca.common.enums import RuntimeState, ApprovalDecision
-from hca.common.types import ApprovalDecisionRecord, ApprovalGrant
-from hca.storage.approvals import append_decision, append_grant
+from hca.common.enums import RuntimeState
+from hca.common.types import ApprovalGrant
+from hca.storage.approvals import append_grant
 from hca.storage.receipts import iter_receipts
 
 
@@ -24,10 +24,12 @@ def setup_module():
 
 def test_deny_halts_run():
     rt = Runtime()
-    ctx = rt.create_run("buy milk", user_id="u1")
-    run_id = ctx.run_id
+    run_id = rt.run("remember the password", user_id="u1")
+    replayed = reconstruct_state(run_id)
+    app_id = replayed["pending_approval_id"]
+    assert app_id is not None
 
-    rt.deny_approval(run_id, "app-1", reason="too expensive")
+    rt.deny_approval(run_id, app_id, reason="too expensive")
 
     replayed = reconstruct_state(run_id)
     print(
@@ -54,13 +56,6 @@ def test_resume_from_events_only():
         ]
     )
 
-    append_decision(
-        run_id,
-        ApprovalDecisionRecord(
-            approval_id=app_id,
-            decision=ApprovalDecision.granted,
-        ),
-    )
     append_grant(run_id, ApprovalGrant(approval_id=app_id, token="t1"))
 
     snap_path = run_storage_path(run_id, "snapshots.jsonl")
@@ -88,13 +83,6 @@ def test_resume_rejects_tampered_selected_action():
     app_id = replayed["pending_approval_id"]
     assert app_id is not None
 
-    append_decision(
-        run_id,
-        ApprovalDecisionRecord(
-            approval_id=app_id,
-            decision=ApprovalDecision.granted,
-        ),
-    )
     append_grant(run_id, ApprovalGrant(approval_id=app_id, token="t1"))
 
     events_path = run_storage_path(run_id, "events.jsonl")
@@ -144,13 +132,6 @@ def test_resume_patch_action_preserves_binding(monkeypatch, tmp_path):
         replayed["approval"]["request"]["binding"]["action_fingerprint"]
     )
 
-    append_decision(
-        run_id,
-        ApprovalDecisionRecord(
-            approval_id=app_id,
-            decision=ApprovalDecision.granted,
-        ),
-    )
     append_grant(run_id, ApprovalGrant(approval_id=app_id, token="t1"))
 
     rt.resume(run_id, app_id, "t1")

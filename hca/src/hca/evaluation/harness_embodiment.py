@@ -5,28 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
-from hca.common.types import ApprovalGrant
+from hca.api.runtime_actions import auto_grant_pending_approval
 from hca.evaluation.datasets import EMBODIMENT_CASES
 from hca.runtime.replay import reconstruct_state
 from hca.runtime.runtime import Runtime
-from hca.storage import append_grant, iter_artifacts, load_run
+from hca.storage import iter_artifacts
 
 
 def _execute_goal(goal: str) -> Dict[str, Any]:
     runtime = Runtime()
     run_id = runtime.run(goal)
-    context = load_run(run_id)
-    if context and context.pending_approval_id:
-        token = f"eval-{context.pending_approval_id}"
-        append_grant(
-            run_id,
-            ApprovalGrant(
-                approval_id=context.pending_approval_id,
-                token=token,
-                actor="evaluation",
-            ),
-        )
-        runtime.resume(run_id, context.pending_approval_id, token)
+    run_id = auto_grant_pending_approval(
+        run_id,
+        actor="evaluation",
+        token_prefix="eval",
+    )
 
     replay = reconstruct_state(run_id)
     artifacts = list(iter_artifacts(run_id))

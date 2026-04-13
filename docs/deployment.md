@@ -40,6 +40,9 @@ cp .env.example .env
 ```
 
 This starts the public backend app. Do not deploy `hca.api.app:app` for normal local or container-backed usage.
+The launcher now resolves and exports `MEMORY_BACKEND`, `HCA_STORAGE_ROOT`,
+and `MEMORY_STORAGE_DIR` explicitly before starting uvicorn, then prints the
+active memory mode and storage roots.
 
 ---
 
@@ -64,6 +67,9 @@ The frontend and operator APIs still talk to the same backend routes (`/api/...`
 ## 3 — Test / proof commands
 
 ```bash
+# canonical local proof wrapper
+./scripts/proof_local.sh
+
 # smoke proof (no sidecar needed)
 make test-bootstrap
 make test-pipeline
