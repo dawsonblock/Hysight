@@ -372,6 +372,35 @@ function RunRow({ run, selected, onClick }) {
 }
 
 function OverviewPanel({ run }) {
+  const plan = run.plan || {};
+  const perception = run.perception || {};
+  const critique = run.critique || {};
+  const actionTaken = run.action_taken || {};
+  const actionResult = run.action_result || {};
+  const activeWorkflow = run.active_workflow || {};
+  const workflowBudget = run.workflow_budget || {};
+  const workflowCheckpoint = run.workflow_checkpoint || {};
+  const workflowOutcome = run.workflow_outcome || {};
+  const memoryHits = Array.isArray(run.memory_hits) ? run.memory_hits : [];
+  const workflowSteps = Array.isArray(run.workflow_step_history)
+    ? run.workflow_step_history
+    : [];
+  const workflowArtifacts = Array.isArray(run.workflow_artifacts)
+    ? run.workflow_artifacts
+    : [];
+  const memoryCountItems = Object.entries(run.memory_counts || {}).map(
+    ([key, value]) => ({
+      label: formatSnakeLabel(key),
+      value: String(value),
+    })
+  );
+  const memoryOutcomeItems = Object.entries(run.memory_outcomes || {}).map(
+    ([key, value]) => ({
+      label: formatSnakeLabel(key),
+      value: summarizeValue(value),
+    })
+  );
+
   return (
     <div style={S.detailBody}>
       <div style={S.summaryCard}>
@@ -381,19 +410,30 @@ function OverviewPanel({ run }) {
           <SummaryField label="State" value={run.state} />
           <SummaryField label="Created" value={formatDateTime(run.created_at)} />
           <SummaryField label="Updated" value={formatDateTime(run.updated_at)} />
-          <SummaryField label="Strategy" value={run.plan?.strategy || "—"} />
-          <SummaryField label="Action" value={run.action_taken?.kind || "—"} />
+          <SummaryField label="Strategy" value={plan.strategy || "—"} />
           <SummaryField
-            label="Workflow"
-            value={run.active_workflow?.workflow_class || "—"}
+            label="Action"
+            value={actionTaken.kind || plan.action || "—"}
           />
           <SummaryField
-            label="Approval"
-            value={run.last_approval_decision || run.approval_id || "—"}
+            label="Workflow"
+            value={activeWorkflow.workflow_class || "—"}
+          />
+          <SummaryField
+            label="Workflow outcome"
+            value={formatWorkflowOutcome(workflowOutcome)}
+          />
+          <SummaryField
+            label="Approval state"
+            value={formatApprovalStatus(run)}
           />
           <SummaryField
             label="Latest Receipt"
-            value={run.latest_receipt?.status || "—"}
+            value={run.latest_receipt?.status || actionResult.status || "—"}
+          />
+          <SummaryField
+            label="Approval required"
+            value={formatBoolean(actionTaken.requires_approval)}
           />
           <SummaryField label="Events" value={String(run.event_count)} />
           <SummaryField
@@ -406,6 +446,194 @@ function OverviewPanel({ run }) {
           />
         </div>
       </div>
+
+      <FactSection
+        label="Planning"
+        items={[
+          { label: "Strategy", value: plan.strategy },
+          { label: "Suggested action", value: plan.action },
+          { label: "Planning mode", value: plan.planning_mode },
+          {
+            label: "Confidence",
+            value: formatConfidence(plan.confidence),
+          },
+          {
+            label: "Memory context used",
+            value: formatBoolean(plan.memory_context_used),
+          },
+          {
+            label: "Memory retrieval",
+            value: plan.memory_retrieval_status,
+          },
+          {
+            label: "Memory retrieval error",
+            value: plan.memory_retrieval_error,
+          },
+          { label: "Fallback reason", value: plan.fallback_reason },
+          { label: "Rationale", value: plan.rationale },
+        ]}
+      />
+
+      <FactSection
+        label="Perception"
+        items={[
+          { label: "Intent class", value: perception.intent_class },
+          { label: "Intent", value: perception.intent },
+          { label: "Perception mode", value: perception.perception_mode },
+          {
+            label: "LLM attempted",
+            value: formatBoolean(perception.llm_attempted),
+          },
+          {
+            label: "Fallback reason",
+            value: perception.fallback_reason,
+          },
+        ]}
+      />
+
+      <FactSection
+        label="Critique"
+        items={[
+          { label: "Verdict", value: critique.verdict },
+          { label: "Alignment", value: formatScore(critique.alignment) },
+          {
+            label: "Feasibility",
+            value: formatScore(critique.feasibility),
+          },
+          { label: "Safety", value: formatScore(critique.safety) },
+          {
+            label: "Confidence delta",
+            value: formatSignedNumber(critique.confidence_delta),
+          },
+          {
+            label: "LLM powered",
+            value: formatBoolean(critique.llm_powered),
+          },
+          {
+            label: "Fallback reason",
+            value: critique.fallback_reason,
+          },
+          {
+            label: "Issues",
+            value: Array.isArray(critique.issues)
+              ? critique.issues.join(" • ")
+              : "",
+          },
+          { label: "Rationale", value: critique.rationale },
+        ]}
+      />
+
+      <FactSection
+        label="Workflow"
+        items={[
+          { label: "Class", value: activeWorkflow.workflow_class },
+          { label: "Strategy", value: activeWorkflow.strategy },
+          { label: "Workflow id", value: activeWorkflow.workflow_id, mono: true },
+          {
+            label: "Budget",
+            value: formatWorkflowBudget(workflowBudget),
+          },
+          {
+            label: "Checkpoint",
+            value: formatWorkflowCheckpoint(workflowCheckpoint),
+            mono: true,
+          },
+          {
+            label: "Outcome",
+            value: formatWorkflowOutcome(workflowOutcome),
+          },
+          {
+            label: "Workflow artifacts",
+            value: String(workflowArtifacts.length || 0),
+          },
+        ]}
+      />
+
+      <FactSection
+        label="Runtime"
+        items={[
+          { label: "Selected action", value: actionTaken.kind },
+          {
+            label: "Requires approval",
+            value: formatBoolean(actionTaken.requires_approval),
+          },
+          {
+            label: "Latest receipt",
+            value: run.latest_receipt?.status || actionResult.status,
+          },
+          {
+            label: "Execution error",
+            value: actionResult.error,
+          },
+          {
+            label: "Approval id",
+            value: run.approval_id,
+            mono: true,
+          },
+        ]}
+      />
+
+      <FactSection
+        label="Metrics"
+        items={[
+          {
+            label: "Run duration",
+            value: formatDuration(run.metrics?.run_duration_ms),
+          },
+          {
+            label: "Tool latency",
+            value: formatLatencySummary(run.metrics?.tool_latency),
+          },
+          {
+            label: "Retrieval latency",
+            value: formatLatencySummary(
+              run.metrics?.memory_retrieval_latency
+            ),
+          },
+          {
+            label: "Commit latency",
+            value: formatLatencySummary(run.metrics?.memory_commit_latency),
+          },
+        ]}
+      />
+
+      <FactSection label="Memory counts" items={memoryCountItems} />
+
+      <FactSection label="Memory outcomes" items={memoryOutcomeItems} />
+
+      {hasValue(actionTaken.arguments) && (
+        <section style={S.section}>
+          <div style={S.sectionLabel}>Action arguments</div>
+          <pre style={S.payloadPreview}>{formatPayload(actionTaken.arguments)}</pre>
+        </section>
+      )}
+
+      {memoryHits.length > 0 && (
+        <section style={S.section}>
+          <div style={S.sectionLabel}>Memory hits</div>
+          <div style={S.memoryHitList}>
+            {memoryHits.map((hit, index) => (
+              <div
+                key={`${hit.text}-${index}`}
+                style={S.memoryHitCard}
+              >
+                <div style={S.memoryHitTop}>
+                  <span style={S.memoryHitScore}>{formatScore(hit.score)}</span>
+                  <span style={S.memoryHitMeta}>
+                    {[
+                      hit.memory_type,
+                      formatDateTime(hit.stored_at),
+                    ]
+                      .filter(Boolean)
+                      .join(" • ") || "recorded memory"}
+                  </span>
+                </div>
+                <div style={S.memoryHitText}>{hit.text}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {Array.isArray(run.key_events) && run.key_events.length > 0 && (
         <section style={S.section}>
@@ -429,10 +657,52 @@ function OverviewPanel({ run }) {
           <section style={S.section}>
             <div style={S.sectionLabel}>Workflow steps</div>
             <div style={S.stepList}>
-              {run.workflow_step_history.map((step) => (
-                <div key={step.step_id || step.action_id} style={S.stepRow}>
-                  <div style={S.stepKey}>{step.step_key || step.tool_name}</div>
-                  <div style={S.stepMeta}>{step.status}</div>
+              {workflowSteps.map((step, index) => (
+                <div
+                  key={step.step_id || step.action_id || `${index}`}
+                  style={S.stepCard}
+                >
+                  <div style={S.stepHeader}>
+                    <div>
+                      <div style={S.stepKey}>
+                        {step.step_key || step.tool_name || `step ${index + 1}`}
+                      </div>
+                      <div style={S.stepSubline}>
+                        {[
+                          step.tool_name,
+                          step.action_id,
+                          step.receipt_id,
+                        ]
+                          .filter(Boolean)
+                          .join(" • ") || "workflow step"}
+                      </div>
+                    </div>
+                    <div style={S.stepMeta}>{step.status || "—"}</div>
+                  </div>
+                  {(hasValue(step.touched_paths) ||
+                    hasValue(step.artifact_summaries)) && (
+                    <div style={S.stepDetailRow}>
+                      {Array.isArray(step.touched_paths) &&
+                        step.touched_paths.length > 0 && (
+                          <span style={S.stepToken}>
+                            {step.touched_paths.length} touched path
+                            {step.touched_paths.length === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      {Array.isArray(step.artifact_summaries) &&
+                        step.artifact_summaries.length > 0 && (
+                          <span style={S.stepToken}>
+                            {step.artifact_summaries.length} artifact
+                            {step.artifact_summaries.length === 1 ? "" : "s"}
+                          </span>
+                        )}
+                    </div>
+                  )}
+                  {hasValue(step.mutation_result) && (
+                    <pre style={S.payloadPreview}>
+                      {formatPayload(step.mutation_result)}
+                    </pre>
+                  )}
                 </div>
               ))}
             </div>
@@ -531,6 +801,62 @@ function ArtifactsPanel({
                   {artifactDetail.truncated ? " • preview truncated" : ""}
                 </div>
               </div>
+              <div style={S.infoGrid}>
+                <SummaryField label="Kind" value={artifactDetail.kind} />
+                <SummaryField
+                  label="Action id"
+                  value={artifactDetail.action_id}
+                  mono
+                />
+                <SummaryField
+                  label="Workflow"
+                  value={artifactDetail.workflow_id || "—"}
+                  mono
+                />
+                <SummaryField
+                  label="Approval"
+                  value={artifactDetail.approval_id || "—"}
+                  mono
+                />
+                <SummaryField
+                  label="Content"
+                  value={artifactDetail.content_available ? "available" : "none"}
+                />
+                <SummaryField
+                  label="File paths"
+                  value={String(artifactDetail.file_paths?.length || 0)}
+                />
+              </div>
+              {Array.isArray(artifactDetail.source_action_ids) &&
+                artifactDetail.source_action_ids.length > 0 && (
+                  <section style={S.section}>
+                    <div style={S.sectionLabel}>Source actions</div>
+                    <TokenList values={artifactDetail.source_action_ids} mono />
+                  </section>
+                )}
+              {Array.isArray(artifactDetail.file_paths) &&
+                artifactDetail.file_paths.length > 0 && (
+                  <section style={S.section}>
+                    <div style={S.sectionLabel}>Linked files</div>
+                    <TokenList values={artifactDetail.file_paths} mono />
+                  </section>
+                )}
+              {hasValue(artifactDetail.hashes) && (
+                <section style={S.section}>
+                  <div style={S.sectionLabel}>Hashes</div>
+                  <pre style={S.payloadPreview}>
+                    {formatPayload(artifactDetail.hashes)}
+                  </pre>
+                </section>
+              )}
+              {hasValue(artifactDetail.metadata) && (
+                <section style={S.section}>
+                  <div style={S.sectionLabel}>Metadata</div>
+                  <pre style={S.payloadPreview}>
+                    {formatPayload(artifactDetail.metadata)}
+                  </pre>
+                </section>
+              )}
               <pre style={S.artifactContent}>{artifactDetail.content || ""}</pre>
             </div>
           )}
@@ -564,6 +890,202 @@ function PanelMessage({ text, tone = "default" }) {
       {text}
     </div>
   );
+}
+
+function FactSection({ label, items }) {
+  const visibleItems = items.filter((item) => hasValue(item?.value));
+
+  if (visibleItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <section style={S.section}>
+      <div style={S.sectionLabel}>{label}</div>
+      <div style={S.infoGrid}>
+        {visibleItems.map((item) => (
+          <SummaryField
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            mono={item.mono}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function TokenList({ values, mono = false }) {
+  return (
+    <div style={S.tokenList}>
+      {values.map((value) => (
+        <span
+          key={value}
+          style={{ ...S.tokenChip, ...(mono ? S.summaryMono : null) }}
+        >
+          {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function hasValue(value) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value).length > 0;
+  }
+
+  return true;
+}
+
+function summarizeValue(value) {
+  if (!hasValue(value)) {
+    return "—";
+  }
+
+  if (Array.isArray(value)) {
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+
+  if (typeof value === "object") {
+    return `${Object.keys(value).length} field${
+      Object.keys(value).length === 1 ? "" : "s"
+    }`;
+  }
+
+  return String(value);
+}
+
+function formatSnakeLabel(value) {
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function formatBoolean(value) {
+  return value ? "Yes" : "No";
+}
+
+function formatScore(value) {
+  if (typeof value !== "number") {
+    return "—";
+  }
+
+  return value.toFixed(2);
+}
+
+function formatSignedNumber(value) {
+  if (typeof value !== "number") {
+    return "—";
+  }
+
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+
+function formatConfidence(value) {
+  if (typeof value !== "number") {
+    return "—";
+  }
+
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatDuration(value) {
+  if (typeof value !== "number") {
+    return "—";
+  }
+
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(2)} s`;
+  }
+
+  return `${Math.round(value)} ms`;
+}
+
+function formatLatencySummary(summary) {
+  if (!summary || typeof summary.count !== "number" || summary.count === 0) {
+    return "—";
+  }
+
+  const parts = [`${summary.count} sample${summary.count === 1 ? "" : "s"}`];
+
+  if (typeof summary.last_ms === "number") {
+    parts.push(`${summary.last_ms.toFixed(1)} ms last`);
+  }
+
+  if (typeof summary.max_ms === "number") {
+    parts.push(`${summary.max_ms.toFixed(1)} ms max`);
+  }
+
+  return parts.join(" • ");
+}
+
+function formatWorkflowBudget(budget) {
+  if (!hasValue(budget)) {
+    return "—";
+  }
+
+  const maxSteps = budget.max_steps ?? "—";
+  const consumedSteps = budget.consumed_steps ?? 0;
+  return `${consumedSteps}/${maxSteps} steps`;
+}
+
+function formatWorkflowCheckpoint(checkpoint) {
+  if (!hasValue(checkpoint)) {
+    return "—";
+  }
+
+  const parts = [
+    checkpoint.current_step_id,
+    typeof checkpoint.current_step_index === "number"
+      ? `index ${checkpoint.current_step_index}`
+      : null,
+  ].filter(Boolean);
+
+  return parts.join(" • ") || "—";
+}
+
+function formatWorkflowOutcome(outcome) {
+  if (!hasValue(outcome)) {
+    return "—";
+  }
+
+  const parts = [
+    outcome.terminal_event,
+    outcome.reason,
+    outcome.next_step_id ? `next ${outcome.next_step_id}` : null,
+  ].filter(Boolean);
+
+  return parts.join(" • ") || "—";
+}
+
+function formatApprovalStatus(run) {
+  if (run.last_approval_decision) {
+    return run.last_approval_decision;
+  }
+
+  if (run.approval_id) {
+    return `pending (${run.approval_id})`;
+  }
+
+  return "—";
 }
 
 function formatDateTime(value) {
@@ -822,15 +1344,71 @@ const S = {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: 12,
   },
+  infoGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 10,
+  },
   section: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
   },
+  tokenList: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  tokenChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    maxWidth: "100%",
+    padding: "6px 10px",
+    borderRadius: 999,
+    border: "1px solid #cbd5e1",
+    background: "#f8fafc",
+    color: "#334155",
+    fontSize: 12,
+    lineHeight: 1.4,
+    wordBreak: "break-word",
+  },
   eventList: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
+  },
+  memoryHitList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  memoryHitCard: {
+    border: "1px solid #dbeafe",
+    borderRadius: 14,
+    padding: 12,
+    background: "rgba(239,246,255,0.68)",
+  },
+  memoryHitTop: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 6,
+  },
+  memoryHitScore: {
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#0f766e",
+    fontFamily: "'JetBrains Mono', monospace",
+  },
+  memoryHitMeta: {
+    fontSize: 11,
+    color: "#64748b",
+  },
+  memoryHitText: {
+    fontSize: 13,
+    lineHeight: 1.55,
+    color: "#0f172a",
   },
   eventCard: {
     border: "1px solid #e2e8f0",
@@ -887,24 +1465,53 @@ const S = {
     flexDirection: "column",
     gap: 8,
   },
-  stepRow: {
+  stepCard: {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: "column",
     gap: 8,
-    padding: "10px 12px",
+    padding: 12,
     border: "1px solid #e2e8f0",
     borderRadius: 12,
     background: "rgba(255,255,255,0.82)",
+  },
+  stepHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
   },
   stepKey: {
     fontSize: 13,
     fontWeight: 700,
     color: "#0f172a",
   },
+  stepSubline: {
+    marginTop: 4,
+    fontSize: 11,
+    color: "#64748b",
+    lineHeight: 1.5,
+    wordBreak: "break-word",
+  },
   stepMeta: {
     fontSize: 12,
     color: "#475569",
+    whiteSpace: "nowrap",
+  },
+  stepDetailRow: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  stepToken: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px 8px",
+    borderRadius: 999,
+    background: "#ecfeff",
+    border: "1px solid #bae6fd",
+    color: "#155e75",
+    fontSize: 11,
+    fontWeight: 700,
   },
   discrepancyBox: {
     border: "1px solid #fecaca",

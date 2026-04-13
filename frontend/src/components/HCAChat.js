@@ -10,9 +10,23 @@ import {
 
 // Events worth showing in the live trace (filter out internal plumbing)
 const VISIBLE_EVENTS = new Set([
-  "run_created", "module_proposed", "meta_assessed", "action_selected",
-  "approval_requested", "execution_started", "execution_finished",
-  "memory_written", "run_completed", "run_failed",
+  "run_created",
+  "module_proposed",
+  "meta_assessed",
+  "workflow_selected",
+  "workflow_step_started",
+  "workflow_step_finished",
+  "workflow_budget_exhausted",
+  "workflow_terminated",
+  "action_selected",
+  "approval_requested",
+  "approval_granted",
+  "approval_denied",
+  "execution_started",
+  "execution_finished",
+  "memory_written",
+  "run_completed",
+  "run_failed",
 ]);
 
 // ── Pipeline step config ──────────────────────────────────────────────────────
@@ -21,9 +35,28 @@ const STEP_ICONS = {
   run_created:        { icon: "◎", color: "#6366f1" },
   module_proposed:    { icon: "◈", color: "#0ea5e9" },
   meta_assessed:      { icon: "◇", color: "#8b5cf6" },
+  workflow_selected:  { icon: "▣", color: "#0ea5e9" },
+  workflow_step_started: {
+    icon: "↳",
+    color: "#14b8a6",
+  },
+  workflow_step_finished: {
+    icon: "↴",
+    color: "#10b981",
+  },
+  workflow_budget_exhausted: {
+    icon: "⧖",
+    color: "#d97706",
+  },
+  workflow_terminated: {
+    icon: "⨯",
+    color: "#dc2626",
+  },
   action_scored:      { icon: "◆", color: "#8b5cf6" },
   action_selected:    { icon: "▷", color: "#f59e0b" },
   approval_requested: { icon: "⊛", color: "#ec4899" },
+  approval_granted:   { icon: "⊕", color: "#10b981" },
+  approval_denied:    { icon: "⊗", color: "#dc2626" },
   execution_started:  { icon: "▶", color: "#f97316" },
   execution_finished: { icon: "✓", color: "#10b981" },
   memory_written:     { icon: "⊕", color: "#14b8a6" },
@@ -399,11 +432,32 @@ function AgentCard({
   const [traceOpen, setTraceOpen] = useState(false);
   const [memOpen,   setMemOpen]   = useState(false);
 
-  const state     = data?.state || "completed";
-  const stateMeta = STATE_META[state] || { label: state.toUpperCase(), color: "#374151", bg: "#f9fafb", border: "#d1d5db" };
-  const plan      = data?.plan || {};
-  const result    = data?.action_result || {};
-  const isAwaiting = state === "awaiting_approval" && data?.approval_id && !approved && !denied;
+  const state = data?.state || "completed";
+  const stateMeta = STATE_META[state] || {
+    label: state.toUpperCase(),
+    color: "#374151",
+    bg: "#f9fafb",
+    border: "#d1d5db",
+  };
+  const plan = data?.plan || {};
+  const perception = data?.perception || {};
+  const critique = data?.critique || {};
+  const workflow = data?.active_workflow || {};
+  const workflowBudget = data?.workflow_budget || {};
+  const workflowCheckpoint = data?.workflow_checkpoint || {};
+  const workflowOutcome = data?.workflow_outcome || {};
+  const workflowSteps = Array.isArray(data?.workflow_step_history)
+    ? data.workflow_step_history
+    : [];
+  const actionTaken = data?.action_taken || {};
+  const actionArgs = actionTaken.arguments || {};
+  const result = data?.action_result || {};
+  const memoryHits = Array.isArray(data?.memory_hits) ? data.memory_hits : [];
+  const isAwaiting =
+    state === "awaiting_approval" &&
+    data?.approval_id &&
+    !approved &&
+    !denied;
   const buttonsDisabled = Boolean(pendingAction);
 
   return (
@@ -425,11 +479,174 @@ function AgentCard({
           {/* Plan section */}
           {plan.strategy && (
             <Section label="PLAN">
-              <DataRow label="Strategy"  value={STRATEGY_LABELS[plan.strategy] || plan.strategy} />
-              <DataRow label="Action"    value={plan.action || "—"} mono />
+              <DataRow
+                label="Strategy"
+                value={STRATEGY_LABELS[plan.strategy] || plan.strategy}
+              />
+              <DataRow label="Action" value={plan.action || "—"} mono />
+              {plan.planning_mode && (
+                <DataRow label="Mode" value={plan.planning_mode} />
+              )}
+              <DataRow
+                label="Confidence"
+                value={formatScore(plan.confidence)}
+              />
               {plan.rationale && <DataRow label="Rationale" value={plan.rationale} />}
+              {plan.fallback_reason && (
+                <DataRow label="Fallback" value={plan.fallback_reason} />
+              )}
+              {plan.memory_retrieval_status && (
+                <DataRow
+                  label="Memory"
+                  value={plan.memory_retrieval_status}
+                  accent
+                />
+              )}
+              {plan.memory_retrieval_error && (
+                <DataRow
+                  label="Memory error"
+                  value={plan.memory_retrieval_error}
+                  color="#dc2626"
+                />
+              )}
               {plan.memory_context_used && (
                 <DataRow label="Context" value="Retrieved from MemVid memory store" accent />
+              )}
+            </Section>
+          )}
+
+          {actionTaken.kind && (
+            <Section label={isAwaiting ? "ACTION READY" : "ACTION"}>
+              <DataRow label="Selected" value={actionTaken.kind} mono />
+              <DataRow
+                label="Approval"
+                value={formatBoolean(actionTaken.requires_approval)}
+              />
+              {hasValue(data?.approval_id) && (
+                <DataRow label="Approval ID" value={data.approval_id} mono />
+              )}
+              {hasValue(actionArgs) && (
+                <div style={S.jsonBlock}>
+                  <span style={S.dataLabelBlock}>Arguments</span>
+                  <pre style={S.jsonPreview}>
+                    {formatObjectPreview(actionArgs)}
+                  </pre>
+                </div>
+              )}
+            </Section>
+          )}
+
+          {hasValue(perception.intent_class) && (
+            <Section label="PERCEPTION">
+              <DataRow label="Intent class" value={perception.intent_class} />
+              {perception.intent && (
+                <DataRow label="Intent" value={perception.intent} />
+              )}
+              {perception.perception_mode && (
+                <DataRow label="Mode" value={perception.perception_mode} />
+              )}
+              <DataRow
+                label="LLM attempted"
+                value={formatBoolean(perception.llm_attempted)}
+              />
+              {perception.fallback_reason && (
+                <DataRow
+                  label="Fallback"
+                  value={perception.fallback_reason}
+                />
+              )}
+            </Section>
+          )}
+
+          {(hasValue(critique.verdict) ||
+            (Array.isArray(critique.issues) && critique.issues.length > 0)) && (
+            <Section label="CRITIQUE">
+              {critique.verdict && (
+                <DataRow label="Verdict" value={critique.verdict} />
+              )}
+              <DataRow
+                label="Alignment"
+                value={formatScore(critique.alignment)}
+              />
+              <DataRow
+                label="Feasibility"
+                value={formatScore(critique.feasibility)}
+              />
+              <DataRow label="Safety" value={formatScore(critique.safety)} />
+              <DataRow
+                label="Confidence Δ"
+                value={formatSignedNumber(critique.confidence_delta)}
+              />
+              <DataRow
+                label="LLM powered"
+                value={formatBoolean(critique.llm_powered)}
+              />
+              {critique.fallback_reason && (
+                <DataRow
+                  label="Fallback"
+                  value={critique.fallback_reason}
+                />
+              )}
+              {critique.rationale && (
+                <DataRow label="Rationale" value={critique.rationale} />
+              )}
+              {Array.isArray(critique.issues) && critique.issues.length > 0 && (
+                <div style={S.issueBlock}>
+                  <span style={S.dataLabelBlock}>Issues</span>
+                  <ul style={S.issueList}>
+                    {critique.issues.map((issue) => (
+                      <li key={issue} style={S.issueItem}>
+                        {issue}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Section>
+          )}
+
+          {(hasValue(workflow.workflow_class) ||
+            hasValue(workflowOutcome.reason) ||
+            workflowSteps.length > 0) && (
+            <Section label="WORKFLOW">
+              {workflow.workflow_class && (
+                <DataRow label="Class" value={workflow.workflow_class} />
+              )}
+              {workflow.strategy && (
+                <DataRow label="Strategy" value={workflow.strategy} />
+              )}
+              <DataRow
+                label="Budget"
+                value={formatWorkflowBudget(workflowBudget)}
+              />
+              <DataRow
+                label="Checkpoint"
+                value={formatWorkflowCheckpoint(workflowCheckpoint)}
+                mono
+              />
+              <DataRow
+                label="Outcome"
+                value={formatWorkflowOutcome(workflowOutcome)}
+              />
+              {workflowSteps.length > 0 && (
+                <div style={S.workflowStepBlock}>
+                  <span style={S.dataLabelBlock}>Recent steps</span>
+                  <div style={S.workflowStepList}>
+                    {workflowSteps.slice(-3).map((step, index) => (
+                      <div
+                        key={step.step_id || step.action_id || `${index}`}
+                        style={S.workflowStepItem}
+                      >
+                        <span style={S.workflowStepName}>
+                          {step.step_key || step.tool_name || `step ${index + 1}`}
+                        </span>
+                        <span style={S.workflowStepMeta}>
+                          {step.status || step.receipt_id || "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </Section>
           )}
@@ -460,9 +677,21 @@ function AgentCard({
             <Section label="APPROVAL REQUIRED">
               <p style={S.approvalNote}>
                 The agent wants to run{" "}
-                <strong style={{ color: "#d97706" }}>{data.action_taken?.kind}</strong>.
+                <strong style={{ color: "#d97706" }}>{actionTaken.kind}</strong>
+                {workflow.workflow_class
+                  ? ` in ${workflow.workflow_class}`
+                  : ""}
+                .
                 This action needs your sign-off before it executes.
               </p>
+              {hasValue(actionArgs) && (
+                <div style={S.jsonBlock}>
+                  <span style={S.dataLabelBlock}>Pending arguments</span>
+                  <pre style={S.jsonPreview}>
+                    {formatObjectPreview(actionArgs)}
+                  </pre>
+                </div>
+              )}
               <div style={S.approvalBtns}>
                 <button
                   data-testid="approve-btn"
@@ -494,16 +723,26 @@ function AgentCard({
           )}
 
           {/* Memory hits */}
-          {data?.memory_hits?.length > 0 && (
+          {memoryHits.length > 0 && (
             <Collapsible
-              label={`MEMORY CONTEXT  (${data.memory_hits.length} hit${data.memory_hits.length > 1 ? "s" : ""})`}
+              label={`MEMORY CONTEXT  (${memoryHits.length} hit${memoryHits.length > 1 ? "s" : ""})`}
               open={memOpen}
               toggle={() => setMemOpen((v) => !v)}
             >
-              {data.memory_hits.map((h, i) => (
+              {memoryHits.map((h, i) => (
                 <div key={i} style={S.memHit}>
                   <span style={S.memScore}>{h.score}</span>
-                  <span style={S.memText}>{h.text}</span>
+                  <div style={S.memBody}>
+                    <span style={S.memText}>{h.text}</span>
+                    <span style={S.memMeta}>
+                      {[
+                        h.memory_type,
+                        formatDateTime(h.stored_at),
+                      ]
+                        .filter(Boolean)
+                        .join(" • ") || "memory hit"}
+                    </span>
+                  </div>
                 </div>
               ))}
             </Collapsible>
@@ -621,6 +860,96 @@ function _renderOutput(outputs) {
     return JSON.stringify(outputs, null, 2);
   }
   return String(outputs);
+}
+
+function hasValue(value) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value).length > 0;
+  }
+
+  return true;
+}
+
+function formatBoolean(value) {
+  return value ? "Yes" : "No";
+}
+
+function formatScore(value) {
+  if (typeof value !== "number") return "—";
+  return value.toFixed(2);
+}
+
+function formatSignedNumber(value) {
+  if (typeof value !== "number") return "—";
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+
+function formatWorkflowBudget(budget) {
+  if (!hasValue(budget)) return "—";
+
+  const consumedSteps = budget.consumed_steps ?? 0;
+  const maxSteps = budget.max_steps ?? "—";
+  return `${consumedSteps}/${maxSteps} steps`;
+}
+
+function formatWorkflowCheckpoint(checkpoint) {
+  if (!hasValue(checkpoint)) return "—";
+
+  const parts = [
+    checkpoint.current_step_id,
+    typeof checkpoint.current_step_index === "number"
+      ? `index ${checkpoint.current_step_index}`
+      : null,
+  ].filter(Boolean);
+
+  return parts.join(" • ") || "—";
+}
+
+function formatWorkflowOutcome(outcome) {
+  if (!hasValue(outcome)) return "—";
+
+  return [outcome.terminal_event, outcome.reason]
+    .filter(Boolean)
+    .join(" • ") || "—";
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value);
+  }
+
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatObjectPreview(value) {
+  try {
+    const serialized = JSON.stringify(value || {}, null, 2);
+    return serialized.length > 520
+      ? `${serialized.slice(0, 520)}...`
+      : serialized;
+  } catch {
+    return "{}";
+  }
 }
 
 // ── Styles (white theme, bigger text) ────────────────────────────────────────
@@ -848,11 +1177,59 @@ const S = {
   dataLabel: { fontSize: 13, color: C.muted, minWidth: 78, flexShrink: 0, paddingTop: 2 },
   dataValue: { fontSize: 15, color: C.text, flex: 1, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" },
   mono:      { fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: C.mono },
+  dataLabelBlock: {
+    fontSize: 13,
+    color: C.muted,
+    marginBottom: 6,
+    display: "block",
+  },
+  jsonBlock: {
+    marginBottom: 8,
+  },
+  jsonPreview: {
+    margin: 0,
+    padding: "10px 12px",
+    borderRadius: 10,
+    background: "#f8fafc",
+    border: `1px solid ${C.border}`,
+    color: C.mono,
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 12,
+    lineHeight: 1.55,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },
+  issueBlock: {
+    marginBottom: 8,
+  },
+  issueList: {
+    margin: 0,
+    paddingLeft: 18,
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  issueItem: {
+    fontSize: 14,
+    color: C.text,
+    lineHeight: 1.55,
+  },
 
   // ── Memory hits ───────────────────────────────────────────────────────────────
   memHit:   { display: "flex", gap: 10, marginBottom: 5 },
   memScore: { fontSize: 12, color: C.cyan, minWidth: 38, paddingTop: 2, fontFamily: "monospace" },
+  memBody: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    flex: 1,
+  },
   memText:  { fontSize: 14, color: C.muted, flex: 1, lineHeight: 1.5 },
+  memMeta: {
+    fontSize: 12,
+    color: "#94a3b8",
+    lineHeight: 1.4,
+  },
 
   // ── Approval ─────────────────────────────────────────────────────────────────
   approvalNote: { fontSize: 15, color: C.text, lineHeight: 1.6, marginBottom: 14 },
@@ -898,6 +1275,34 @@ const S = {
   // ── Run ID ────────────────────────────────────────────────────────────────────
   runIdLine: { fontSize: 12, color: "#cbd5e1", marginTop: 4 },
   runIdVal:  { fontFamily: "monospace", color: "#94a3b8" },
+  workflowStepBlock: {
+    marginBottom: 8,
+  },
+  workflowStepList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  workflowStepItem: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    padding: "8px 10px",
+    borderRadius: 10,
+    border: `1px solid ${C.border}`,
+    background: "#f8fafc",
+  },
+  workflowStepName: {
+    fontSize: 13,
+    color: C.text,
+    fontWeight: 600,
+  },
+  workflowStepMeta: {
+    fontSize: 12,
+    color: C.muted,
+    textAlign: "right",
+  },
 
   // ── Markdown output ───────────────────────────────────────────────────────────
   mdOutput: { flex: 1, minWidth: 0 },
