@@ -69,6 +69,14 @@ def test_removed_compatibility_aliases_return_not_found():
 
     assert client.get(f"/runs/{run_id}/state").status_code == 404
     assert client.get(f"/runs/{run_id}/replay").status_code == 404
+    assert client.get(f"/runs/{run_id}/events").status_code == 404
+    assert client.get(f"/runs/{run_id}/artifacts").status_code == 404
+    assert (
+        client.get(f"/runs/{run_id}/artifacts/example-artifact").status_code
+        == 404
+    )
+    assert client.get(f"/runs/{run_id}/approvals").status_code == 404
+    assert client.get(f"/runs/{run_id}/memory/episodic").status_code == 404
     assert client.get("/memory/search?run_id=x&query=test").status_code == 404
     assert client.get("/admin/health").status_code == 404
 

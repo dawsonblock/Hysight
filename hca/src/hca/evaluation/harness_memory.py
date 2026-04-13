@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import shutil
 import uuid
-from pathlib import Path
 from typing import Any, Dict, List
 
 from hca.common.enums import MemoryType
 from hca.common.types import MemoryRecord
 from hca.memory.episodic_store import EpisodicStore
 from hca.memory.retrieval import retrieve
+from hca.paths import run_storage_dir
 
 
 def run_memory_harness() -> Dict[str, Any]:
     """Test memory retrieval and contradiction detection."""
     run_id = f"eval_memory_{uuid.uuid4().hex}"
-    run_path = Path(f"storage/runs/{run_id}")
+    run_path = run_storage_dir(run_id)
     if run_path.exists():
         shutil.rmtree(run_path)
 

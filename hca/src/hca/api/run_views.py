@@ -278,6 +278,18 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
                             if content.get("fallback_reason") is not None
                             else None
                         ),
+                        memory_retrieval_status=(
+                            str(content.get("memory_retrieval_status"))
+                            if content.get("memory_retrieval_status")
+                            is not None
+                            else None
+                        ),
+                        memory_retrieval_error=(
+                            str(content.get("memory_retrieval_error"))
+                            if content.get("memory_retrieval_error")
+                            is not None
+                            else None
+                        ),
                     )
 
         if (

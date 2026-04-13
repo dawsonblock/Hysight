@@ -2,9 +2,9 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  apiFetch,
-  fetchJson,
+  decideRunApproval,
   getResponseErrorMessage,
+  streamRun,
   toErrorMessage,
 } from "@/lib/api";
 
@@ -86,11 +86,7 @@ export default function HCAChat({
     ]);
 
     try {
-      const response = await apiFetch("/hca/run/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal }),
-      });
+      const response = await streamRun(goal);
 
       if (!response.ok) {
         throw new Error(await getResponseErrorMessage(response));
@@ -179,11 +175,7 @@ export default function HCAChat({
     }));
 
     try {
-      const data = await fetchJson(`/hca/run/${runId}/${decision}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approval_id: approvalId }),
-      });
+      const data = await decideRunApproval(runId, decision, approvalId);
 
       updateMessageById(agentId, (currentMessage) => ({
         ...currentMessage,

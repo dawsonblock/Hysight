@@ -7,6 +7,25 @@ export const API_BASE_URL = normalizedBackendUrl
   ? `${normalizedBackendUrl}/api`
   : "/api";
 
+function encodeSegment(value) {
+  return encodeURIComponent(String(value));
+}
+
+function buildQuery(paramsObject = {}) {
+  const params = new URLSearchParams();
+
+  Object.entries(paramsObject).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    params.set(key, String(value));
+  });
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 function normalizePath(path) {
   return path.startsWith("/") ? path : `/${path}`;
 }
@@ -77,4 +96,91 @@ export function toErrorMessage(error, fallback = "Request failed.") {
   }
 
   return fallback;
+}
+
+export function streamRun(goal) {
+  return apiFetch("/hca/run/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ goal }),
+  });
+}
+
+export function decideRunApproval(runId, decision, approvalId) {
+  return fetchJson(
+    `/hca/run/${encodeSegment(runId)}/${encodeSegment(decision)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approval_id: approvalId }),
+    }
+  );
+}
+
+export function listRuns({ query, limit, offset }) {
+  return fetchJson(
+    `/hca/runs${buildQuery({
+      q: typeof query === "string" ? query.trim() : undefined,
+      limit,
+      offset,
+    })}`
+  );
+}
+
+export function getRunSummary(runId) {
+  return fetchJson(`/hca/run/${encodeSegment(runId)}`);
+}
+
+export function listRunEvents(runId, { limit, offset } = {}) {
+  return fetchJson(
+    `/hca/run/${encodeSegment(runId)}/events${buildQuery({
+      limit,
+      offset,
+    })}`
+  );
+}
+
+export function listRunArtifacts(runId, { limit, offset } = {}) {
+  return fetchJson(
+    `/hca/run/${encodeSegment(runId)}/artifacts${buildQuery({
+      limit,
+      offset,
+    })}`
+  );
+}
+
+export function getRunArtifactDetail(
+  runId,
+  artifactId,
+  { previewBytes } = {}
+) {
+  return fetchJson(
+    `/hca/run/${encodeSegment(runId)}/artifacts/${encodeSegment(
+      artifactId
+    )}${buildQuery({ preview_bytes: previewBytes })}`
+  );
+}
+
+export function listMemories({
+  memoryType,
+  scope,
+  includeExpired,
+  limit,
+  offset,
+} = {}) {
+  return fetchJson(
+    `/hca/memory/list${buildQuery({
+      memory_type: memoryType,
+      scope,
+      include_expired: includeExpired ? true : undefined,
+      limit,
+      offset,
+    })}`
+  );
+}
+
+export function deleteMemoryRecord(memoryId) {
+  return fetchJson(`/hca/memory/${encodeSegment(memoryId)}`, {
+    method: "DELETE",
+  });
 }

@@ -13,7 +13,7 @@ import hca.modules.planner as planner_module
 from hca.common.enums import ReceiptStatus
 from hca.common.types import ActionCandidate, RunContext
 from hca.executor.executor import Executor
-from hca.paths import run_storage_path
+from hca.paths import relative_run_storage_path, run_storage_path
 from hca.runtime.runtime import Runtime
 
 
@@ -466,7 +466,11 @@ def test_create_diff_report_writes_certification_artifact(
                     }
                 ],
                 "diff_artifact_path": (
-                    "storage/runs/test_run/artifacts/patch.diff"
+                    relative_run_storage_path(
+                        "test_run",
+                        "artifacts",
+                        "patch.diff",
+                    ).as_posix()
                 ),
                 "approval_id": "approval-1",
             },

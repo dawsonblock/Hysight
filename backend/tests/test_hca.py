@@ -40,16 +40,16 @@ def _seed_run(run_id: str, goal: str, *, completed: bool = True):
 
 
 def _seed_artifact(run_id: str, artifact_id: str, content: str):
-    from hca.paths import run_storage_path  # type: ignore
+    from hca.paths import (  # type: ignore
+        relative_run_storage_path,
+        run_storage_path,
+    )
     from hca.storage.artifacts import append_artifact  # type: ignore
 
     artifact_path = run_storage_path(run_id, "artifacts", "report.txt")
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
     artifact_path.write_text(content, encoding="utf-8")
 
-    relative_path = (
-        Path("storage") / "runs" / run_id / "artifacts" / "report.txt"
-    )
     append_artifact(
         run_id,
         {
@@ -57,7 +57,11 @@ def _seed_artifact(run_id: str, artifact_id: str, content: str):
             "run_id": run_id,
             "action_id": "action-1",
             "kind": "create_run_report",
-            "path": relative_path.as_posix(),
+            "path": relative_run_storage_path(
+                run_id,
+                "artifacts",
+                "report.txt",
+            ).as_posix(),
             "source_action_ids": ["action-1"],
             "file_paths": [],
             "hashes": {},
@@ -216,6 +220,8 @@ def test_run_summary_uses_recorded_memory_hits_and_metrics(
                         "memory_context_used": True,
                         "planning_mode": "rule_based_fallback",
                         "fallback_reason": "llm_error:RuntimeError",
+                        "memory_retrieval_status": "retrieved",
+                        "memory_retrieval_error": None,
                         "memory_hits": [
                             {
                                 "text": "The API key expires on March 1st.",
@@ -282,6 +288,8 @@ def test_run_summary_uses_recorded_memory_hits_and_metrics(
     data = response.json()
     assert data["plan"]["planning_mode"] == "rule_based_fallback"
     assert data["plan"]["fallback_reason"] == "llm_error:RuntimeError"
+    assert data["plan"]["memory_retrieval_status"] == "retrieved"
+    assert data["plan"]["memory_retrieval_error"] is None
     assert (
         data["memory_hits"][0]["text"]
         == "The API key expires on March 1st."
@@ -482,6 +490,8 @@ def test_basic_run_completed(app_client):
     assert isinstance(data.get("discrepancies"), list)
     assert data.get("plan", {}).get("planning_mode") is not None
     assert "fallback_reason" in data.get("plan", {})
+    assert "memory_retrieval_status" in data.get("plan", {})
+    assert "memory_retrieval_error" in data.get("plan", {})
     assert isinstance(data.get("metrics"), dict)
 
 

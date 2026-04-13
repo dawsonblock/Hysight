@@ -12,14 +12,9 @@ from hca.api.models import (
     ApprovalDecisionRequest,
     ApprovalDenyRequest,
     ApprovalGrantRequest,
-    ApprovalListResponse,
-    ApprovalSummaryItem,
     CreateRunRequest,
     CreateRunResponse,
-    MemoryResponse,
     ReplayResponse,
-    RunArtifactDetailResponse,
-    RunArtifactListResponse,
     RunListResponse,
 )
 from hca.api.runtime_actions import (
@@ -29,22 +24,13 @@ from hca.api.runtime_actions import (
 )
 from hca.api.run_views import (
     extract_run_summary,
-    get_run_artifact_detail,
-    list_run_artifacts,
-    list_run_events,
     list_run_summaries,
     require_pending_approval_selection,
     require_run_context,
 )
-from hca.common.enums import MemoryType
-from hca.memory.episodic_store import EpisodicStore
-from hca.memory.identity_store import IdentityStore
-from hca.memory.procedural_store import ProceduralStore
-from hca.memory.semantic_store import SemanticStore
 from hca.storage.approvals import (
     get_approval_status,
     get_pending_requests,
-    iter_records,
 )
 
 app = FastAPI(title="Hybrid Cognitive Agent API")
@@ -63,35 +49,6 @@ def get_runs(
     return list_run_summaries(limit=limit, offset=offset, query_text=query)
 
 
-def _approval_ids(run_id: str) -> List[str]:
-    seen: List[str] = []
-    for record in iter_records(run_id):
-        approval_id = record.get("approval_id")
-        if isinstance(approval_id, str) and approval_id not in seen:
-            seen.append(approval_id)
-    return seen
-
-
-def _approval_list(run_id: str) -> ApprovalListResponse:
-    items = [
-        ApprovalSummaryItem.model_validate(
-            get_approval_status(run_id, approval_id)
-        )
-        for approval_id in _approval_ids(run_id)
-    ]
-    return ApprovalListResponse(approvals=items)
-
-
-def _memory_store(memory_type: MemoryType):
-    stores = {
-        MemoryType.episodic: EpisodicStore,
-        MemoryType.semantic: SemanticStore,
-        MemoryType.procedural: ProceduralStore,
-        MemoryType.identity: IdentityStore,
-    }
-    return stores[memory_type]
-
-
 @app.post("/runs", response_model=CreateRunResponse)
 def create_run(req: CreateRunRequest) -> CreateRunResponse:
     run_id = run_goal(req.goal, req.user_id)
@@ -104,49 +61,6 @@ def get_run(run_id: str) -> ReplayResponse:
     return ReplayResponse.model_validate(
         extract_run_summary(run_id).model_dump(mode="json")
     )
-
-
-@app.get("/runs/{run_id}/events", response_model=List[Dict[str, Any]])
-def get_events(run_id: str) -> List[Dict[str, Any]]:
-    _require_run(run_id)
-    return [
-        record.model_dump(mode="json")
-        for record in list_run_events(run_id, limit=100, offset=0).records
-    ]
-
-
-@app.get(
-    "/runs/{run_id}/artifacts",
-    response_model=RunArtifactListResponse,
-)
-def get_artifacts(
-    run_id: str,
-    limit: int = 100,
-    offset: int = 0,
-) -> RunArtifactListResponse:
-    return list_run_artifacts(run_id, limit=limit, offset=offset)
-
-
-@app.get(
-    "/runs/{run_id}/artifacts/{artifact_id}",
-    response_model=RunArtifactDetailResponse,
-)
-def get_artifact_detail(
-    run_id: str,
-    artifact_id: str,
-    preview_bytes: int = 20000,
-) -> RunArtifactDetailResponse:
-    return get_run_artifact_detail(
-        run_id,
-        artifact_id,
-        preview_bytes=preview_bytes,
-    )
-
-
-@app.get("/runs/{run_id}/approvals", response_model=ApprovalListResponse)
-def get_approvals(run_id: str) -> ApprovalListResponse:
-    _require_run(run_id)
-    return _approval_list(run_id)
 
 
 @app.get(
@@ -246,20 +160,3 @@ def decide_approval(
             ApprovalDenyRequest(actor=req.actor, reason=req.reason),
         )
     raise HTTPException(status_code=400, detail="Invalid decision")
-
-
-@app.get(
-    "/runs/{run_id}/memory/{memory_type}",
-    response_model=MemoryResponse,
-)
-def get_memory(run_id: str, memory_type: MemoryType) -> MemoryResponse:
-    _require_run(run_id)
-    store = _memory_store(memory_type)(run_id)
-    return MemoryResponse(
-        run_id=run_id,
-        memory_type=memory_type.value,
-        items=[
-            record.model_dump(mode="json")
-            for record in store.iter_records()
-        ],
-    )

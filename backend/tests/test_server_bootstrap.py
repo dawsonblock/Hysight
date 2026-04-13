@@ -217,6 +217,7 @@ def test_frontend_uses_shared_api_client_only():
     direct_fetch_files = []
     direct_backend_url_files = []
     compatibility_route_files = []
+    hardcoded_api_route_files = []
 
     for path in frontend_root.rglob("*.js"):
         relative_path = path.relative_to(ROOT).as_posix()
@@ -227,10 +228,16 @@ def test_frontend_uses_shared_api_client_only():
             direct_backend_url_files.append(relative_path)
         if re.search(r"['\"]/?runs(?:/|['\"])", content):
             compatibility_route_files.append(relative_path)
+        if (
+            relative_path != "frontend/src/lib/api.js"
+            and re.search(r"['\"`]\/(?:api|hca)\/", content)
+        ):
+            hardcoded_api_route_files.append(relative_path)
 
     assert direct_fetch_files == []
     assert direct_backend_url_files == []
     assert compatibility_route_files == []
+    assert hardcoded_api_route_files == []
 
 
 def test_launch_surfaces_do_not_start_compatibility_app():
@@ -279,6 +286,37 @@ def test_fastapi_entrypoints_are_limited_to_authorized_surfaces():
     assert "internal runtime tests" in internal_app
 
 
+def test_internal_compatibility_app_routes_are_minimal():
+    compatibility_app = import_module("hca.api.app").app
+    compatibility_routes = sorted(
+        (
+            route.path,
+            tuple(
+                sorted(
+                    method
+                    for method in route.methods
+                    if method not in {"HEAD", "OPTIONS"}
+                )
+            ),
+        )
+        for route in compatibility_app.routes
+        if route.path.startswith("/runs")
+        or route.path.startswith("/memory")
+        or route.path.startswith("/admin")
+    )
+
+    assert compatibility_routes == [
+        ("/runs", ("GET",)),
+        ("/runs", ("POST",)),
+        ("/runs/{run_id}", ("GET",)),
+        ("/runs/{run_id}/approvals/pending", ("GET",)),
+        (
+            "/runs/{run_id}/approvals/{approval_id}/decide",
+            ("POST",),
+        ),
+    ]
+
+
 def test_run_view_models_delegate_to_canonical_api_models():
     api_models = import_module("hca.api.models")
     run_views = import_module("hca.api.run_views")
@@ -324,6 +362,31 @@ def test_non_test_code_does_not_append_grants_directly():
             continue
         content = path.read_text(encoding="utf-8")
         if "append_grant(" in content:
+            offenders.append(relative_path)
+
+    assert offenders == []
+
+
+def test_python_code_uses_storage_helpers_instead_of_hardcoded_runs_paths():
+    offenders = []
+    allowed_paths = {
+        "backend/tests/test_server_bootstrap.py",
+        "hca/src/hca/executor/tool_registry.py",
+        "hca/src/hca/paths.py",
+    }
+    hardcoded_patterns = [
+        re.compile(r"storage/runs"),
+        re.compile(r'Path\("storage"\)\s*/\s*"runs"'),
+        re.compile(r'PurePosixPath\("storage/runs"\)'),
+    ]
+
+    for path in ROOT.rglob("*.py"):
+        relative_path = path.relative_to(ROOT).as_posix()
+        if relative_path in allowed_paths:
+            continue
+
+        content = path.read_text(encoding="utf-8")
+        if any(pattern.search(content) for pattern in hardcoded_patterns):
             offenders.append(relative_path)
 
     assert offenders == []

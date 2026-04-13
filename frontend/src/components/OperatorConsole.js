@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { fetchJson, toErrorMessage } from "@/lib/api";
+import {
+  getRunArtifactDetail,
+  getRunSummary,
+  listRunArtifacts,
+  listRunEvents,
+  listRuns,
+  toErrorMessage,
+} from "@/lib/api";
 
 const RUN_PAGE_SIZE = 10;
 const EVENT_LIMIT = 80;
@@ -59,16 +66,11 @@ export default function OperatorConsole({
       setRunsError("");
 
       try {
-        const params = new URLSearchParams({
-          limit: String(RUN_PAGE_SIZE),
-          offset: String(runPage * RUN_PAGE_SIZE),
+        const data = await listRuns({
+          query: runQuery,
+          limit: RUN_PAGE_SIZE,
+          offset: runPage * RUN_PAGE_SIZE,
         });
-
-        if (runQuery.trim()) {
-          params.set("q", runQuery.trim());
-        }
-
-        const data = await fetchJson(`/hca/runs?${params.toString()}`);
         if (!cancelled) {
           setRuns(Array.isArray(data?.records) ? data.records : []);
           setTotalRuns(typeof data?.total === "number" ? data.total : 0);
@@ -119,11 +121,9 @@ export default function OperatorConsole({
 
       try {
         const [detail, eventData, artifactData] = await Promise.all([
-          fetchJson(`/hca/run/${selectedRunId}`),
-          fetchJson(`/hca/run/${selectedRunId}/events?limit=${EVENT_LIMIT}`),
-          fetchJson(
-            `/hca/run/${selectedRunId}/artifacts?limit=${ARTIFACT_LIMIT}`
-          ),
+          getRunSummary(selectedRunId),
+          listRunEvents(selectedRunId, { limit: EVENT_LIMIT }),
+          listRunArtifacts(selectedRunId, { limit: ARTIFACT_LIMIT }),
         ]);
 
         if (cancelled) {
@@ -179,8 +179,9 @@ export default function OperatorConsole({
       setArtifactLoading(true);
       setArtifactError("");
       try {
-        const data = await fetchJson(
-          `/hca/run/${selectedRunId}/artifacts/${selectedArtifactId}`
+        const data = await getRunArtifactDetail(
+          selectedRunId,
+          selectedArtifactId
         );
         if (!cancelled) {
           setArtifactDetail(data);

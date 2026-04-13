@@ -334,7 +334,9 @@
         "confidence",
         "memory_context_used",
         "planning_mode",
-        "fallback_reason"
+        "fallback_reason",
+        "memory_retrieval_status",
+        "memory_retrieval_error"
       ],
       "properties": {
         "strategy": { "type": ["string", "null"] },
@@ -347,7 +349,9 @@
         },
         "memory_context_used": { "type": "boolean" },
         "planning_mode": { "type": ["string", "null"] },
-        "fallback_reason": { "type": ["string", "null"] }
+        "fallback_reason": { "type": ["string", "null"] },
+        "memory_retrieval_status": { "type": ["string", "null"] },
+        "memory_retrieval_error": { "type": ["string", "null"] }
       }
     },
     "RunActionTakenResponse": {

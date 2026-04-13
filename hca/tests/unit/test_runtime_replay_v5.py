@@ -8,7 +8,7 @@ import shutil
 import pytest
 
 import hca.executor.tool_registry as tool_registry
-from hca.paths import run_storage_path
+from hca.paths import run_storage_path, storage_root
 from hca.runtime.runtime import Runtime
 from hca.runtime.replay import reconstruct_state
 from hca.common.enums import RuntimeState
@@ -18,8 +18,9 @@ from hca.storage.receipts import iter_receipts
 
 
 def setup_module():
-    if os.path.exists("storage/runs"):
-        shutil.rmtree("storage/runs")
+    runs_root = storage_root() / "runs"
+    if runs_root.exists():
+        shutil.rmtree(runs_root)
 
 
 def test_deny_halts_run():

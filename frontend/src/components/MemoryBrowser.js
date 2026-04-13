@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { fetchJson, toErrorMessage } from "@/lib/api";
+import {
+  deleteMemoryRecord,
+  listMemories,
+  toErrorMessage,
+} from "@/lib/api";
 
 const TYPE_META = {
   episode:    { color: "#6366f1", bg: "#eef2ff", label: "Episode"   },
@@ -34,21 +38,12 @@ export default function MemoryBrowser({ open, onClose }) {
 
     try {
       const isSearchMode = queryText.trim().length > 0;
-      const params = new URLSearchParams();
 
-      if (type) {
-        params.set("memory_type", type);
-      }
-
-      if (isSearchMode) {
-        params.set("limit", String(SEARCH_LIMIT));
-        params.set("offset", "0");
-      } else {
-        params.set("limit", String(PAGE_SIZE));
-        params.set("offset", String(currentPage * PAGE_SIZE));
-      }
-
-      const data = await fetchJson(`/hca/memory/list?${params.toString()}`);
+      const data = await listMemories({
+        memoryType: type,
+        limit: isSearchMode ? SEARCH_LIMIT : PAGE_SIZE,
+        offset: isSearchMode ? 0 : currentPage * PAGE_SIZE,
+      });
 
       if (!Array.isArray(data?.records) || typeof data?.total !== "number") {
         throw new Error("Memory list response was invalid.");
@@ -116,7 +111,7 @@ export default function MemoryBrowser({ open, onClose }) {
     setDeleting(memoryId);
     try {
       setError("");
-      const data = await fetchJson(`/hca/memory/${memoryId}`, { method: "DELETE" });
+      const data = await deleteMemoryRecord(memoryId);
 
       if (!data?.deleted || data.memory_id !== memoryId) {
         throw new Error("Memory delete did not complete.");

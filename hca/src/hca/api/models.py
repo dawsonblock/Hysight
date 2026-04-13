@@ -24,6 +24,8 @@ class RunPlanResponse(RunAPIModel):
     memory_context_used: bool = False
     planning_mode: Optional[str] = None
     fallback_reason: Optional[str] = None
+    memory_retrieval_status: Optional[str] = None
+    memory_retrieval_error: Optional[str] = None
 
 
 class RunActionResponse(RunAPIModel):
