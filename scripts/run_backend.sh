@@ -31,6 +31,39 @@ MEMORY_BACKEND="${MEMORY_BACKEND:-python}"
 HCA_STORAGE_ROOT="${HCA_STORAGE_ROOT:-$REPO_ROOT/storage}"
 MEMORY_STORAGE_DIR="${MEMORY_STORAGE_DIR:-$HCA_STORAGE_ROOT/memory}"
 
+case "$MEMORY_BACKEND" in
+  python|rust)
+    ;;
+  *)
+    echo "ERROR: MEMORY_BACKEND must be either 'python' or 'rust'." >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$HCA_STORAGE_ROOT" != /* ]]; then
+  echo "ERROR: HCA_STORAGE_ROOT must be an absolute path when set." >&2
+  exit 1
+fi
+
+if [[ "$MEMORY_STORAGE_DIR" != /* ]]; then
+  echo "ERROR: MEMORY_STORAGE_DIR must be an absolute path when set." >&2
+  exit 1
+fi
+
+case "$MEMORY_STORAGE_DIR" in
+  "$HCA_STORAGE_ROOT"/*)
+    ;;
+  *)
+    echo "ERROR: MEMORY_STORAGE_DIR must be inside HCA_STORAGE_ROOT." >&2
+    exit 1
+    ;;
+esac
+
+if [ "$MEMORY_BACKEND" = "python" ] && [ -n "${MEMORY_SERVICE_URL:-}" ]; then
+  echo "ERROR: MEMORY_SERVICE_URL must be unset unless MEMORY_BACKEND=rust." >&2
+  exit 1
+fi
+
 export MEMORY_BACKEND
 export HCA_STORAGE_ROOT
 export MEMORY_STORAGE_DIR

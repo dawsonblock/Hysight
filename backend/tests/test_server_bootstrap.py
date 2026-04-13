@@ -11,11 +11,14 @@ if str(ROOT) not in sys.path:
 
 memory_config = import_module("memory_service.config")
 server_module = import_module("backend.server")
+paths_module = import_module("hca.paths")
 BackendConfigurationError = server_module.BackendConfigurationError
 _load_settings = server_module._load_settings
 create_app = server_module.create_app
 FastAPI = import_module("fastapi").FastAPI
 TestClient = import_module("fastapi.testclient").TestClient
+StorageConfigurationError = paths_module.StorageConfigurationError
+storage_root = paths_module.storage_root
 MemoryConfigurationError = import_module(
     "memory_service"
 ).MemoryConfigurationError
@@ -67,9 +70,11 @@ def test_memory_retrieve_route_works_without_db(monkeypatch, tmp_path):
 
     monkeypatch.delenv("MONGO_URL", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)
-    monkeypatch.delenv("MEMORY_BACKEND", raising=False)
+    storage_dir = tmp_path / "storage"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
     monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
-    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(tmp_path / "memory"))
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(storage_dir / "memory"))
     _ms_singleton._controller = None
     try:
         with TestClient(create_app()) as client:
@@ -81,6 +86,63 @@ def test_memory_retrieve_route_works_without_db(monkeypatch, tmp_path):
         assert "hits" in r.json()
     finally:
         _ms_singleton._controller = None
+
+
+def test_load_memory_settings_derives_storage_from_hca_storage_root(
+    monkeypatch,
+    tmp_path,
+):
+    storage_dir = tmp_path / "storage"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.delenv("MEMORY_STORAGE_DIR", raising=False)
+    monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
+
+    settings = memory_config.load_memory_settings()
+
+    assert settings.storage_dir == (storage_dir / "memory").resolve()
+
+
+def test_load_memory_settings_rejects_sidecar_url_in_python_mode(
+    monkeypatch,
+):
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.setenv("MEMORY_SERVICE_URL", "http://localhost:3031")
+
+    with pytest.raises(
+        MemoryConfigurationError,
+        match="must be unset unless MEMORY_BACKEND=rust",
+    ):
+        memory_config.load_memory_settings()
+
+
+def test_load_memory_settings_rejects_memory_storage_outside_root(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    monkeypatch.setenv(
+        "MEMORY_STORAGE_DIR",
+        str(tmp_path / "other-memory"),
+    )
+    monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
+
+    with pytest.raises(
+        MemoryConfigurationError,
+        match="inside HCA_STORAGE_ROOT",
+    ):
+        memory_config.load_memory_settings()
+
+
+def test_storage_root_rejects_relative_explicit_path(monkeypatch):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", "relative/storage")
+
+    with pytest.raises(
+        StorageConfigurationError,
+        match="absolute path",
+    ):
+        storage_root()
 
 
 @pytest.mark.filterwarnings(_ASYNCIO_DEPRECATION_FILTER)
@@ -279,6 +341,26 @@ def test_run_backend_script_sets_explicit_storage_defaults():
         'MEMORY_STORAGE_DIR="${MEMORY_STORAGE_DIR:-$HCA_STORAGE_ROOT/memory}"'
         in script
     )
+    assert (
+        "MEMORY_SERVICE_URL must be unset unless MEMORY_BACKEND=rust"
+        in script
+    )
+    assert "MEMORY_STORAGE_DIR must be inside HCA_STORAGE_ROOT" in script
+
+
+def test_base_compose_does_not_export_sidecar_url():
+    compose = (ROOT / "compose.yml").read_text(encoding="utf-8")
+    assert re.search(r"^\s+MEMORY_SERVICE_URL:", compose, re.MULTILINE) is None
+
+
+def test_proof_runner_uses_explicit_isolated_storage_env():
+    proof_runner = (ROOT / "scripts" / "run_tests.py").read_text(
+        encoding="utf-8"
+    )
+    assert "isolated_storage" in proof_runner
+    assert '"MEMORY_BACKEND": "python"' in proof_runner
+    assert 'env.pop("MEMORY_SERVICE_URL", None)' in proof_runner
+    assert 'tempfile.mkdtemp(prefix="hysight-proof-")' in proof_runner
 
 
 def test_proof_wrapper_delegates_to_canonical_proof_runner():

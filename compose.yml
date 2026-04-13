@@ -9,7 +9,6 @@
 # Copy .env.example → .env and fill in your values before starting.
 
 services:
-
   # ─── backend ──────────────────────────────────────────────────────────────
   backend:
     build:
@@ -23,8 +22,6 @@ services:
     environment:
       # Memory backend: "python" (default) or "rust" (see compose.sidecar.yml)
       MEMORY_BACKEND: ${MEMORY_BACKEND:-python}
-      # Only required when MEMORY_BACKEND=rust; wired by compose.sidecar.yml
-      MEMORY_SERVICE_URL: ${MEMORY_SERVICE_URL:-}
       # HCA run storage root inside the container
       HCA_STORAGE_ROOT: /app/storage
       # Memory storage dir inside the container
@@ -52,4 +49,3 @@ services:
 
 volumes:
   hca-storage:
-

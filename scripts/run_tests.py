@@ -25,6 +25,7 @@ import pathlib
 import shlex
 import subprocess
 import sys
+import tempfile
 from typing import Any, Dict, List
 
 MEMORY_SERVICE_URL = os.environ.get(
@@ -45,6 +46,7 @@ Step = Dict[str, Any]
 DEFAULT_STEPS: List[Step] = [
     {
         "name": "HCA pipeline proof",
+        "isolated_storage": True,
         "cmd": [
             sys.executable, "-m", "pytest",
             "tests/test_hca_pipeline.py", "-q",
@@ -52,6 +54,7 @@ DEFAULT_STEPS: List[Step] = [
     },
     {
         "name": "Backend local proof",
+        "isolated_storage": True,
         "cmd": [
             sys.executable, "-m", "pytest",
             "backend/tests/test_hca.py",
@@ -62,6 +65,7 @@ DEFAULT_STEPS: List[Step] = [
     },
     {
         "name": "Contract conformance proof",
+        "isolated_storage": True,
         "cmd": [
             sys.executable, "-m", "pytest",
             "backend/tests/test_contract_conformance.py", "-q",
@@ -69,6 +73,7 @@ DEFAULT_STEPS: List[Step] = [
     },
     {
         "name": "Backend full proof",
+        "isolated_storage": True,
         "cmd": [
             sys.executable, "-m", "pytest",
             "backend/tests", "-q",
@@ -78,6 +83,7 @@ DEFAULT_STEPS: List[Step] = [
 
 SIDECAR_STEP: Step = {
     "name": "Live sidecar proof",
+    "isolated_storage": True,
     "cmd": [
         sys.executable, "-m", "pytest",
         "backend/tests/test_memvid_sidecar.py", "-q",
@@ -99,6 +105,14 @@ REQUIRED_TEST_DEPS = (
     "httpx",
     "jsonschema",
 )
+
+
+def _isolated_proof_env(storage_root: pathlib.Path) -> Dict[str, str]:
+    return {
+        "MEMORY_BACKEND": "python",
+        "HCA_STORAGE_ROOT": str(storage_root),
+        "MEMORY_STORAGE_DIR": str(storage_root / "memory"),
+    }
 
 
 def _check_test_deps() -> bool:
@@ -147,18 +161,42 @@ def _check_sidecar_health() -> bool:
 def _run_step(step: Step) -> int:
     cmd = step["cmd"]
     extra_env = step.get("env", {})
-    env = {**os.environ, **extra_env}
+    isolated_dir = None
+    isolated_env: Dict[str, str] = {}
+    if step.get("isolated_storage"):
+        isolated_dir = pathlib.Path(
+            tempfile.mkdtemp(prefix="hysight-proof-")
+        ).resolve()
+        isolated_env = _isolated_proof_env(isolated_dir)
+
+    env = dict(os.environ)
+    if step.get("isolated_storage") and "MEMORY_SERVICE_URL" not in extra_env:
+        env.pop("MEMORY_SERVICE_URL", None)
+    env.update(isolated_env)
+    env.update(extra_env)
 
     print(f"\n==> [{step['name']}]")
-    display_env = " ".join(f"{k}={v}" for k, v in extra_env.items())
+    display_env_map = {**isolated_env, **extra_env}
+    display_env = " ".join(
+        f"{k}={v}" for k, v in display_env_map.items()
+    )
     display_cmd = shlex.join(cmd)
     if display_env:
         print(f"    {display_env} {display_cmd}")
     else:
         print(f"    {display_cmd}")
 
-    result = subprocess.run(cmd, env=env, cwd=REPO_ROOT, check=False)
-    return result.returncode
+    try:
+        result = subprocess.run(cmd, env=env, cwd=REPO_ROOT, check=False)
+        return result.returncode
+    finally:
+        if isolated_dir is not None:
+            for path in sorted(isolated_dir.rglob("*"), reverse=True):
+                if path.is_file() or path.is_symlink():
+                    path.unlink(missing_ok=True)
+                elif path.is_dir():
+                    path.rmdir()
+            isolated_dir.rmdir()
 
 
 def main() -> int:

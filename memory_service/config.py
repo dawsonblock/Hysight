@@ -38,16 +38,70 @@ class MemorySettings:
 
 
 def default_memory_storage_dir() -> Path:
-    return REPO_ROOT / "storage" / "memory"
+    return default_hca_storage_root() / "memory"
 
 
-def _normalize_storage_dir(raw_path: str | None) -> Path:
-    if not raw_path:
-        return default_memory_storage_dir()
+def default_hca_storage_root() -> Path:
+    return REPO_ROOT / "storage"
+
+
+def _normalize_configured_path(
+    raw_path: str | None,
+    *,
+    env_name: str,
+    default_path: Path,
+) -> Path:
+    if not raw_path or not raw_path.strip():
+        return default_path.resolve()
     path = Path(raw_path).expanduser()
-    if not path.is_absolute():
-        path = (REPO_ROOT / path).resolve()
-    return path
+    if path.is_absolute():
+        return path.resolve()
+    raise MemoryConfigurationError(
+        f"{env_name} must be an absolute path when set. "
+        f"Example: {env_name}={default_path}"
+    )
+
+
+def _normalize_hca_storage_root(raw_path: str | None) -> Path:
+    return _normalize_configured_path(
+        raw_path,
+        env_name="HCA_STORAGE_ROOT",
+        default_path=default_hca_storage_root(),
+    )
+
+
+def _normalize_storage_dir(
+    raw_path: str | None,
+    *,
+    hca_storage_root: Path,
+) -> Path:
+    return _normalize_configured_path(
+        raw_path,
+        env_name="MEMORY_STORAGE_DIR",
+        default_path=hca_storage_root / "memory",
+    )
+
+
+def _validate_storage_layout(
+    hca_storage_root: Path,
+    storage_dir: Path,
+) -> None:
+    try:
+        relative_storage_dir = storage_dir.relative_to(hca_storage_root)
+    except ValueError as exc:
+        raise MemoryConfigurationError(
+            "MEMORY_STORAGE_DIR must be inside HCA_STORAGE_ROOT so memory "
+            "and run storage stay under one explicit root. Example: "
+            f"HCA_STORAGE_ROOT={hca_storage_root} "
+            f"MEMORY_STORAGE_DIR={hca_storage_root / 'memory'}"
+        ) from exc
+
+    if not relative_storage_dir.parts:
+        raise MemoryConfigurationError(
+            "MEMORY_STORAGE_DIR must be a child directory of "
+            "HCA_STORAGE_ROOT, not the root itself. Example: "
+            f"MEMORY_STORAGE_DIR={hca_storage_root / 'memory'}"
+        )
 
 
 def _validate_service_url(service_url: str) -> None:
@@ -70,8 +124,22 @@ def load_memory_settings() -> MemorySettings:
             f"MEMORY_BACKEND must be one of: {allowed}"
         )
 
-    storage_dir = _normalize_storage_dir(os.environ.get("MEMORY_STORAGE_DIR"))
+    hca_storage_root = _normalize_hca_storage_root(
+        os.environ.get("HCA_STORAGE_ROOT")
+    )
+    storage_dir = _normalize_storage_dir(
+        os.environ.get("MEMORY_STORAGE_DIR"),
+        hca_storage_root=hca_storage_root,
+    )
     service_url = os.environ.get("MEMORY_SERVICE_URL", "").strip() or None
+
+    _validate_storage_layout(hca_storage_root, storage_dir)
+
+    if raw_backend == "python" and service_url:
+        raise MemoryConfigurationError(
+            "MEMORY_SERVICE_URL must be unset unless MEMORY_BACKEND=rust. "
+            f"{_SIDECAR_URL_EXAMPLE}"
+        )
 
     if raw_backend == "rust":
         if not service_url:

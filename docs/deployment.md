@@ -6,6 +6,10 @@ The canonical public HTTP surface is `backend.server:app`, exposed through `./sc
 
 The default memory mode is the in-process Python backend (`MEMORY_BACKEND=python`). The Rust memvid sidecar is optional and only changes the memory implementation behind the backend; it does not replace the public HTTP API.
 
+When `MEMORY_BACKEND=python`, `MEMORY_SERVICE_URL` must be unset. When
+`MEMORY_STORAGE_DIR` is set, it must be an absolute child path under
+`HCA_STORAGE_ROOT`.
+
 ---
 
 ## Prerequisites
@@ -42,7 +46,9 @@ cp .env.example .env
 This starts the public backend app. Do not deploy `hca.api.app:app` for normal local or container-backed usage.
 The launcher now resolves and exports `MEMORY_BACKEND`, `HCA_STORAGE_ROOT`,
 and `MEMORY_STORAGE_DIR` explicitly before starting uvicorn, then prints the
-active memory mode and storage roots.
+active memory mode and storage roots. It now also rejects mixed python+sidecar
+config and storage paths that are relative or outside the configured
+`HCA_STORAGE_ROOT`.
 
 ---
 
@@ -82,6 +88,10 @@ make test-backend
 MEMORY_SERVICE_URL=http://localhost:3031 make test-sidecar
 ```
 
+`python scripts/run_tests.py` now runs each proof step with an isolated
+temporary `HCA_STORAGE_ROOT` and matching `MEMORY_STORAGE_DIR`, so proof does
+not rely on repo-default storage state.
+
 ---
 
 ## 4 — Required environment variables
@@ -90,9 +100,9 @@ MEMORY_SERVICE_URL=http://localhost:3031 make test-sidecar
 | --- | --- | --- | --- |
 | `EMERGENT_LLM_KEY` | yes (for agent runs) | — | LLM API key |
 | `MEMORY_BACKEND` | no | `python` | `python` or `rust` |
-| `MEMORY_SERVICE_URL` | when `rust` | — | e.g. `http://localhost:3031` |
+| `MEMORY_SERVICE_URL` | when `rust` | — | Must be unset in `python` mode |
 | `HCA_STORAGE_ROOT` | no | `<repo>/storage` | Run storage path |
-| `MEMORY_STORAGE_DIR` | no | `<repo>/storage/memory` | Memory store path |
+| `MEMORY_STORAGE_DIR` | no | `<HCA_STORAGE_ROOT>/memory` | Absolute child path under `HCA_STORAGE_ROOT` |
 | `MONGO_URL` | paired with `DB_NAME` | — | Set both or neither |
 | `DB_NAME` | paired with `MONGO_URL` | — | Set both or neither |
 | `CORS_ORIGINS` | no | (none) | Comma-separated origins |
@@ -167,6 +177,14 @@ Set **both** `MONGO_URL` and `DB_NAME`, or unset both. Mixed state is rejected a
 ### `MemoryConfigurationError: MEMORY_SERVICE_URL is required`
 
 `MEMORY_BACKEND=rust` was set but `MEMORY_SERVICE_URL` was not. Either switch back to `MEMORY_BACKEND=python` or start the sidecar and set the URL.
+
+### `MemoryConfigurationError: MEMORY_SERVICE_URL must be unset unless MEMORY_BACKEND=rust`
+
+Remove `MEMORY_SERVICE_URL` in python mode, or switch fully to sidecar mode by setting `MEMORY_BACKEND=rust`.
+
+### `MemoryConfigurationError: MEMORY_STORAGE_DIR must be inside HCA_STORAGE_ROOT`
+
+Set `MEMORY_STORAGE_DIR` to an absolute child directory such as `<HCA_STORAGE_ROOT>/memory`.
 
 ### `MemoryConfigurationError: Rust memory backend health check failed`
 

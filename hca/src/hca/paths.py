@@ -13,6 +13,10 @@ HCA_ROOT = HCA_SRC_ROOT.parent
 REPO_ROOT = HCA_ROOT.parent
 
 
+class StorageConfigurationError(RuntimeError):
+    """Raised when HCA storage configuration is invalid."""
+
+
 def ensure_sys_path(*paths: Path) -> None:
     for path in reversed(paths):
         path_str = str(path)
@@ -28,11 +32,26 @@ def ensure_repo_paths_on_sys_path() -> None:
     ensure_sys_path(REPO_ROOT, HCA_SRC_ROOT)
 
 
-def storage_root() -> Path:
-    configured = os.environ.get("HCA_STORAGE_ROOT")
-    if configured:
-        return Path(configured).expanduser().resolve()
+def default_storage_root() -> Path:
     return REPO_ROOT / "storage"
+
+
+def _normalize_storage_root(raw_path: str | None) -> Path:
+    if not raw_path or not raw_path.strip():
+        return default_storage_root().resolve()
+
+    path = Path(raw_path).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+
+    raise StorageConfigurationError(
+        "HCA_STORAGE_ROOT must be an absolute path when set. "
+        f"Example: HCA_STORAGE_ROOT={default_storage_root()}"
+    )
+
+
+def storage_root() -> Path:
+    return _normalize_storage_root(os.environ.get("HCA_STORAGE_ROOT"))
 
 
 def run_storage_dir(run_id: str) -> Path:

@@ -370,9 +370,14 @@ DB_NAME=hysight
 # Optional — override where run artifacts are written
 # HCA_STORAGE_ROOT=/path/to/custom/storage
 
+# Optional — override the local python memory store path.
+# If set, it must stay under HCA_STORAGE_ROOT.
+# MEMORY_STORAGE_DIR=/path/to/custom/storage/memory
+
 # Optional — enable the Rust memory sidecar.
 # If MEMORY_BACKEND=rust is set, MEMORY_SERVICE_URL must point to a healthy
-# sidecar that responds on /health or startup will fail.
+# sidecar that responds on /health or startup will fail. Leave
+# MEMORY_SERVICE_URL unset in python mode; mixed mode is rejected.
 # MEMORY_BACKEND=rust
 # MEMORY_SERVICE_URL=http://localhost:3031
 
@@ -411,6 +416,10 @@ To enable the Rust-backed memory path in the backend, set both
 `MEMORY_BACKEND=rust` and `MEMORY_SERVICE_URL=http://localhost:3031` before
 starting the FastAPI app. Startup now validates the sidecar via `/health` and
 fails fast if the service is unreachable.
+
+The proof runner now sets isolated temporary `HCA_STORAGE_ROOT` and
+`MEMORY_STORAGE_DIR` values for each proof step so local proof does not depend
+on repo-default storage paths or leftover state.
 
 ---
 

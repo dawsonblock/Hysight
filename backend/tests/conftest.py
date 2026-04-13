@@ -48,12 +48,18 @@ def pytest_sessionstart(session):
 def isolated_memory(tmp_path, monkeypatch):
     """Give each test a fresh, empty MemoryController in a temp directory.
 
-    Sets MEMORY_STORAGE_DIR to a unique tmp path and resets the module-level
-    singleton before and after, so no state leaks between tests.
+    Sets explicit python-backed memory config under one temp storage root and
+    resets the module-level singleton before and after, so no state leaks
+    between tests.
     """
-    monkeypatch.delenv("MEMORY_BACKEND", raising=False)
+    storage_root = tmp_path / "storage"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
     monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
-    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(tmp_path / "memory"))
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv(
+        "MEMORY_STORAGE_DIR",
+        str(storage_root / "memory"),
+    )
     _ms_singleton._controller = None
     yield
     _ms_singleton._controller = None
@@ -67,7 +73,10 @@ def app_client(tmp_path, monkeypatch, isolated_memory):
     catches the missing DB config and logs a warning instead of raising, so
     /status routes return 503 while all HCA and memory routes work normally.
     """
-    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    storage_root = tmp_path / "storage"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(storage_root / "memory"))
     monkeypatch.delenv("MONGO_URL", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)
     monkeypatch.delenv("CORS_ORIGINS", raising=False)
