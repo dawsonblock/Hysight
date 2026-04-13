@@ -236,6 +236,51 @@ def test_run_summary_uses_recorded_memory_hits_and_metrics(
             ]
         },
     )
+    append_event(
+        context,
+        EventType.module_proposed,
+        "perception_text",
+        {
+            "candidate_items": [
+                {
+                    "kind": "perceived_intent",
+                    "content": {
+                        "intent_class": "retrieve_memory",
+                        "intent": "retrieve",
+                        "arguments": {"query": context.goal},
+                        "perception_mode": "rule_based_fallback",
+                        "fallback_reason": "llm_error:RuntimeError",
+                        "llm_attempted": True,
+                    },
+                }
+            ]
+        },
+    )
+    append_event(
+        context,
+        EventType.recurrent_pass_completed,
+        "runtime",
+        {
+            "revision_payloads": [
+                {
+                    "source_module": "critic",
+                    "critique_items": [
+                        {
+                            "kind": "critic_verdict",
+                            "content": {
+                                "verdict": "approve",
+                                "issues": [],
+                                "confidence_delta": 0.02,
+                                "rationale": "Replay-backed critic proof.",
+                                "llm_powered": False,
+                                "fallback_reason": "rule_based_only",
+                            },
+                        }
+                    ],
+                }
+            ]
+        },
+    )
 
     started_at = datetime.now(timezone.utc)
     finished_at = started_at + timedelta(milliseconds=25)
@@ -290,6 +335,20 @@ def test_run_summary_uses_recorded_memory_hits_and_metrics(
     assert data["plan"]["fallback_reason"] == "llm_error:RuntimeError"
     assert data["plan"]["memory_retrieval_status"] == "retrieved"
     assert data["plan"]["memory_retrieval_error"] is None
+    assert data["perception"]["intent_class"] == "retrieve_memory"
+    assert data["perception"]["intent"] == "retrieve"
+    assert data["perception"]["perception_mode"] == "rule_based_fallback"
+    assert (
+        data["perception"]["fallback_reason"]
+        == "llm_error:RuntimeError"
+    )
+    assert data["perception"]["llm_attempted"] is True
+    assert data["critique"]["verdict"] == "approve"
+    assert data["critique"]["issues"] == []
+    assert data["critique"]["rationale"] == "Replay-backed critic proof."
+    assert data["critique"]["llm_powered"] is False
+    assert data["critique"]["fallback_reason"] == "rule_based_only"
+    assert data["critique"]["confidence_delta"] == 0.02
     assert (
         data["memory_hits"][0]["text"]
         == "The API key expires on March 1st."
@@ -492,6 +551,13 @@ def test_basic_run_completed(app_client):
     assert "fallback_reason" in data.get("plan", {})
     assert "memory_retrieval_status" in data.get("plan", {})
     assert "memory_retrieval_error" in data.get("plan", {})
+    assert isinstance(data.get("perception"), dict)
+    assert "perception_mode" in data.get("perception", {})
+    assert "fallback_reason" in data.get("perception", {})
+    assert "llm_attempted" in data.get("perception", {})
+    assert isinstance(data.get("critique"), dict)
+    assert "llm_powered" in data.get("critique", {})
+    assert "fallback_reason" in data.get("critique", {})
     assert isinstance(data.get("metrics"), dict)
 
 

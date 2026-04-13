@@ -25,6 +25,8 @@ from hca.api.models import (
     RunPlanResponse,
     RunResultResponse,
     RunSummaryResponse,
+    RunPerceptionResponse,
+    RunCritiqueResponse,
 )
 
 from hca.paths import (
@@ -234,6 +236,8 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
 
     plan = RunPlanResponse()
     action_taken = RunActionResponse()
+    perception = RunPerceptionResponse()
+    critique = RunCritiqueResponse()
     action_result = RunResultResponse()
     approval_id: Optional[str] = replay.get("pending_approval_id")
     key_events: List[RunKeyEventResponse] = []
@@ -288,6 +292,80 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
                             str(content.get("memory_retrieval_error"))
                             if content.get("memory_retrieval_error")
                             is not None
+                            else None
+                        ),
+                    )
+
+        if (
+            event_type == "module_proposed"
+            and event.get("actor") == "perception_text"
+        ):
+            for candidate_item in safe_payload.get("candidate_items", []):
+                if candidate_item.get("kind") == "perceived_intent":
+                    content = candidate_item.get("content", {})
+                    perception = RunPerceptionResponse(
+                        intent_class=(
+                            str(content.get("intent_class"))
+                            if content.get("intent_class") is not None
+                            else None
+                        ),
+                        intent=(
+                            str(content.get("intent"))
+                            if content.get("intent") is not None
+                            else None
+                        ),
+                        perception_mode=(
+                            str(content.get("perception_mode"))
+                            if content.get("perception_mode") is not None
+                            else None
+                        ),
+                        fallback_reason=(
+                            str(content.get("fallback_reason"))
+                            if content.get("fallback_reason") is not None
+                            else None
+                        ),
+                        llm_attempted=bool(
+                            content.get("llm_attempted", False)
+                        ),
+                    )
+
+        if event_type == "recurrent_pass_completed":
+            for revision_payload in safe_payload.get("revision_payloads", []):
+                if not isinstance(revision_payload, dict):
+                    continue
+                if revision_payload.get("source_module") != "critic":
+                    continue
+                for critique_item in revision_payload.get(
+                    "critique_items",
+                    [],
+                ):
+                    if not isinstance(critique_item, dict):
+                        continue
+                    if critique_item.get("kind") != "critic_verdict":
+                        continue
+                    content = critique_item.get("content", {})
+                    critique = RunCritiqueResponse(
+                        verdict=(
+                            str(content.get("verdict"))
+                            if content.get("verdict") is not None
+                            else None
+                        ),
+                        issues=_list_of_strings(content.get("issues")),
+                        rationale=str(content.get("rationale", "")),
+                        llm_powered=bool(
+                            content.get("llm_powered", False)
+                        ),
+                        fallback_reason=(
+                            str(content.get("fallback_reason"))
+                            if content.get("fallback_reason") is not None
+                            else None
+                        ),
+                        confidence_delta=(
+                            float(content.get("confidence_delta"))
+                            if isinstance(
+                                content.get("confidence_delta"),
+                                (int, float),
+                            )
                             else None
                         ),
                     )
@@ -398,6 +476,8 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
         created_at=context.created_at,
         updated_at=context.updated_at,
         plan=plan,
+        perception=perception,
+        critique=critique,
         action_taken=action_taken,
         action_result=action_result,
         approval_id=approval_id,

@@ -28,6 +28,23 @@ class RunPlanResponse(RunAPIModel):
     memory_retrieval_error: Optional[str] = None
 
 
+class RunPerceptionResponse(RunAPIModel):
+    intent_class: Optional[str] = None
+    intent: Optional[str] = None
+    perception_mode: Optional[str] = None
+    fallback_reason: Optional[str] = None
+    llm_attempted: bool = False
+
+
+class RunCritiqueResponse(RunAPIModel):
+    verdict: Optional[str] = None
+    issues: List[str] = Field(default_factory=list)
+    rationale: str = ""
+    llm_powered: bool = False
+    fallback_reason: Optional[str] = None
+    confidence_delta: Optional[float] = None
+
+
 class RunActionResponse(RunAPIModel):
     kind: Optional[str] = None
     arguments: Dict[str, Any] = Field(default_factory=dict)
@@ -83,6 +100,12 @@ class RunSummaryResponse(RunAPIModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     plan: RunPlanResponse = Field(default_factory=RunPlanResponse)
+    perception: RunPerceptionResponse = Field(
+        default_factory=RunPerceptionResponse
+    )
+    critique: RunCritiqueResponse = Field(
+        default_factory=RunCritiqueResponse
+    )
     action_taken: RunActionResponse = Field(default_factory=RunActionResponse)
     action_result: RunResultResponse = Field(default_factory=RunResultResponse)
     approval_id: Optional[str] = None

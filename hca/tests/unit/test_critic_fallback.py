@@ -104,6 +104,10 @@ def test_on_broadcast_falls_back_when_llm_dependency_is_unavailable(
     critique_item = result["critique_items"][0]["content"]
     assert critique_item["verdict"] == "revise"
     assert critique_item["llm_powered"] is False
+    assert (
+        critique_item["fallback_reason"]
+        == "llm_error:ModuleNotFoundError"
+    )
     assert critique_item["issues"] == [
         "Action write_artifact is missing required fields: content"
     ]

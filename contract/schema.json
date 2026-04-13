@@ -354,6 +354,47 @@
         "memory_retrieval_error": { "type": ["string", "null"] }
       }
     },
+    "RunPerceptionResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_class",
+        "intent",
+        "perception_mode",
+        "fallback_reason",
+        "llm_attempted"
+      ],
+      "properties": {
+        "intent_class": { "type": ["string", "null"] },
+        "intent": { "type": ["string", "null"] },
+        "perception_mode": { "type": ["string", "null"] },
+        "fallback_reason": { "type": ["string", "null"] },
+        "llm_attempted": { "type": "boolean" }
+      }
+    },
+    "RunCritiqueResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "issues",
+        "rationale",
+        "llm_powered",
+        "fallback_reason",
+        "confidence_delta"
+      ],
+      "properties": {
+        "verdict": { "type": ["string", "null"] },
+        "issues": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "rationale": { "type": "string" },
+        "llm_powered": { "type": "boolean" },
+        "fallback_reason": { "type": ["string", "null"] },
+        "confidence_delta": { "type": ["number", "null"] }
+      }
+    },
     "RunActionTakenResponse": {
       "type": "object",
       "additionalProperties": false,
@@ -641,6 +682,8 @@
         "created_at",
         "updated_at",
         "plan",
+        "perception",
+        "critique",
         "action_taken",
         "action_result",
         "approval_id",
@@ -669,6 +712,8 @@
         "created_at": { "type": ["string", "null"], "format": "date-time" },
         "updated_at": { "type": ["string", "null"], "format": "date-time" },
         "plan": { "$ref": "#/definitions/RunPlanResponse" },
+        "perception": { "$ref": "#/definitions/RunPerceptionResponse" },
+        "critique": { "$ref": "#/definitions/RunCritiqueResponse" },
         "action_taken": { "$ref": "#/definitions/RunActionTakenResponse" },
         "action_result": { "$ref": "#/definitions/RunActionResultResponse" },
         "approval_id": { "type": ["string", "null"] },
