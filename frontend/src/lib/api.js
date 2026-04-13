@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 const configuredBackendUrl = process.env.REACT_APP_BACKEND_URL?.trim();
 const normalizedBackendUrl = configuredBackendUrl
   ? configuredBackendUrl.replace(/\/+$/, "")
@@ -6,6 +8,103 @@ const normalizedBackendUrl = configuredBackendUrl
 export const API_BASE_URL = normalizedBackendUrl
   ? `${normalizedBackendUrl}/api`
   : "/api";
+
+const looseObjectSchema = z.object({}).passthrough();
+
+const runSummarySchema = z.object({
+  run_id: z.string(),
+  goal: z.string(),
+  state: z.string(),
+  plan: looseObjectSchema.optional(),
+  perception: looseObjectSchema.optional(),
+  critique: looseObjectSchema.optional(),
+  action_taken: looseObjectSchema.optional(),
+  action_result: looseObjectSchema.optional(),
+  latest_receipt: looseObjectSchema.nullish(),
+  active_workflow: looseObjectSchema.nullish(),
+  workflow_budget: looseObjectSchema.nullish(),
+  workflow_checkpoint: looseObjectSchema.nullish(),
+  workflow_outcome: looseObjectSchema.nullish(),
+  workflow_step_history: z.array(looseObjectSchema).optional(),
+  workflow_artifacts: z.array(looseObjectSchema).optional(),
+  memory_hits: z.array(looseObjectSchema).optional(),
+  key_events: z.array(looseObjectSchema).optional(),
+  discrepancies: z.array(z.string()).optional(),
+  memory_counts: z.record(z.number()).optional(),
+  memory_outcomes: z.record(z.unknown()).optional(),
+  artifacts_count: z.number().int().nonnegative().optional(),
+  event_count: z.number().int().nonnegative().optional(),
+  approval_id: z.string().nullable().optional(),
+  metrics: looseObjectSchema.optional(),
+}).passthrough();
+
+const runListSchema = z.object({
+  records: z.array(runSummarySchema),
+  total: z.number().int().nonnegative(),
+}).passthrough();
+
+const runEventSchema = z.object({
+  event_id: z.string(),
+  run_id: z.string(),
+  event_type: z.string(),
+  summary: z.string(),
+  payload: z.record(z.unknown()).optional(),
+  actor: z.string().nullable().optional(),
+  prior_state: z.string().nullable().optional(),
+  next_state: z.string().nullable().optional(),
+  is_key_event: z.boolean().optional(),
+}).passthrough();
+
+const runEventListSchema = z.object({
+  run_id: z.string(),
+  records: z.array(runEventSchema),
+  total: z.number().int().nonnegative(),
+}).passthrough();
+
+const runArtifactSchema = z.object({
+  artifact_id: z.string(),
+  run_id: z.string(),
+  action_id: z.string(),
+  kind: z.string(),
+  path: z.string(),
+  source_action_ids: z.array(z.string()).optional(),
+  file_paths: z.array(z.string()).optional(),
+  hashes: z.record(z.string()).optional(),
+  approval_id: z.string().nullable().optional(),
+  workflow_id: z.string().nullable().optional(),
+  metadata: z.record(z.unknown()).optional(),
+  content_available: z.boolean().optional(),
+}).passthrough();
+
+const runArtifactListSchema = z.object({
+  run_id: z.string(),
+  records: z.array(runArtifactSchema),
+  total: z.number().int().nonnegative(),
+}).passthrough();
+
+const runArtifactDetailSchema = runArtifactSchema.extend({
+  content: z.string().nullable().optional(),
+  size_bytes: z.number().int().nonnegative().optional(),
+  truncated: z.boolean().optional(),
+});
+
+const memoryRecordSchema = z.object({
+  memory_id: z.string(),
+  text: z.string(),
+  memory_type: z.string().nullable().optional(),
+  run_id: z.string().nullable().optional(),
+  stored_at: z.string().nullable().optional(),
+}).passthrough();
+
+const memoryListSchema = z.object({
+  records: z.array(memoryRecordSchema),
+  total: z.number().int().nonnegative(),
+}).passthrough();
+
+const deleteMemorySchema = z.object({
+  deleted: z.boolean(),
+  memory_id: z.string(),
+}).passthrough();
 
 function encodeSegment(value) {
   return encodeURIComponent(String(value));
@@ -79,7 +178,7 @@ export async function getResponseErrorMessage(response) {
   return formatErrorMessage(response, await readResponseBody(response));
 }
 
-export async function fetchJson(path, init) {
+export async function fetchJson(path, init, schema) {
   const response = await apiFetch(path, init);
   const payload = await readResponseBody(response);
 
@@ -87,7 +186,22 @@ export async function fetchJson(path, init) {
     throw new Error(formatErrorMessage(response, payload));
   }
 
-  return payload;
+  if (!schema) {
+    return payload;
+  }
+
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    const issuePath = firstIssue?.path?.length
+      ? firstIssue.path.join(".")
+      : "response";
+    throw new Error(
+      `Unexpected response shape from ${normalizePath(path)} at ${issuePath}: ${firstIssue?.message || "invalid payload"}`
+    );
+  }
+
+  return parsed.data;
 }
 
 export function toErrorMessage(error, fallback = "Request failed.") {
@@ -113,7 +227,8 @@ export function decideRunApproval(runId, decision, approvalId) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ approval_id: approvalId }),
-    }
+    },
+    runSummarySchema
   );
 }
 
@@ -123,12 +238,14 @@ export function listRuns({ query, limit, offset }) {
       q: typeof query === "string" ? query.trim() : undefined,
       limit,
       offset,
-    })}`
+    })}`,
+    undefined,
+    runListSchema
   );
 }
 
 export function getRunSummary(runId) {
-  return fetchJson(`/hca/run/${encodeSegment(runId)}`);
+  return fetchJson(`/hca/run/${encodeSegment(runId)}`, undefined, runSummarySchema);
 }
 
 export function listRunEvents(runId, { limit, offset } = {}) {
@@ -136,7 +253,9 @@ export function listRunEvents(runId, { limit, offset } = {}) {
     `/hca/run/${encodeSegment(runId)}/events${buildQuery({
       limit,
       offset,
-    })}`
+    })}`,
+    undefined,
+    runEventListSchema
   );
 }
 
@@ -145,7 +264,9 @@ export function listRunArtifacts(runId, { limit, offset } = {}) {
     `/hca/run/${encodeSegment(runId)}/artifacts${buildQuery({
       limit,
       offset,
-    })}`
+    })}`,
+    undefined,
+    runArtifactListSchema
   );
 }
 
@@ -157,7 +278,9 @@ export function getRunArtifactDetail(
   return fetchJson(
     `/hca/run/${encodeSegment(runId)}/artifacts/${encodeSegment(
       artifactId
-    )}${buildQuery({ preview_bytes: previewBytes })}`
+    )}${buildQuery({ preview_bytes: previewBytes })}`,
+    undefined,
+    runArtifactDetailSchema
   );
 }
 
@@ -175,12 +298,14 @@ export function listMemories({
       include_expired: includeExpired ? true : undefined,
       limit,
       offset,
-    })}`
+    })}`,
+    undefined,
+    memoryListSchema
   );
 }
 
 export function deleteMemoryRecord(memoryId) {
   return fetchJson(`/hca/memory/${encodeSegment(memoryId)}`, {
     method: "DELETE",
-  });
+  }, deleteMemorySchema);
 }

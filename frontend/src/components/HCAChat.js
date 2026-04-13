@@ -7,6 +7,7 @@ import {
   streamRun,
   toErrorMessage,
 } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 // Events worth showing in the live trace (filter out internal plumbing)
 const VISIBLE_EVENTS = new Set([
@@ -173,6 +174,7 @@ export default function HCAChat({
             if (typeof data?.run_id === "string") {
               onRunObserved?.(data.run_id);
             }
+            showRunToast(data);
             updateMessageById(agentId, (currentMessage) => ({
               ...currentMessage,
               type: "agent",
@@ -181,6 +183,11 @@ export default function HCAChat({
               actionError: "",
             }));
           } else if (eventType === "error") {
+            toast({
+              title: "Run failed",
+              description: data.label || "The agent reported an execution error.",
+              variant: "destructive",
+            });
             updateMessageById(agentId, (currentMessage) => ({
               ...currentMessage,
               type: "error",
@@ -190,10 +197,16 @@ export default function HCAChat({
         }
       }
     } catch (error) {
+      const message = toErrorMessage(error, "Request failed.");
+      toast({
+        title: "Run failed to start",
+        description: message,
+        variant: "destructive",
+      });
       updateMessageById(agentId, (currentMessage) => ({
         ...currentMessage,
         type: "error",
-        content: toErrorMessage(error, "Request failed."),
+        content: message,
       }));
     } finally {
       setLoading(false);
@@ -210,6 +223,12 @@ export default function HCAChat({
     try {
       const data = await decideRunApproval(runId, decision, approvalId);
 
+      toast({
+        title: decision === "approve" ? "Approval granted" : "Approval denied",
+        description: summarizeApprovalToast(data, decision),
+        variant: data?.state === "failed" ? "destructive" : "default",
+      });
+
       updateMessageById(agentId, (currentMessage) => ({
         ...currentMessage,
         summary: data,
@@ -222,13 +241,19 @@ export default function HCAChat({
         onRunObserved?.(data.run_id);
       }
     } catch (error) {
+      const message = toErrorMessage(
+        error,
+        decision === "approve" ? "Approval failed." : "Deny failed."
+      );
+      toast({
+        title: decision === "approve" ? "Approval failed" : "Deny failed",
+        description: message,
+        variant: "destructive",
+      });
       updateMessageById(agentId, (currentMessage) => ({
         ...currentMessage,
         _actionPending: null,
-        actionError: toErrorMessage(
-          error,
-          decision === "approve" ? "Approval failed." : "Deny failed."
-        ),
+        actionError: message,
       }));
     }
   }, [onRunObserved, updateMessageById]);
@@ -949,6 +974,50 @@ function formatObjectPreview(value) {
       : serialized;
   } catch {
     return "{}";
+  }
+}
+
+function summarizeApprovalToast(data, decision) {
+  const stateLabel = data?.state ? data.state.replace(/_/g, " ") : "updated";
+  const outcome = data?.workflow_outcome?.reason || data?.action_result?.error;
+  const baseMessage = decision === "approve"
+    ? `Run ${data?.run_id || ""} resumed and is now ${stateLabel}.`
+    : `Run ${data?.run_id || ""} is now ${stateLabel}.`;
+
+  return outcome ? `${baseMessage} ${outcome}` : baseMessage;
+}
+
+function showRunToast(summary) {
+  if (!summary || typeof summary !== "object") {
+    return;
+  }
+
+  if (summary.state === "awaiting_approval") {
+    toast({
+      title: "Approval required",
+      description: `${summary.action_taken?.kind || "Action"} is waiting for sign-off.`,
+    });
+    return;
+  }
+
+  if (summary.state === "completed") {
+    toast({
+      title: "Run completed",
+      description: summary.goal || summary.run_id || "The run completed successfully.",
+    });
+    return;
+  }
+
+  if (summary.state === "failed" || summary.state === "halted") {
+    toast({
+      title: summary.state === "failed" ? "Run failed" : "Run halted",
+      description:
+        summary.action_result?.error ||
+        summary.workflow_outcome?.reason ||
+        summary.goal ||
+        "The run did not complete successfully.",
+      variant: "destructive",
+    });
   }
 }
 

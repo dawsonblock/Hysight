@@ -4,6 +4,7 @@ import {
   listMemories,
   toErrorMessage,
 } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 const TYPE_META = {
   episode:    { color: "#6366f1", bg: "#eef2ff", label: "Episode"   },
@@ -148,13 +149,24 @@ export default function MemoryBrowser({ open, onClose }) {
         throw new Error("Memory delete did not complete.");
       }
 
+      toast({
+        title: "Memory deleted",
+        description: "The selected record was removed from the memory store.",
+      });
+
       if (page > 0 && records.length === 1) {
         setPage((currentPage) => currentPage - 1);
       } else {
         await fetchRecords(search, typeFilter, page);
       }
     } catch (error) {
-      setError(toErrorMessage(error, "Delete failed."));
+      const message = toErrorMessage(error, "Delete failed.");
+      toast({
+        title: "Delete failed",
+        description: message,
+        variant: "destructive",
+      });
+      setError(message);
     } finally {
       setDeleting(null);
     }
