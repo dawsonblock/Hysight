@@ -9,8 +9,25 @@ import {
 } from "@/lib/api";
 
 const RUN_PAGE_SIZE = 10;
+const RUN_FETCH_LIMIT = 100;
 const EVENT_LIMIT = 80;
 const ARTIFACT_LIMIT = 50;
+const FILTER_ALL = "all";
+
+const RUN_STATE_FILTERS = [
+  { value: FILTER_ALL, label: "All" },
+  { value: "awaiting_approval", label: "Approval" },
+  { value: "completed", label: "Completed" },
+  { value: "failed", label: "Failed" },
+  { value: "halted", label: "Halted" },
+];
+
+const STORAGE_KEYS = {
+  operatorTab: "hysight:operator-tab",
+  runQuery: "hysight:run-query",
+  runStateFilter: "hysight:run-state-filter",
+  runStrategyFilter: "hysight:run-strategy-filter",
+};
 
 const STATE_META = {
   completed: { color: "#0f766e", bg: "#ccfbf1", border: "#99f6e4" },
@@ -31,6 +48,22 @@ const DEFAULT_STATE_META = {
 
 const TABS = ["overview", "events", "artifacts"];
 
+const STRATEGY_LABELS = {
+  single_action_dispatch: "Direct dispatch",
+  memory_persistence_strategy: "Memory write",
+  information_retrieval_strategy: "Memory retrieval",
+  artifact_authoring_strategy: "Artifact authoring",
+};
+
+function readStoredValue(key, fallback) {
+  try {
+    const storedValue = window.localStorage.getItem(key);
+    return storedValue ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function OperatorConsole({
   selectedRunId,
   onSelectRun,
@@ -38,8 +71,16 @@ export default function OperatorConsole({
 }) {
   const [runs, setRuns] = useState([]);
   const [totalRuns, setTotalRuns] = useState(0);
-  const [runQuery, setRunQuery] = useState("");
+  const [runQuery, setRunQuery] = useState(() =>
+    readStoredValue(STORAGE_KEYS.runQuery, "")
+  );
   const [runPage, setRunPage] = useState(0);
+  const [runStateFilter, setRunStateFilter] = useState(() =>
+    readStoredValue(STORAGE_KEYS.runStateFilter, FILTER_ALL)
+  );
+  const [runStrategyFilter, setRunStrategyFilter] = useState(() =>
+    readStoredValue(STORAGE_KEYS.runStrategyFilter, FILTER_ALL)
+  );
   const [runsLoading, setRunsLoading] = useState(false);
   const [runsError, setRunsError] = useState("");
 
@@ -52,11 +93,14 @@ export default function OperatorConsole({
   const [artifacts, setArtifacts] = useState([]);
   const [artifactTotal, setArtifactTotal] = useState(0);
 
-  const [activeTab, setActiveTab] = useState("overview");
   const [selectedArtifactId, setSelectedArtifactId] = useState(null);
   const [artifactDetail, setArtifactDetail] = useState(null);
   const [artifactLoading, setArtifactLoading] = useState(false);
   const [artifactError, setArtifactError] = useState("");
+  const [activeTab, setActiveTab] = useState(() => {
+    const storedTab = readStoredValue(STORAGE_KEYS.operatorTab, "overview");
+    return TABS.includes(storedTab) ? storedTab : "overview";
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -68,8 +112,8 @@ export default function OperatorConsole({
       try {
         const data = await listRuns({
           query: runQuery,
-          limit: RUN_PAGE_SIZE,
-          offset: runPage * RUN_PAGE_SIZE,
+          limit: RUN_FETCH_LIMIT,
+          offset: 0,
         });
         if (!cancelled) {
           setRuns(Array.isArray(data?.records) ? data.records : []);
@@ -92,13 +136,69 @@ export default function OperatorConsole({
     return () => {
       cancelled = true;
     };
-  }, [refreshToken, runPage, runQuery]);
+  }, [refreshToken, runQuery]);
 
   useEffect(() => {
-    if (!selectedRunId && runs.length > 0) {
-      onSelectRun?.(runs[0].run_id);
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.runQuery, runQuery);
+      window.localStorage.setItem(
+        STORAGE_KEYS.runStateFilter,
+        runStateFilter
+      );
+      window.localStorage.setItem(
+        STORAGE_KEYS.runStrategyFilter,
+        runStrategyFilter
+      );
+      window.localStorage.setItem(STORAGE_KEYS.operatorTab, activeTab);
+    } catch {
+      // Ignore storage failures and keep the console interactive.
     }
-  }, [onSelectRun, runs, selectedRunId]);
+  }, [activeTab, runQuery, runStateFilter, runStrategyFilter]);
+
+  const availableStrategies = Array.from(
+    new Set(runs.map((run) => run.plan?.strategy).filter(Boolean))
+  );
+  const filteredRuns = runs.filter((run) => {
+    if (runStateFilter !== FILTER_ALL && run.state !== runStateFilter) {
+      return false;
+    }
+
+    if (
+      runStrategyFilter !== FILTER_ALL &&
+      (run.plan?.strategy || "") !== runStrategyFilter
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+  const maxRunPage = Math.max(
+    0,
+    Math.ceil(filteredRuns.length / RUN_PAGE_SIZE) - 1
+  );
+  const visibleRuns = filteredRuns.slice(
+    runPage * RUN_PAGE_SIZE,
+    runPage * RUN_PAGE_SIZE + RUN_PAGE_SIZE
+  );
+  const selectedRunHidden =
+    Boolean(selectedRunId) &&
+    filteredRuns.every((run) => run.run_id !== selectedRunId);
+  const hasRunFilters =
+    runQuery.trim().length > 0 ||
+    runStateFilter !== FILTER_ALL ||
+    runStrategyFilter !== FILTER_ALL;
+
+  useEffect(() => {
+    if (runPage > maxRunPage) {
+      setRunPage(maxRunPage);
+    }
+  }, [maxRunPage, runPage]);
+
+  useEffect(() => {
+    if (!selectedRunId && filteredRuns.length > 0) {
+      onSelectRun?.(filteredRuns[0].run_id);
+    }
+  }, [filteredRuns, onSelectRun, selectedRunId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,12 +262,6 @@ export default function OperatorConsole({
   }, [refreshToken, selectedRunId]);
 
   useEffect(() => {
-    if (!selectedArtifactId && artifacts.length > 0) {
-      setSelectedArtifactId(artifacts[0].artifact_id);
-    }
-  }, [artifacts, selectedArtifactId]);
-
-  useEffect(() => {
     let cancelled = false;
 
     async function loadArtifactDetail() {
@@ -206,6 +300,13 @@ export default function OperatorConsole({
     };
   }, [selectedArtifactId, selectedRunId]);
 
+  const clearRunFilters = () => {
+    setRunQuery("");
+    setRunStateFilter(FILTER_ALL);
+    setRunStrategyFilter(FILTER_ALL);
+    setRunPage(0);
+  };
+
   return (
     <aside style={S.root}>
       <div style={S.header}>
@@ -217,11 +318,20 @@ export default function OperatorConsole({
           </div>
         </div>
         <button
-          onClick={() => onSelectRun?.(selectedRunId || null)}
+          onClick={() => {
+            if (hasRunFilters) {
+              clearRunFilters();
+              return;
+            }
+
+            if (filteredRuns.length > 0) {
+              onSelectRun?.(filteredRuns[0].run_id);
+            }
+          }}
           style={S.refreshBtn}
           type="button"
         >
-          Focus
+          {hasRunFilters ? "Clear filters" : "Latest run"}
         </button>
       </div>
 
@@ -232,23 +342,103 @@ export default function OperatorConsole({
             setRunQuery(event.target.value);
             setRunPage(0);
           }}
-          placeholder="Search runs by goal or id"
+          aria-label="Search runs"
+          placeholder="Search runs by goal, id, or strategy"
           style={S.searchInput}
         />
+        {runQuery && (
+          <button
+            type="button"
+            onClick={() => {
+              setRunQuery("");
+              setRunPage(0);
+            }}
+            style={S.searchClearBtn}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       <div style={S.runListHeader}>
         <span style={S.sectionLabel}>Runs</span>
-        <span style={S.sectionCount}>{totalRuns}</span>
+        <span style={S.sectionCount}>
+          {filteredRuns.length} shown
+          {totalRuns > runs.length ? ` • latest ${runs.length} of ${totalRuns}` : ` • ${totalRuns} total`}
+        </span>
+      </div>
+
+      <div style={S.filterStack}>
+        <div style={S.filterChipRow}>
+          {RUN_STATE_FILTERS.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              aria-pressed={runStateFilter === filter.value}
+              onClick={() => {
+                setRunStateFilter(filter.value);
+                setRunPage(0);
+              }}
+              style={{
+                ...S.filterChip,
+                ...(runStateFilter === filter.value ? S.filterChipActive : null),
+              }}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+
+        {availableStrategies.length > 0 && (
+          <div style={S.filterChipRow}>
+            <button
+              type="button"
+              aria-pressed={runStrategyFilter === FILTER_ALL}
+              onClick={() => {
+                setRunStrategyFilter(FILTER_ALL);
+                setRunPage(0);
+              }}
+              style={{
+                ...S.filterChip,
+                ...(runStrategyFilter === FILTER_ALL ? S.filterChipActive : null),
+              }}
+            >
+              All strategies
+            </button>
+            {availableStrategies.map((strategy) => (
+              <button
+                key={strategy}
+                type="button"
+                aria-pressed={runStrategyFilter === strategy}
+                onClick={() => {
+                  setRunStrategyFilter(strategy);
+                  setRunPage(0);
+                }}
+                style={{
+                  ...S.filterChip,
+                  ...(runStrategyFilter === strategy ? S.filterChipActive : null),
+                }}
+              >
+                {formatStrategyLabel(strategy)}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selectedRunHidden && (
+          <div style={S.noticeBar}>
+            The current selection is outside the active run filters.
+          </div>
+        )}
       </div>
 
       <div style={S.runList}>
         {runsLoading && <PanelMessage text="Loading runs…" />}
         {!runsLoading && runsError && <PanelMessage text={runsError} tone="error" />}
-        {!runsLoading && !runsError && runs.length === 0 && (
+        {!runsLoading && !runsError && filteredRuns.length === 0 && (
           <PanelMessage text="No runs found." />
         )}
-        {runs.map((run) => (
+        {visibleRuns.map((run) => (
           <RunRow
             key={run.run_id}
             run={run}
@@ -258,7 +448,7 @@ export default function OperatorConsole({
         ))}
       </div>
 
-      {totalRuns > RUN_PAGE_SIZE && (
+      {filteredRuns.length > RUN_PAGE_SIZE && (
         <div style={S.pagination}>
           <button
             type="button"
@@ -271,7 +461,7 @@ export default function OperatorConsole({
           <span style={S.pageInfo}>
             {runPage * RUN_PAGE_SIZE + 1}-{Math.min(
               (runPage + 1) * RUN_PAGE_SIZE,
-              totalRuns
+              filteredRuns.length
             )}
           </span>
           <button
@@ -279,9 +469,9 @@ export default function OperatorConsole({
             style={{
               ...S.pageBtn,
               opacity:
-                (runPage + 1) * RUN_PAGE_SIZE >= totalRuns ? 0.4 : 1,
+                (runPage + 1) * RUN_PAGE_SIZE >= filteredRuns.length ? 0.4 : 1,
             }}
-            disabled={(runPage + 1) * RUN_PAGE_SIZE >= totalRuns}
+            disabled={(runPage + 1) * RUN_PAGE_SIZE >= filteredRuns.length}
             onClick={() => setRunPage((currentValue) => currentValue + 1)}
           >
             Next
@@ -363,7 +553,7 @@ function RunRow({ run, selected, onClick }) {
       </div>
       <div style={S.runGoal}>{run.goal}</div>
       <div style={S.runMeta}>
-        <span>{run.plan?.strategy || "no strategy"}</span>
+        <span>{formatStrategyLabel(run.plan?.strategy) || "No strategy"}</span>
         <span>{run.event_count} events</span>
         <span>{run.artifacts_count} artifacts</span>
       </div>
@@ -720,29 +910,204 @@ function OverviewPanel({ run }) {
 }
 
 function EventsPanel({ events, total }) {
+  const [eventQuery, setEventQuery] = useState("");
+  const [eventTypeFilter, setEventTypeFilter] = useState(FILTER_ALL);
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [keyEventsOnly, setKeyEventsOnly] = useState(false);
+
+  useEffect(() => {
+    setEventQuery("");
+    setEventTypeFilter(FILTER_ALL);
+    setSelectedEventId(null);
+    setKeyEventsOnly(false);
+  }, [events]);
+
+  const eventTypeOptions = Object.entries(
+    events.reduce((accumulator, event) => {
+      accumulator[event.event_type] = (accumulator[event.event_type] || 0) + 1;
+      return accumulator;
+    }, {})
+  ).sort((left, right) => right[1] - left[1]);
+  const filteredEvents = events.filter((event) => {
+    if (keyEventsOnly && !event.is_key_event) {
+      return false;
+    }
+
+    if (
+      eventTypeFilter !== FILTER_ALL &&
+      event.event_type !== eventTypeFilter
+    ) {
+      return false;
+    }
+
+    if (!matchesQueryText(eventQuery, [
+      event.event_type,
+      event.summary,
+      event.actor,
+      event.prior_state,
+      event.next_state,
+      safeJsonStringify(event.payload),
+    ])) {
+      return false;
+    }
+
+    return true;
+  });
+  const selectedEvent = filteredEvents.find(
+    (event) => event.event_id === selectedEventId
+  ) || filteredEvents[0] || null;
+
+  useEffect(() => {
+    if (filteredEvents.length === 0) {
+      if (selectedEventId !== null) {
+        setSelectedEventId(null);
+      }
+      return;
+    }
+
+    if (!filteredEvents.some((event) => event.event_id === selectedEventId)) {
+      setSelectedEventId(filteredEvents[0].event_id);
+    }
+  }, [filteredEvents, selectedEventId]);
+
   return (
     <div style={S.detailBody}>
-      <div style={S.sectionLabel}>Events ({total})</div>
-      {events.length === 0 && <PanelMessage text="No events recorded." />}
-      {events.length > 0 && (
-        <div style={S.eventList}>
-          {events.map((event) => (
-            <div key={event.event_id} style={S.eventCard}>
-              <div style={S.eventTop}>
-                <span style={S.eventType}>{event.event_type}</span>
-                <span style={S.eventTime}>{formatDateTime(event.timestamp)}</span>
-              </div>
-              <div style={S.eventSummary}>{event.summary}</div>
-              <div style={S.eventMeta}>
-                <span>{event.actor || "unknown actor"}</span>
-                <span>
-                  {event.prior_state || "—"} → {event.next_state || "—"}
-                </span>
-              </div>
-              <pre style={S.payloadPreview}>{formatPayload(event.payload)}</pre>
-            </div>
-          ))}
+      <div style={S.panelHeaderRow}>
+        <div style={S.sectionLabel}>Events ({total})</div>
+        <div style={S.sectionCount}>
+          {total > events.length
+            ? `Latest ${events.length} loaded`
+            : `${filteredEvents.length} visible`}
         </div>
+      </div>
+
+      {events.length === 0 && <PanelMessage text="No events recorded." />}
+
+      {events.length > 0 && (
+        <>
+          <div style={S.toolbarRow}>
+            <input
+              aria-label="Filter events"
+              placeholder="Filter by type, actor, summary, or payload"
+              style={S.toolbarInput}
+              value={eventQuery}
+              onChange={(event) => setEventQuery(event.target.value)}
+            />
+            <button
+              type="button"
+              aria-pressed={keyEventsOnly}
+              onClick={() => setKeyEventsOnly((currentValue) => !currentValue)}
+              style={{
+                ...S.toggleBtn,
+                ...(keyEventsOnly ? S.toggleBtnActive : null),
+              }}
+            >
+              Key only
+            </button>
+          </div>
+
+          <div style={S.filterChipRow}>
+            <button
+              type="button"
+              aria-pressed={eventTypeFilter === FILTER_ALL}
+              onClick={() => setEventTypeFilter(FILTER_ALL)}
+              style={{
+                ...S.filterChip,
+                ...(eventTypeFilter === FILTER_ALL ? S.filterChipActive : null),
+              }}
+            >
+              All types
+            </button>
+            {eventTypeOptions.map(([eventType, count]) => (
+              <button
+                key={eventType}
+                type="button"
+                aria-pressed={eventTypeFilter === eventType}
+                onClick={() => setEventTypeFilter(eventType)}
+                style={{
+                  ...S.filterChip,
+                  ...(eventTypeFilter === eventType ? S.filterChipActive : null),
+                }}
+              >
+                {eventType} · {count}
+              </button>
+            ))}
+          </div>
+
+          {filteredEvents.length === 0 && (
+            <PanelMessage text="No events match the current filters." />
+          )}
+
+          {filteredEvents.length > 0 && (
+            <>
+              <div style={S.selectionList}>
+                {filteredEvents.map((event) => {
+                  const isSelected = event.event_id === selectedEvent?.event_id;
+
+                  return (
+                    <button
+                      key={event.event_id}
+                      type="button"
+                      onClick={() => setSelectedEventId(event.event_id)}
+                      style={{
+                        ...S.selectionCard,
+                        ...(isSelected ? S.selectionCardActive : null),
+                      }}
+                    >
+                      <div style={S.eventTop}>
+                        <div style={S.selectionHeading}>
+                          <span style={S.eventType}>{event.event_type}</span>
+                          {event.is_key_event && (
+                            <span style={S.selectionPill}>Key</span>
+                          )}
+                        </div>
+                        <span style={S.eventTime}>
+                          {formatDateTime(event.timestamp)}
+                        </span>
+                      </div>
+                      <div style={S.eventSummary}>{event.summary}</div>
+                      <div style={S.eventMeta}>
+                        <span>{event.actor || "unknown actor"}</span>
+                        <span>
+                          {event.prior_state || "—"} → {event.next_state || "—"}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedEvent && (
+                <div style={S.inspectorCard}>
+                  <div style={S.inspectorHeader}>
+                    <div>
+                      <div style={S.sectionLabel}>Selected event</div>
+                      <div style={S.inspectorTitle}>{selectedEvent.summary}</div>
+                    </div>
+                    <span style={S.selectionPill}>{selectedEvent.event_type}</span>
+                  </div>
+                  <div style={S.infoGrid}>
+                    <SummaryField label="Event ID" value={selectedEvent.event_id} mono />
+                    <SummaryField label="Actor" value={selectedEvent.actor || "—"} />
+                    <SummaryField
+                      label="Timestamp"
+                      value={formatDateTime(selectedEvent.timestamp)}
+                    />
+                    <SummaryField
+                      label="Key event"
+                      value={formatBoolean(selectedEvent.is_key_event)}
+                    />
+                    <SummaryField
+                      label="State change"
+                      value={`${selectedEvent.prior_state || "—"} → ${selectedEvent.next_state || "—"}`}
+                    />
+                  </div>
+                  <pre style={S.payloadPreview}>{formatPayload(selectedEvent.payload)}</pre>
+                </div>
+              )}
+            </>
+          )}
+        </>
       )}
     </div>
   );
@@ -757,36 +1122,149 @@ function ArtifactsPanel({
   total,
   onSelectArtifact,
 }) {
+  const [artifactQuery, setArtifactQuery] = useState("");
+  const [artifactKindFilter, setArtifactKindFilter] = useState(FILTER_ALL);
+
+  useEffect(() => {
+    setArtifactQuery("");
+    setArtifactKindFilter(FILTER_ALL);
+  }, [artifacts]);
+
+  const artifactKinds = Array.from(
+    new Set(artifacts.map((artifact) => artifact.kind).filter(Boolean))
+  );
+  const filteredArtifacts = artifacts.filter((artifact) => {
+    if (
+      artifactKindFilter !== FILTER_ALL &&
+      artifact.kind !== artifactKindFilter
+    ) {
+      return false;
+    }
+
+    if (!matchesQueryText(artifactQuery, [
+      artifact.kind,
+      artifact.path,
+      artifact.action_id,
+      artifact.workflow_id,
+      artifact.approval_id,
+    ])) {
+      return false;
+    }
+
+    return true;
+  });
+
+  useEffect(() => {
+    if (filteredArtifacts.length === 0) {
+      if (selectedArtifactId !== null) {
+        onSelectArtifact(null);
+      }
+      return;
+    }
+
+    if (
+      !filteredArtifacts.some(
+        (artifact) => artifact.artifact_id === selectedArtifactId
+      )
+    ) {
+      onSelectArtifact(filteredArtifacts[0].artifact_id);
+    }
+  }, [filteredArtifacts, onSelectArtifact, selectedArtifactId]);
+
   return (
     <div style={S.detailBody}>
-      <div style={S.sectionLabel}>Artifacts ({total})</div>
+      <div style={S.panelHeaderRow}>
+        <div style={S.sectionLabel}>Artifacts ({total})</div>
+        <div style={S.sectionCount}>
+          {total > artifacts.length
+            ? `Latest ${artifacts.length} loaded`
+            : `${filteredArtifacts.length} visible`}
+        </div>
+      </div>
+
       {artifacts.length === 0 && <PanelMessage text="No artifacts stored." />}
+
       {artifacts.length > 0 && (
         <>
-          <div style={S.artifactList}>
-            {artifacts.map((artifact) => (
+          <div style={S.toolbarRow}>
+            <input
+              aria-label="Filter artifacts"
+              placeholder="Filter by kind, path, workflow, or action"
+              style={S.toolbarInput}
+              value={artifactQuery}
+              onChange={(event) => setArtifactQuery(event.target.value)}
+            />
+          </div>
+
+          <div style={S.filterChipRow}>
+            <button
+              type="button"
+              aria-pressed={artifactKindFilter === FILTER_ALL}
+              onClick={() => setArtifactKindFilter(FILTER_ALL)}
+              style={{
+                ...S.filterChip,
+                ...(artifactKindFilter === FILTER_ALL ? S.filterChipActive : null),
+              }}
+            >
+              All kinds
+            </button>
+            {artifactKinds.map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                aria-pressed={artifactKindFilter === kind}
+                onClick={() => setArtifactKindFilter(kind)}
+                style={{
+                  ...S.filterChip,
+                  ...(artifactKindFilter === kind ? S.filterChipActive : null),
+                }}
+              >
+                {kind}
+              </button>
+            ))}
+          </div>
+
+          {filteredArtifacts.length === 0 && (
+            <PanelMessage text="No artifacts match the current filters." />
+          )}
+
+          {filteredArtifacts.length > 0 && (
+            <div style={S.artifactList}>
+              {filteredArtifacts.map((artifact) => (
               <button
                 key={artifact.artifact_id}
                 type="button"
                 onClick={() => onSelectArtifact(artifact.artifact_id)}
                 style={{
-                  ...S.artifactRow,
-                  borderColor:
-                    artifact.artifact_id === selectedArtifactId
-                      ? "#67e8f9"
-                      : "#e2e8f0",
+                  ...S.selectionCard,
+                  ...(artifact.artifact_id === selectedArtifactId
+                    ? S.selectionCardActive
+                    : null),
                 }}
               >
                 <div style={S.artifactTop}>
-                  <span style={S.artifactKind}>{artifact.kind}</span>
+                  <div style={S.selectionHeading}>
+                    <span style={S.artifactKind}>{artifact.kind}</span>
+                    {artifact.content_available && (
+                      <span style={S.selectionPill}>Preview</span>
+                    )}
+                  </div>
                   <span style={S.artifactTime}>
                     {formatDateTime(artifact.created_at)}
                   </span>
                 </div>
                 <div style={S.artifactPath}>{artifact.path}</div>
+                <div style={S.eventMeta}>
+                  <span>{artifact.action_id}</span>
+                  <span>
+                    {artifact.file_paths?.length || 0} file path
+                    {(artifact.file_paths?.length || 0) === 1 ? "" : "s"}
+                  </span>
+                </div>
               </button>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {artifactLoading && <PanelMessage text="Loading artifact…" />}
           {!artifactLoading && artifactError && (
@@ -979,6 +1457,14 @@ function formatSnakeLabel(value) {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function formatStrategyLabel(value) {
+  if (!value) {
+    return "";
+  }
+
+  return STRATEGY_LABELS[value] || formatSnakeLabel(value);
+}
+
 function formatBoolean(value) {
   return value ? "Yes" : "No";
 }
@@ -1117,6 +1603,25 @@ function formatPayload(payload) {
   }
 }
 
+function safeJsonStringify(value) {
+  try {
+    return JSON.stringify(value || {});
+  } catch {
+    return "";
+  }
+}
+
+function matchesQueryText(queryText, values) {
+  const normalizedQuery = queryText.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return values.some((value) =>
+    String(value || "").toLowerCase().includes(normalizedQuery)
+  );
+}
+
 const S = {
   root: {
     display: "flex",
@@ -1166,9 +1671,10 @@ const S = {
   },
   searchRow: {
     display: "flex",
+    gap: 8,
   },
   searchInput: {
-    width: "100%",
+    flex: 1,
     border: "1px solid #cbd5e1",
     borderRadius: 12,
     padding: "10px 12px",
@@ -1177,10 +1683,57 @@ const S = {
     color: "#0f172a",
     outline: "none",
   },
+  searchClearBtn: {
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#334155",
+    borderRadius: 10,
+    padding: "0 12px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
   runListHeader: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  filterStack: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  filterChipRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#cbd5e1",
+    background: "rgba(255,255,255,0.8)",
+    color: "#475569",
+    borderRadius: 999,
+    padding: "6px 10px",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: "pointer",
+    lineHeight: 1.2,
+  },
+  filterChipActive: {
+    borderColor: "#67e8f9",
+    background: "#ecfeff",
+    color: "#155e75",
+  },
+  noticeBar: {
+    border: "1px solid #fde68a",
+    background: "#fffbeb",
+    color: "#92400e",
+    borderRadius: 12,
+    padding: "10px 12px",
+    fontSize: 12,
+    lineHeight: 1.5,
   },
   sectionLabel: {
     fontSize: 11,
@@ -1209,7 +1762,9 @@ const S = {
     width: "100%",
     padding: "12px 12px 11px",
     borderRadius: 14,
-    border: "1px solid #e2e8f0",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#e2e8f0",
     background: "rgba(255,255,255,0.82)",
     cursor: "pointer",
     textAlign: "left",
@@ -1281,7 +1836,9 @@ const S = {
     marginBottom: 12,
   },
   tab: {
-    border: "1px solid #cbd5e1",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#cbd5e1",
     background: "rgba(255,255,255,0.78)",
     color: "#475569",
     borderRadius: 999,
@@ -1376,6 +1933,107 @@ const S = {
     display: "flex",
     flexDirection: "column",
     gap: 8,
+  },
+  panelHeaderRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  toolbarRow: {
+    display: "flex",
+    gap: 8,
+  },
+  toolbarInput: {
+    flex: 1,
+    border: "1px solid #cbd5e1",
+    borderRadius: 12,
+    padding: "10px 12px",
+    fontSize: 13,
+    background: "rgba(255,255,255,0.88)",
+    color: "#0f172a",
+    outline: "none",
+  },
+  toggleBtn: {
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#cbd5e1",
+    background: "#ffffff",
+    color: "#334155",
+    borderRadius: 10,
+    padding: "0 12px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  toggleBtnActive: {
+    borderColor: "#67e8f9",
+    background: "#ecfeff",
+    color: "#155e75",
+  },
+  selectionList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  selectionCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    width: "100%",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#e2e8f0",
+    background: "rgba(255,255,255,0.82)",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  selectionCardActive: {
+    borderColor: "#67e8f9",
+    boxShadow: "0 0 0 1px rgba(6,182,212,0.12)",
+    background: "rgba(236,254,255,0.78)",
+  },
+  selectionHeading: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  selectionPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px 8px",
+    borderRadius: 999,
+    background: "#ecfeff",
+    border: "1px solid #bae6fd",
+    color: "#155e75",
+    fontSize: 11,
+    fontWeight: 700,
+  },
+  inspectorCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    border: "1px solid #bae6fd",
+    background: "rgba(236,254,255,0.6)",
+    borderRadius: 16,
+    padding: 12,
+  },
+  inspectorHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  inspectorTitle: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: 700,
+    color: "#0f172a",
+    lineHeight: 1.45,
   },
   memoryHitList: {
     display: "flex",

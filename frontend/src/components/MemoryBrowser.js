@@ -28,6 +28,7 @@ export default function MemoryBrowser({ open, onClose }) {
   const [typeFilter, setTypeFilter] = useState(null);
   const [page, setPage]           = useState(0);
   const [deleting, setDeleting]   = useState(null);
+  const [selectedMemoryId, setSelectedMemoryId] = useState(null);
   const [searchLimited, setSearchLimited] = useState(false);
   const searchRef = useRef(null);
 
@@ -97,6 +98,36 @@ export default function MemoryBrowser({ open, onClose }) {
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        onClose?.();
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [onClose, open]);
+
+  useEffect(() => {
+    if (records.length === 0) {
+      if (selectedMemoryId !== null) {
+        setSelectedMemoryId(null);
+      }
+      return;
+    }
+
+    if (!records.some((record) => record.memory_id === selectedMemoryId)) {
+      setSelectedMemoryId(records[0].memory_id);
+    }
+  }, [records, selectedMemoryId]);
+
   const handleSearch = (event) => {
     setSearch(event.target.value);
     setPage(0);
@@ -130,6 +161,9 @@ export default function MemoryBrowser({ open, onClose }) {
   };
 
   const isSearchMode = search.trim().length > 0;
+  const hasFilters = isSearchMode || Boolean(typeFilter);
+  const selectedRecord =
+    records.find((record) => record.memory_id === selectedMemoryId) || null;
 
   if (!open) return null;
 
@@ -143,7 +177,13 @@ export default function MemoryBrowser({ open, onClose }) {
       />
 
       {/* Panel */}
-      <aside data-testid="memory-browser" style={S.panel}>
+      <aside
+        aria-label="Memory store"
+        aria-modal="true"
+        data-testid="memory-browser"
+        role="dialog"
+        style={S.panel}
+      >
         {/* Header */}
         <div style={S.panelHeader}>
           <div>
@@ -152,19 +192,35 @@ export default function MemoryBrowser({ open, onClose }) {
               {total} {isSearchMode ? "matching " : ""}record{total !== 1 ? "s" : ""}{isSearchMode ? "" : " total"}
             </div>
           </div>
-          <button
-            data-testid="close-memory-btn"
-            style={S.closeBtn}
-            onClick={onClose}
-          >
-            ✕
-          </button>
+          <div style={S.headerActions}>
+            {hasFilters && (
+              <button
+                type="button"
+                style={S.secondaryBtn}
+                onClick={() => {
+                  setSearch("");
+                  setTypeFilter(null);
+                  setPage(0);
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+            <button
+              data-testid="close-memory-btn"
+              style={S.closeBtn}
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Search */}
         <div style={S.searchRow}>
           <input
             data-testid="memory-search-input"
+            aria-label="Search memories"
             ref={searchRef}
             style={S.searchInput}
             placeholder="Search memories…"
@@ -214,6 +270,18 @@ export default function MemoryBrowser({ open, onClose }) {
           </div>
         )}
 
+        <div style={S.selectionSummary}>
+          <span>
+            {records.length} loaded on this page
+            {typeFilter ? ` • ${TYPE_META[typeFilter]?.label || typeFilter}` : ""}
+          </span>
+          {selectedRecord && (
+            <span>
+              Selected {TYPE_META[selectedRecord.memory_type]?.label || selectedRecord.memory_type || "memory"}
+            </span>
+          )}
+        </div>
+
         {/* Records list */}
         <div style={S.list}>
           {loading && <div style={S.loadingMsg}>Loading…</div>}
@@ -231,10 +299,53 @@ export default function MemoryBrowser({ open, onClose }) {
               key={rec.memory_id}
               rec={rec}
               deleting={deleting === rec.memory_id}
+              selected={rec.memory_id === selectedMemoryId}
+              onSelect={() => setSelectedMemoryId(rec.memory_id)}
               onDelete={() => handleDelete(rec.memory_id)}
             />
           ))}
         </div>
+
+        {selectedRecord && !loading && !error && (
+          <section style={S.detailPane}>
+            <div style={S.detailHeader}>
+              <div>
+                <div style={S.detailEyebrow}>Selected Record</div>
+                <div style={S.detailTitle}>
+                  {TYPE_META[selectedRecord.memory_type]?.label || selectedRecord.memory_type || "Memory"}
+                </div>
+              </div>
+              <div style={S.detailTimestamp}>
+                {selectedRecord.stored_at
+                  ? new Date(selectedRecord.stored_at).toLocaleString()
+                  : "Unknown time"}
+              </div>
+            </div>
+
+            <div style={S.detailGrid}>
+              <DetailField label="Memory ID" value={selectedRecord.memory_id} mono />
+              <DetailField
+                label="Run ID"
+                value={selectedRecord.run_id || "—"}
+                mono
+              />
+              <DetailField
+                label="Type"
+                value={TYPE_META[selectedRecord.memory_type]?.label || selectedRecord.memory_type || "—"}
+              />
+              <DetailField
+                label="Stored"
+                value={selectedRecord.stored_at
+                  ? new Date(selectedRecord.stored_at).toLocaleString()
+                  : "—"}
+              />
+            </div>
+
+            <div style={S.detailBody}>
+              {selectedRecord.text}
+            </div>
+          </section>
+        )}
 
         {/* Pagination */}
         {total > PAGE_SIZE && (
@@ -265,8 +376,7 @@ export default function MemoryBrowser({ open, onClose }) {
 
 // ── Memory row ────────────────────────────────────────────────────────────────
 
-function MemoryRow({ rec, deleting, onDelete }) {
-  const [expanded, setExpanded] = useState(false);
+function MemoryRow({ rec, deleting, selected, onDelete, onSelect }) {
   const meta = TYPE_META[rec.memory_type] || DEFAULT_TYPE;
 
   const storedAt = rec.stored_at
@@ -279,15 +389,28 @@ function MemoryRow({ rec, deleting, onDelete }) {
   return (
     <div
       data-testid="memory-row"
-      style={{ ...S.row, opacity: deleting ? 0.4 : 1 }}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      role="button"
+      style={{
+        ...S.row,
+        ...(selected ? S.rowSelected : null),
+        opacity: deleting ? 0.4 : 1,
+      }}
+      tabIndex={0}
     >
-      <div style={S.rowTop} onClick={() => setExpanded((v) => !v)}>
+      <div style={S.rowTop}>
         <div style={S.rowLeft}>
           <span style={{ ...S.typeBadge, color: meta.color, background: meta.bg }}>
             {meta.label}
           </span>
           <span style={S.rowText}>
-            {expanded ? rec.text : (rec.text?.length > 80 ? rec.text.slice(0, 80) + "…" : rec.text)}
+            {rec.text?.length > 88 ? rec.text.slice(0, 88) + "…" : rec.text}
           </span>
         </div>
         <div style={S.rowRight}>
@@ -303,11 +426,26 @@ function MemoryRow({ rec, deleting, onDelete }) {
           </button>
         </div>
       </div>
-      {expanded && rec.run_id && (
-        <div style={S.rowMeta}>
-          run_id: <span style={S.rowMetaVal}>{rec.run_id}</span>
-        </div>
-      )}
+      <div style={S.rowMeta}>
+        {rec.run_id ? (
+          <>
+            run_id: <span style={S.rowMetaVal}>{rec.run_id}</span>
+          </>
+        ) : (
+          "No run linkage"
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DetailField({ label, value, mono = false }) {
+  return (
+    <div style={S.detailField}>
+      <div style={S.detailFieldLabel}>{label}</div>
+      <div style={{ ...S.detailFieldValue, ...(mono ? S.detailFieldMono : null) }}>
+        {value}
+      </div>
     </div>
   );
 }
@@ -346,8 +484,23 @@ const S = {
     borderBottom:   "1px solid #e2e8f0",
     flexShrink:     0,
   },
+  headerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
   panelTitle: { fontSize: 18, fontWeight: 700, color: "#0f172a" },
   panelSub:   { fontSize: 13, color: "#64748b", marginTop: 2 },
+  secondaryBtn: {
+    border: "1px solid #e2e8f0",
+    borderRadius: 8,
+    background: "#f8fafc",
+    color: "#475569",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 700,
+    padding: "7px 10px",
+  },
   closeBtn: {
     width:        32,
     height:       32,
@@ -404,6 +557,16 @@ const S = {
     lineHeight: 1.5,
     color: "#64748b",
   },
+  selectionSummary: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    padding: "12px 16px 0",
+    fontSize: 12,
+    color: "#64748b",
+    lineHeight: 1.5,
+  },
   filterChip: {
     fontSize:     11,
     padding:      "3px 10px",
@@ -437,6 +600,10 @@ const S = {
     padding:      "10px 16px",
     transition:   "background 0.12s, opacity 0.2s",
     cursor:       "pointer",
+  },
+  rowSelected: {
+    background: "#f8fafc",
+    boxShadow: "inset 3px 0 0 #6366f1",
   },
   rowTop: {
     display:        "flex",
@@ -480,6 +647,81 @@ const S = {
   },
   rowMeta:    { fontSize: 11, color: "#94a3b8", paddingTop: 4, paddingLeft: 56 },
   rowMetaVal: { fontFamily: "monospace", color: "#cbd5e1" },
+  detailPane: {
+    borderTop: "1px solid #e2e8f0",
+    background: "#f8fafc",
+    padding: "14px 16px 16px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    flexShrink: 0,
+  },
+  detailHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  detailEyebrow: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    color: "#6366f1",
+    fontWeight: 800,
+    marginBottom: 4,
+  },
+  detailTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: "#0f172a",
+  },
+  detailTimestamp: {
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "right",
+    lineHeight: 1.5,
+  },
+  detailGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 10,
+  },
+  detailField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    minWidth: 0,
+  },
+  detailFieldLabel: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    color: "#94a3b8",
+    fontWeight: 700,
+  },
+  detailFieldValue: {
+    fontSize: 13,
+    color: "#334155",
+    lineHeight: 1.45,
+    wordBreak: "break-word",
+  },
+  detailFieldMono: {
+    fontFamily: "monospace",
+    fontSize: 12,
+  },
+  detailBody: {
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    background: "#ffffff",
+    padding: "12px 14px",
+    fontSize: 14,
+    lineHeight: 1.65,
+    color: "#334155",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    maxHeight: 180,
+    overflowY: "auto",
+  },
 
   pagination: {
     display:        "flex",
