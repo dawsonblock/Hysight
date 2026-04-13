@@ -1,4 +1,5 @@
-"""TextPerception module — LLM-powered intent classification via Gemini 3 Flash.
+"""TextPerception module — LLM-powered intent classification via
+Gemini 3 Flash.
 
 Falls back to rule-based classification if the LLM call fails.
 """
@@ -42,7 +43,10 @@ _INTENT_MAP = {
 
 
 async def _llm_perceive(goal: str) -> dict:
-    from emergentintegrations.llm.chat import LlmChat, UserMessage  # type: ignore
+    from emergentintegrations.llm.chat import (  # type: ignore
+        LlmChat,
+        UserMessage,
+    )
 
     api_key = os.environ.get("EMERGENT_LLM_KEY", "")
     chat = LlmChat(
@@ -64,19 +68,41 @@ async def _llm_perceive(goal: str) -> dict:
 def _rule_based_perceive(goal: str) -> dict:
     goal_lower = goal.lower()
     if any(k in goal_lower for k in ("note ", "remember ", "save ")):
-        return {"intent_class": "store_note", "intent": "store",
-                "arguments": {"text": goal}, "confidence": 0.6}
-    if any(k in goal_lower for k in ("retrieve ", "find ", "search ", "recall ")):
-        return {"intent_class": "retrieve_memory", "intent": "retrieve",
-                "arguments": {"query": goal}, "confidence": 0.6}
+        return {
+            "intent_class": "store_note",
+            "intent": "store",
+            "arguments": {"text": goal},
+            "confidence": 0.6,
+        }
+    if any(
+        k in goal_lower for k in ("retrieve ", "find ", "search ", "recall ")
+    ):
+        return {
+            "intent_class": "retrieve_memory",
+            "intent": "retrieve",
+            "arguments": {"query": goal},
+            "confidence": 0.6,
+        }
     if any(k in goal_lower for k in ("write file", "artifact", "create file")):
-        return {"intent_class": "write_artifact", "intent": "write",
-                "arguments": {"content": goal, "path": "output.txt"}, "confidence": 0.6}
+        return {
+            "intent_class": "write_artifact",
+            "intent": "write",
+            "arguments": {"content": goal, "path": "output.txt"},
+            "confidence": 0.6,
+        }
     if any(k in goal_lower for k in ("hello", "hi ", "hey ")):
-        return {"intent_class": "greeting", "intent": "general",
-                "arguments": {"text": "hello"}, "confidence": 0.9}
-    return {"intent_class": "general", "intent": "general",
-            "arguments": {"text": goal}, "confidence": 0.5}
+        return {
+            "intent_class": "greeting",
+            "intent": "general",
+            "arguments": {"text": "hello"},
+            "confidence": 0.9,
+        }
+    return {
+        "intent_class": "general",
+        "intent": "general",
+        "arguments": {"text": goal},
+        "confidence": 0.5,
+    }
 
 
 class TextPerception:
@@ -86,9 +112,16 @@ class TextPerception:
         pass
 
     def on_broadcast(self, items: List[WorkspaceItem]):
-        return {"revised_proposals": [], "confidence_adjustments": [], "critique_items": []}
+        return {
+            "revised_proposals": [],
+            "confidence_adjustments": [],
+            "critique_items": [],
+        }
 
-    def propose(self, input_data: Union[str, List[WorkspaceItem]]) -> ModuleProposal:
+    def propose(
+        self,
+        input_data: Union[str, List[WorkspaceItem]],
+    ) -> ModuleProposal:
         if isinstance(input_data, list):
             for item in input_data:
                 if item.kind == "perceived_intent":
@@ -127,7 +160,10 @@ class TextPerception:
                 fallback_reason = "missing_goal"
 
         intent_class = perception.get("intent_class", "general")
-        intent = perception.get("intent") or _INTENT_MAP.get(intent_class, "general")
+        intent = perception.get("intent") or _INTENT_MAP.get(
+            intent_class,
+            "general",
+        )
 
         item = WorkspaceItem(
             source_module=self.name,

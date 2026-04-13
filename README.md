@@ -99,9 +99,6 @@ flowchart LR
 
 ### Expanded system layout
 
-<details>
-<summary>Show full module layout</summary>
-
 ```text
 ┌─────────────────────────────────────────────────────────┐
 │                      HCA Runtime                        │
@@ -156,8 +153,6 @@ flowchart LR
   │  Frontend   │
   └─────────────┘
 ```
-
-</details>
 
 ---
 

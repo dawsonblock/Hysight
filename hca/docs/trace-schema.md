@@ -1,4 +1,4 @@
-## Trace schema
+# Trace schema
 
 The runtime writes an append‑only log of events in JSON Lines format (`events.jsonl`).  Each event record contains:
 

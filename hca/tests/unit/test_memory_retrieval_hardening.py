@@ -10,22 +10,28 @@ def test_retrieval_resilience(monkeypatch, tmp_path):
     store = EpisodicStore(run_id)
 
     # Add malformed/partial records
-    store.append(MemoryRecord(
-        memory_type=MemoryType.episodic,
-        subject=None,
-        content="some content"
-    ))
-    store.append(MemoryRecord(
-        memory_type=MemoryType.episodic,
-        subject="some subject",
-        content=None
-    ))
-    store.append(MemoryRecord(
-        memory_type=MemoryType.episodic,
-        subject=None,
-        content=None
-    ))
-    
+    store.append(
+        MemoryRecord(
+            memory_type=MemoryType.episodic,
+            subject=None,
+            content="some content",
+        )
+    )
+    store.append(
+        MemoryRecord(
+            memory_type=MemoryType.episodic,
+            subject="some subject",
+            content=None,
+        )
+    )
+    store.append(
+        MemoryRecord(
+            memory_type=MemoryType.episodic,
+            subject=None,
+            content=None,
+        )
+    )
+
     # Should not crash
     results = retrieve(run_id, "some")
     # Record 1 matches "some" in content

@@ -1,8 +1,8 @@
-## Operator Runtime Contract
+# Operator Runtime Contract
 
 This document freezes the current bounded Hysight contract from code reality. It is not aspirational. The authoritative implementation lives in the runtime, executor, registry, sandbox, replay, snapshot, approval, artifact, and memory code paths under `hca/src/hca`.
 
-### Authority path
+## Authority path
 
 One side-effect path exists.
 
@@ -14,7 +14,7 @@ One side-effect path exists.
 
 No module is allowed to perform critical side effects outside executor-dispatched tools.
 
-### Registry and tool rules
+## Registry and tool rules
 
 The tool registry is the source of truth for tool behavior. Each tool in `hca/src/hca/executor/tool_registry.py` defines:
 
@@ -28,7 +28,7 @@ The tool registry is the source of truth for tool behavior. Each tool in `hca/sr
 
 The current bounded operator surface includes repo inspection tools, evidence/report tools, approval-bound mutation, run-scoped note or artifact persistence, and one bounded command tool.
 
-### Canonical action identity
+## Canonical action identity
 
 Canonical approved action identity is `ActionBinding`.
 
@@ -42,7 +42,7 @@ An action binding includes:
 
 Approvals, receipts, snapshots, and replay all rely on the same canonical binding. Resume must re-canonicalize the selected action and match the original approval binding before execution.
 
-### Approval semantics
+## Approval semantics
 
 Approval remains action-bound, not workflow-bound.
 
@@ -53,7 +53,7 @@ Approval remains action-bound, not workflow-bound.
 
 Within a workflow, approval applies to the gated step only.
 
-### Workflow semantics
+## Workflow semantics
 
 The runtime supports bounded template-driven workflows selected through the same planning and executor path. Current workflow classes are:
 
@@ -79,7 +79,7 @@ Workflow budgets are explicit and fail closed. If a workflow's configured budget
 
 If the next workflow step cannot be rebuilt from prior step outputs, the runtime emits `workflow_terminated` with reason `next_step_unbuildable` and fails the run rather than improvising arguments.
 
-### Mutation guarantees
+## Mutation guarantees
 
 `patch_text_file` is the authoritative repo-mutation path.
 
@@ -99,7 +99,7 @@ Current guarantees:
 
 `replace_in_file` is currently a legacy alias to the same implementation.
 
-### Command execution boundaries
+## Command execution boundaries
 
 `run_command` remains bounded and registry-governed.
 
@@ -120,7 +120,7 @@ Current guarantees in `hca/src/hca/executor/sandbox.py`:
 
 The command surface is intentionally narrow and exists primarily for bounded verification.
 
-### Artifact guarantees
+## Artifact guarantees
 
 Artifacts are first-class records, not ad hoc blobs.
 
@@ -134,7 +134,7 @@ Current typed artifact categories include:
 
 Artifact records and summaries capture run id, source action ids, file-path associations, hashes where available, approval linkage, workflow linkage, and storage path.
 
-### Memory guarantees
+## Memory guarantees
 
 Local episodic memory writes are authoritative for runtime completion. External memory ingestion is best-effort.
 
@@ -148,13 +148,13 @@ Those event payloads carry stable operator-facing fields including run id, sink,
 
 External-memory failure is visible and non-silent, but it does not currently fail an otherwise successful run.
 
-### Replay and snapshot guarantees
+## Replay and snapshot guarantees
 
 Replay reconstructs state from events, receipts, approvals, artifacts, and snapshots. It validates canonical action identity and surfaces discrepancies when the stored selected action, approval binding, or receipt lineage no longer agree.
 
 Workflow-aware replay persists step history and workflow artifacts so consumers do not have to infer multi-step runs heuristically.
 
-### Public run summary contract
+## Public run summary contract
 
 The canonical operator-facing replay surface is `GET /api/hca/run/{run_id}` and the bounded list view `GET /api/hca/runs`.
 
@@ -173,7 +173,7 @@ Consumers should treat that summary as the public contract and should not re-par
 
 `GET /api/hca/run/{run_id}/events` remains the raw forensic surface. It is the correct place for full per-event payloads, candidate-item details, revision payloads, and other trace-level details that are intentionally not frozen into the normalized summary.
 
-### Known intentional limits
+## Known intentional limits
 
 The runtime is bounded and operator-oriented. It intentionally does not provide:
 
