@@ -169,6 +169,12 @@ def test_workflow_budget_exhaustion_fails_closed(
         "max_steps": 1,
         "consumed_steps": 1,
     }
+    assert replay["workflow_outcome"] == {
+        "terminal_event": "workflow_terminated",
+        "reason": "budget_exhausted",
+        "workflow_step_id": None,
+        "next_step_id": replay["workflow_checkpoint"]["current_step_id"],
+    }
     assert [
         step["step_key"] for step in replay["workflow_step_history"]
     ] == ["first_step"]
@@ -227,6 +233,12 @@ def test_workflow_next_step_unbuildable_fails_closed(
 
     replay = reconstruct_state(run_id)
     assert replay["state"] == RuntimeState.failed.value
+    assert replay["workflow_outcome"] == {
+        "terminal_event": "workflow_terminated",
+        "reason": "next_step_unbuildable",
+        "workflow_step_id": replay["workflow_checkpoint"]["current_step_id"],
+        "next_step_id": None,
+    }
     assert [
         step["step_key"] for step in replay["workflow_step_history"]
     ] == ["emit_marker"]

@@ -154,6 +154,25 @@ Replay reconstructs state from events, receipts, approvals, artifacts, and snaps
 
 Workflow-aware replay persists step history and workflow artifacts so consumers do not have to infer multi-step runs heuristically.
 
+### Public run summary contract
+
+The canonical operator-facing replay surface is `GET /api/hca/run/{run_id}` and the bounded list view `GET /api/hca/runs`.
+
+That public contract is defined by `hca/src/hca/api/models.py` and populated by `hca/src/hca/api/run_views.py`. It is intentionally normalized and stricter than the raw trace.
+
+Current structured summary sections include:
+
+- `plan` for planner strategy, selected action, confidence, and planner fallback or memory-retrieval evidence
+- `perception` for the interpreted intent class, intent label, and perception fallback metadata
+- `critique` for the critic verdict, scores (`alignment`, `feasibility`, `safety`), issues, confidence delta, and critic fallback metadata
+- `workflow_outcome` for structured workflow terminal state lifted from replayed events, including the terminal event and fail-closed reason when applicable
+- `action_taken` and `action_result` for the canonical selected action and terminal receipt summary
+- `memory_hits`, `memory_outcomes`, `workflow_*`, `discrepancies`, `key_events`, and `metrics` for replay-backed operator evidence
+
+Consumers should treat that summary as the public contract and should not re-parse module-specific raw payloads from the event stream for fields that already appear there.
+
+`GET /api/hca/run/{run_id}/events` remains the raw forensic surface. It is the correct place for full per-event payloads, candidate-item details, revision payloads, and other trace-level details that are intentionally not frozen into the normalized summary.
+
 ### Known intentional limits
 
 The runtime is bounded and operator-oriented. It intentionally does not provide:

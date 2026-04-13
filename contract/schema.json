@@ -377,6 +377,9 @@
       "additionalProperties": false,
       "required": [
         "verdict",
+        "alignment",
+        "feasibility",
+        "safety",
         "issues",
         "rationale",
         "llm_powered",
@@ -385,6 +388,9 @@
       ],
       "properties": {
         "verdict": { "type": ["string", "null"] },
+        "alignment": { "type": ["number", "null"] },
+        "feasibility": { "type": ["number", "null"] },
+        "safety": { "type": ["number", "null"] },
         "issues": {
           "type": "array",
           "items": { "type": "string" }
@@ -393,6 +399,22 @@
         "llm_powered": { "type": "boolean" },
         "fallback_reason": { "type": ["string", "null"] },
         "confidence_delta": { "type": ["number", "null"] }
+      }
+    },
+    "RunWorkflowOutcomeResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "terminal_event",
+        "reason",
+        "workflow_step_id",
+        "next_step_id"
+      ],
+      "properties": {
+        "terminal_event": { "type": ["string", "null"] },
+        "reason": { "type": ["string", "null"] },
+        "workflow_step_id": { "type": ["string", "null"] },
+        "next_step_id": { "type": ["string", "null"] }
       }
     },
     "RunActionTakenResponse": {
@@ -699,6 +721,7 @@
         "workflow_checkpoint",
         "workflow_step_history",
         "workflow_artifacts",
+        "workflow_outcome",
         "discrepancies",
         "memory_hits",
         "key_events",
@@ -743,6 +766,9 @@
         "workflow_artifacts": {
           "type": "array",
           "items": { "$ref": "#/definitions/FlexibleObject" }
+        },
+        "workflow_outcome": {
+          "$ref": "#/definitions/RunWorkflowOutcomeResponse"
         },
         "discrepancies": {
           "type": "array",

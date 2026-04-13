@@ -27,6 +27,7 @@ from hca.api.models import (
     RunSummaryResponse,
     RunPerceptionResponse,
     RunCritiqueResponse,
+    RunWorkflowOutcomeResponse,
 )
 
 from hca.paths import (
@@ -350,6 +351,30 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
                             if content.get("verdict") is not None
                             else None
                         ),
+                        alignment=(
+                            float(content.get("alignment"))
+                            if isinstance(
+                                content.get("alignment"),
+                                (int, float),
+                            )
+                            else None
+                        ),
+                        feasibility=(
+                            float(content.get("feasibility"))
+                            if isinstance(
+                                content.get("feasibility"),
+                                (int, float),
+                            )
+                            else None
+                        ),
+                        safety=(
+                            float(content.get("safety"))
+                            if isinstance(
+                                content.get("safety"),
+                                (int, float),
+                            )
+                            else None
+                        ),
                         issues=_list_of_strings(content.get("issues")),
                         rationale=str(content.get("rationale", "")),
                         llm_powered=bool(
@@ -469,6 +494,12 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
         memory_commit_latency=_latency_summary(memory_commit_latency_samples),
     )
 
+    workflow_outcome = RunWorkflowOutcomeResponse.model_validate(
+        replay.get("workflow_outcome")
+        if isinstance(replay.get("workflow_outcome"), dict)
+        else {}
+    )
+
     return RunSummaryResponse(
         run_id=run_id,
         goal=context.goal,
@@ -515,6 +546,7 @@ def extract_run_summary(run_id: str) -> RunSummaryResponse:
             replay.get("workflow_step_history")
         ),
         workflow_artifacts=_list_of_dicts(replay.get("workflow_artifacts")),
+        workflow_outcome=workflow_outcome,
         discrepancies=_list_of_strings(replay.get("discrepancies")),
         memory_hits=memory_hits,
         key_events=key_events[-12:],

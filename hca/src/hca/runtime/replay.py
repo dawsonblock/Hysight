@@ -208,6 +208,55 @@ def _memory_outcomes_from_events(
     }
 
 
+def _workflow_outcome_from_events(
+    events: List[Dict[str, Any]],
+) -> Dict[str, Optional[str]]:
+    outcome: Dict[str, Optional[str]] = {
+        "terminal_event": None,
+        "reason": None,
+        "workflow_step_id": None,
+        "next_step_id": None,
+    }
+
+    for event in events:
+        event_type = event.get("event_type")
+        payload = event.get("payload")
+        safe_payload = payload if isinstance(payload, dict) else {}
+
+        if event_type == EventType.workflow_budget_exhausted.value:
+            outcome = {
+                "terminal_event": EventType.workflow_budget_exhausted.value,
+                "reason": "budget_exhausted",
+                "workflow_step_id": None,
+                "next_step_id": (
+                    str(safe_payload.get("next_step_id"))
+                    if safe_payload.get("next_step_id") is not None
+                    else None
+                ),
+            }
+        elif event_type == EventType.workflow_terminated.value:
+            outcome = {
+                "terminal_event": EventType.workflow_terminated.value,
+                "reason": (
+                    str(safe_payload.get("reason"))
+                    if safe_payload.get("reason") is not None
+                    else None
+                ),
+                "workflow_step_id": (
+                    str(safe_payload.get("workflow_step_id"))
+                    if safe_payload.get("workflow_step_id") is not None
+                    else None
+                ),
+                "next_step_id": (
+                    str(safe_payload.get("next_step_id"))
+                    if safe_payload.get("next_step_id") is not None
+                    else None
+                ),
+            }
+
+    return outcome
+
+
 def _detect_snapshot_discrepancies(
     snapshot: Optional[Dict[str, Any]],
     reconstructed: Dict[str, Any],
@@ -475,6 +524,7 @@ def reconstruct_state(run_id: str) -> Dict[str, Any]:
                 else []
             )
         ),
+        "workflow_outcome": _workflow_outcome_from_events(events),
         "discrepancies": [],
     }
     discrepancies = _detect_snapshot_discrepancies(

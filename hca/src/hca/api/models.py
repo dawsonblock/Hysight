@@ -38,11 +38,21 @@ class RunPerceptionResponse(RunAPIModel):
 
 class RunCritiqueResponse(RunAPIModel):
     verdict: Optional[str] = None
+    alignment: Optional[float] = None
+    feasibility: Optional[float] = None
+    safety: Optional[float] = None
     issues: List[str] = Field(default_factory=list)
     rationale: str = ""
     llm_powered: bool = False
     fallback_reason: Optional[str] = None
     confidence_delta: Optional[float] = None
+
+
+class RunWorkflowOutcomeResponse(RunAPIModel):
+    terminal_event: Optional[str] = None
+    reason: Optional[str] = None
+    workflow_step_id: Optional[str] = None
+    next_step_id: Optional[str] = None
 
 
 class RunActionResponse(RunAPIModel):
@@ -121,6 +131,9 @@ class RunSummaryResponse(RunAPIModel):
     workflow_checkpoint: Optional[Dict[str, Any]] = None
     workflow_step_history: List[Dict[str, Any]] = Field(default_factory=list)
     workflow_artifacts: List[Dict[str, Any]] = Field(default_factory=list)
+    workflow_outcome: RunWorkflowOutcomeResponse = Field(
+        default_factory=RunWorkflowOutcomeResponse
+    )
     discrepancies: List[str] = Field(default_factory=list)
     memory_hits: List[RunMemoryHitResponse] = Field(default_factory=list)
     key_events: List[RunKeyEventResponse] = Field(default_factory=list)

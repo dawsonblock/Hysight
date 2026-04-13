@@ -360,6 +360,99 @@ def test_run_summary_uses_recorded_memory_hits_and_metrics(
     assert data["metrics"]["run_duration_ms"] is not None
 
 
+def test_run_summary_surfaces_workflow_outcome_and_critic_scores(
+    app_client,
+):
+    from hca.common.enums import EventType, RuntimeState  # type: ignore
+    from hca.common.types import RunContext  # type: ignore
+    from hca.storage.event_log import append_event  # type: ignore
+    from hca.storage.runs import save_run  # type: ignore
+
+    context = RunContext(
+        run_id="run-workflow-outcome",
+        goal="exercise structured workflow outcome",
+        state=RuntimeState.failed,
+    )
+    save_run(context)
+    append_event(
+        context,
+        EventType.run_created,
+        "runtime",
+        {"goal": context.goal},
+    )
+    append_event(
+        context,
+        EventType.recurrent_pass_completed,
+        "runtime",
+        {
+            "revision_payloads": [
+                {
+                    "source_module": "critic",
+                    "critique_items": [
+                        {
+                            "kind": "critic_verdict",
+                            "content": {
+                                "verdict": "revise",
+                                "alignment": 0.61,
+                                "feasibility": 0.72,
+                                "safety": 0.94,
+                                "issues": ["Need one more verification step"],
+                                "confidence_delta": -0.03,
+                                "rationale": (
+                                    "Budget exhausted before verification."
+                                ),
+                                "llm_powered": False,
+                                "fallback_reason": "rule_based_only",
+                            },
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    append_event(
+        context,
+        EventType.workflow_budget_exhausted,
+        "runtime",
+        {
+            "workflow_id": "workflow-1",
+            "max_steps": 1,
+            "consumed_steps": 1,
+            "next_step_id": "step-2",
+        },
+    )
+    append_event(
+        context,
+        EventType.workflow_terminated,
+        "runtime",
+        {
+            "workflow_id": "workflow-1",
+            "reason": "budget_exhausted",
+            "consumed_steps": 1,
+            "next_step_id": "step-2",
+        },
+    )
+
+    response = app_client.get(f"/api/hca/run/{context.run_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["workflow_outcome"] == {
+        "terminal_event": "workflow_terminated",
+        "reason": "budget_exhausted",
+        "workflow_step_id": None,
+        "next_step_id": "step-2",
+    }
+    assert data["critique"]["verdict"] == "revise"
+    assert data["critique"]["alignment"] == 0.61
+    assert data["critique"]["feasibility"] == 0.72
+    assert data["critique"]["safety"] == 0.94
+    assert data["critique"]["issues"] == [
+        "Need one more verification step"
+    ]
+    assert data["critique"]["confidence_delta"] == -0.03
+    assert data["critique"]["fallback_reason"] == "rule_based_only"
+
+
 def test_approve_rejects_non_pending_approval_without_writing_grant(
     app_client,
 ):
@@ -556,8 +649,14 @@ def test_basic_run_completed(app_client):
     assert "fallback_reason" in data.get("perception", {})
     assert "llm_attempted" in data.get("perception", {})
     assert isinstance(data.get("critique"), dict)
+    assert "alignment" in data.get("critique", {})
+    assert "feasibility" in data.get("critique", {})
+    assert "safety" in data.get("critique", {})
     assert "llm_powered" in data.get("critique", {})
     assert "fallback_reason" in data.get("critique", {})
+    assert isinstance(data.get("workflow_outcome"), dict)
+    assert "terminal_event" in data.get("workflow_outcome", {})
+    assert "reason" in data.get("workflow_outcome", {})
     assert isinstance(data.get("metrics"), dict)
 
 

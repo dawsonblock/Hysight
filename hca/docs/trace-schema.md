@@ -20,3 +20,7 @@ Additional append‑only logs include:
 * `snapshots.jsonl` – periodic serialisations of runtime state and workspace summaries.
 
 These logs, along with `run.json` (run metadata) and memory stores, allow complete reconstruction of a run.
+
+The append-only logs are the raw trace truth, but they are not the primary operator summary contract. The canonical normalized replay surface is `GET /api/hca/run/{run_id}` and `GET /api/hca/runs`, defined by `hca/src/hca/api/models.py` and populated by `hca/src/hca/api/run_views.py`.
+
+Planner fallback state, perception fallback state, critic verdict scores, and workflow terminal outcome may originate in raw event payloads, but operator-facing consumers should use the normalized summary fields instead of scraping those values back out of the raw trace. The `/events` endpoint remains the correct boundary for full forensic payload inspection.
