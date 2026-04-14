@@ -34,6 +34,10 @@ python scripts/run_tests.py
 
 # 3. Optional — live sidecar proof (requires running memvid sidecar)
 RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
+
+# If localhost:3031 is already occupied, move the sidecar and proof together
+MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
+RUN_MEMVID_TESTS=1 MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
 ```
 
 That is the shortest path to prove the system locally. Everything else below covers setup, configuration, operator workflows, and advanced usage.
@@ -702,14 +706,21 @@ running memvid sidecar (see [Build the memvid sidecar](#6-optional-build-the-mem
 
 ```bash
 RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
+
+# If localhost:3031 is busy on macOS or another local service is using it
+MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
+RUN_MEMVID_TESTS=1 MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
 ```
 
 Or directly:
 
 ```bash
-RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3031 \
+RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3032 \
   pytest backend/tests/test_memvid_sidecar.py -q
 ```
+
+The proof runner defaults to `http://localhost:3031`, but it will derive the
+loopback URL from `MEMORY_SERVICE_PORT` when `MEMORY_SERVICE_URL` is unset.
 
 CI job name: **Backend Live Sidecar Proof**. Push and pull request runs execute
 this supported sidecar mode in CI; `workflow_dispatch` exposes an input so

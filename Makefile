@@ -7,6 +7,7 @@
 	test-backend-local \
 	test-backend \
 	test-sidecar \
+	run-memvid-sidecar \
 	run \
 	run-sidecar \
 	docker-build \
@@ -15,7 +16,8 @@
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
 PYTEST ?= $(PYTHON) -m pytest
-MEMORY_SERVICE_URL ?= http://localhost:3031
+MEMORY_SERVICE_PORT ?= 3031
+MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)
 
 test-bootstrap:
 	$(PIP) install -r backend/requirements-test.txt
@@ -43,17 +45,21 @@ test-backend:
 
 test-sidecar:
 	@curl --fail --silent "$(MEMORY_SERVICE_URL)/health" >/dev/null || { \
-		echo "test-sidecar requires a healthy memvid sidecar at $(MEMORY_SERVICE_URL)/health. Start the sidecar first, or run make test for the mock-backed proof surface."; \
+		echo "test-sidecar requires a healthy memvid sidecar at $(MEMORY_SERVICE_URL)/health. Start the sidecar first with make run-memvid-sidecar, or run make test for the mock-backed proof surface."; \
 		exit 1; \
 	}
 	RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" \
 		$(PYTEST) backend/tests/test_memvid_sidecar.py -q
 
+run-memvid-sidecar:
+	MEMORY_SERVICE_PORT="$(MEMORY_SERVICE_PORT)" \
+		cargo run --manifest-path memvid_service/Cargo.toml --release
+
 run:
 	./scripts/run_backend.sh
 
 run-sidecar:
-	# MEMORY_SERVICE_URL defaults to http://localhost:3031 when unset
+	# MEMORY_SERVICE_URL defaults to http://localhost:$(MEMORY_SERVICE_PORT) when unset
 	MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" ./scripts/run_backend.sh
 
 docker-build:

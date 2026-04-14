@@ -9,6 +9,8 @@ services:
 Optional live sidecar proof (requires a running memvid sidecar):
 
     RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
+        RUN_MEMVID_TESTS=1 MEMORY_SERVICE_PORT=3032 \
+            python scripts/run_tests.py --sidecar
 
 Proof modes and their corresponding CI job names:
 - HCA pipeline proof      → CI: HCA Smoke Proof
@@ -28,9 +30,13 @@ import sys
 import tempfile
 from typing import Any, Dict, List
 
+DEFAULT_MEMORY_SERVICE_PORT = (
+    os.environ.get("MEMORY_SERVICE_PORT", "").strip() or "3031"
+)
+
 MEMORY_SERVICE_URL = os.environ.get(
     "MEMORY_SERVICE_URL",
-    "http://localhost:3031",
+    f"http://localhost:{DEFAULT_MEMORY_SERVICE_PORT}",
 )
 
 # Repo root is two levels up from this file (scripts/run_tests.py → repo root).
@@ -216,7 +222,9 @@ def main() -> int:
         help=(
             "Also run the live sidecar proof. "
             f"Requires a running memvid sidecar at {MEMORY_SERVICE_URL} "
-            "and RUN_MEMVID_TESTS=1 in the environment."
+            "and RUN_MEMVID_TESTS=1 in the environment. "
+            "Override the default loopback port with MEMORY_SERVICE_PORT or "
+            "set a full MEMORY_SERVICE_URL explicitly."
         ),
     )
     args = parser.parse_args()

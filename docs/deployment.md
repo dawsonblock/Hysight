@@ -84,8 +84,12 @@ make test-backend-local
 # full backend suite (no sidecar needed)
 make test-backend
 
-# sidecar proof (sidecar must be running)
-MEMORY_SERVICE_URL=http://localhost:3031 make test-sidecar
+# sidecar proof (sidecar must be running; default port is 3031)
+make test-sidecar
+
+# if localhost:3031 is occupied, override the local sidecar port
+MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
+MEMORY_SERVICE_PORT=3032 make test-sidecar
 ```
 
 `python scripts/run_tests.py` now runs each proof step with an isolated
@@ -116,14 +120,14 @@ See `.env.example` for the full annotated template.
 | Service | URL | Expected response |
 | --- | --- | --- |
 | Backend | `http://localhost:8000/api/` | `{"message":"HCA API — Hybrid Cognitive Agent"}` |
-| Memvid sidecar | `http://localhost:3031/health` | `{"status":"ok",...}` |
+| Memvid sidecar | `http://localhost:<MEMORY_SERVICE_PORT>/health` (default `3031`) | `{"status":"ok",...}` |
 
 ```bash
 # backend
 curl http://localhost:8000/api/
 
-# sidecar (when running)
-curl http://localhost:3031/health
+# sidecar (when running; default port is 3031)
+curl "${MEMORY_SERVICE_URL:-http://localhost:3031}/health"
 ```
 
 ---

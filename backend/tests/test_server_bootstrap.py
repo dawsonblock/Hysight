@@ -522,13 +522,25 @@ def test_base_compose_does_not_export_sidecar_url():
     assert re.search(r"^\s+MEMORY_SERVICE_URL:", compose, re.MULTILINE) is None
 
 
+def test_makefile_exposes_local_sidecar_port_override():
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "MEMORY_SERVICE_PORT ?= 3031" in makefile
+    assert (
+        "MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)"
+        in makefile
+    )
+    assert "run-memvid-sidecar" in makefile
+
+
 def test_proof_runner_uses_explicit_isolated_storage_env():
     proof_runner = (ROOT / "scripts" / "run_tests.py").read_text(
         encoding="utf-8"
     )
     assert "isolated_storage" in proof_runner
     assert '"MEMORY_BACKEND": "python"' in proof_runner
+    assert "DEFAULT_MEMORY_SERVICE_PORT" in proof_runner
     assert "LIVE_SIDECAR_ENV_KEYS" in proof_runner
+    assert '"MEMORY_SERVICE_PORT"' in proof_runner
     assert '"RUN_MEMVID_TESTS"' in proof_runner
     assert '"MEMORY_SERVICE_URL"' in proof_runner
     assert 'env.pop(key, None)' in proof_runner

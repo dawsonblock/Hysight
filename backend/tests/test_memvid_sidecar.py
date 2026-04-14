@@ -5,8 +5,13 @@ requests-mock, so the backend suite can prove request/response shapes without a
 running Rust service. Live-sidecar behavior is opt-in:
 
     RUN_MEMVID_TESTS=1 \
-    MEMORY_BACKEND=rust \
-    MEMORY_SERVICE_URL=http://localhost:3031 \
+    MEMORY_SERVICE_PORT=3032 \
+    pytest backend/tests/test_memvid_sidecar.py -v
+
+Or set the full URL explicitly:
+
+    RUN_MEMVID_TESTS=1 \
+    MEMORY_SERVICE_URL=http://localhost:3032 \
     pytest backend/tests/test_memvid_sidecar.py -v
 
 Tests that require real restart semantics skip unless the live sidecar is
@@ -41,7 +46,10 @@ if str(ROOT) not in sys.path:
 
 SIDECAR_URL = os.environ.get(
     "MEMORY_SERVICE_URL",
-    "http://localhost:3031",
+    (
+        "http://localhost:"
+        f"{os.environ.get('MEMORY_SERVICE_PORT', '').strip() or '3031'}"
+    ),
 )
 
 
@@ -61,10 +69,10 @@ SIDECAR_REACHABLE = (
 )
 _USE_REAL_SIDECAR = SIDECAR_REACHABLE
 _LIVE_SIDECAR_REASON = (
-    "requires RUN_MEMVID_TESTS=1 with a live memvid sidecar on localhost:3031"
+    f"requires RUN_MEMVID_TESTS=1 with a live memvid sidecar at {SIDECAR_URL}"
 )
 _RESTART_REASON = (
-    "requires RUN_MEMVID_TESTS=1, a live memvid sidecar, "
+    f"requires RUN_MEMVID_TESTS=1, a live memvid sidecar at {SIDECAR_URL}, "
     "and supervisorctl in PATH"
 )
 
