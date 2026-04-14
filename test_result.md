@@ -121,7 +121,7 @@ backend:
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -129,6 +129,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Extracted Mongo settings, client lifecycle, and require-db accessors into backend/server_persistence.py, moved subsystem health aggregation into backend/server_subsystems.py, and reduced backend/server.py to adapter composition and lifespan wiring."
+      - working: true
+        agent: "testing"
+        comment: "Verified the current adapter-layer shape with python -m pytest backend/tests/test_server_bootstrap.py -q (30 passed). The targeted suite exercised create_app(), lifespan startup validation, subsystem health wiring, and the documented backend proof surfaces that depend on backend/server.py."
   - task: "Default backend proof rerun"
     implemented: true
     working: true
@@ -143,13 +146,16 @@ backend:
       - working: true
         agent: "main"
         comment: "Validated the split with python -m pytest backend/tests/test_server_bootstrap.py backend/tests/test_contract_conformance.py backend/tests/test_hca.py -q (79 passed) and python scripts/run_tests.py (7 passed, 69 passed, 18 passed, 99 passed 3 skipped)."
+      - working: true
+        agent: "testing"
+        comment: "Re-verified the branch through make proof-sidecar MEMORY_SERVICE_PORT=3032, which runs python scripts/run_tests.py --sidecar. Proof results: HCA pipeline 7 passed, backend local 69 passed, contract conformance 18 passed, backend full 99 passed 4 skipped, and live sidecar 13 passed 2 skipped."
   - task: "Live Mongo /api/status integration"
     implemented: true
     working: true
     file: "backend/tests/test_status_live_mongo.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -157,13 +163,16 @@ backend:
       - working: true
         agent: "main"
         comment: "Added backend/tests/test_status_live_mongo.py as an opt-in real Mongo integration proof and verified it with make test-mongo-live against a disposable mongo:7 container (1 passed)."
+      - working: true
+        agent: "testing"
+        comment: "Verified the current live Mongo path with make test-mongo-live LIVE_MONGO_URL=mongodb://127.0.0.1:27018 LIVE_MONGO_DB_NAME=hysight_verify_live against a disposable mongo:7 container. The opt-in proof passed (1 passed) and exercised the real /api/status persistence round trip."
   - task: "Live sidecar proof automation"
     implemented: true
     working: true
     file: "scripts/run_tests.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -171,6 +180,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Added Makefile targets for proof-sidecar and live Mongo execution, documented the commands, and verified make proof-sidecar MEMORY_SERVICE_PORT=3032 end to end (all 5 proof steps passed; live sidecar proof 13 passed, 2 skipped)."
+      - working: true
+        agent: "testing"
+        comment: "Re-verified the opt-in live sidecar path with a real sidecar on port 3032 and make proof-sidecar MEMORY_SERVICE_PORT=3032. The documented Make target completed successfully, including the live sidecar proof step (13 passed, 2 skipped)."
   - task: "Release notes extraction"
     implemented: true
     working: true
@@ -203,12 +215,10 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 test_plan:
-  current_focus:
-    - "Backend persistence extraction"
-    - "Live Mongo /api/status integration"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -219,3 +229,7 @@ agent_communication:
     message: "Backend persistence extraction is implemented and the default backend proof surface passes. Next implementation focus is the opt-in live Mongo status test plus a clearer automated live sidecar proof entrypoint."
   - agent: "main"
     message: "Backend refactor, optional live Mongo proof, optional live sidecar proof automation, and release notes are implemented. The backend is ready for dedicated testing-agent verification."
+  - agent: "testing"
+    message: "Starting backend verification for the current branch. Focus: targeted adapter-layer checks for backend/server.py and backend/tests/test_server_bootstrap.py, then the opt-in live Mongo and sidecar proof paths."
+  - agent: "testing"
+    message: "Verification complete. Targeted bootstrap regression passed (30 passed), the opt-in live Mongo Make target passed (1 passed), and the documented live sidecar proof path passed end to end via make proof-sidecar (all 5 proof steps passed). No new backend issues were found in this verification pass."
