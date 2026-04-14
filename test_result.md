@@ -101,3 +101,121 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Complete the backend persistence separation, fill live integration proof gaps, add release notes, and evaluate frontend API type safety after the architecture hardening pass."
+backend:
+  - task: "Testing protocol bootstrap"
+    implemented: true
+    working: "NA"
+    file: "test_result.md"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Initialized protocol tracking before code edits as required by the testing instructions."
+  - task: "Backend persistence extraction"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Planned extraction of Mongo settings, lifecycle, and persistence wiring out of backend/server.py into dedicated backend modules."
+      - working: true
+        agent: "main"
+        comment: "Extracted Mongo settings, client lifecycle, and require-db accessors into backend/server_persistence.py, moved subsystem health aggregation into backend/server_subsystems.py, and reduced backend/server.py to adapter composition and lifespan wiring."
+  - task: "Default backend proof rerun"
+    implemented: true
+    working: true
+    file: "scripts/run_tests.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Pending rerun of python scripts/run_tests.py after the backend refactor is complete."
+      - working: true
+        agent: "main"
+        comment: "Validated the split with python -m pytest backend/tests/test_server_bootstrap.py backend/tests/test_contract_conformance.py backend/tests/test_hca.py -q (79 passed) and python scripts/run_tests.py (7 passed, 69 passed, 18 passed, 99 passed 3 skipped)."
+  - task: "Live Mongo /api/status integration"
+    implemented: true
+    working: true
+    file: "backend/tests/test_status_live_mongo.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need an explicit real-Mongo integration proof for POST/GET /api/status that stays out of the default local proof surface."
+      - working: true
+        agent: "main"
+        comment: "Added backend/tests/test_status_live_mongo.py as an opt-in real Mongo integration proof and verified it with make test-mongo-live against a disposable mongo:7 container (1 passed)."
+  - task: "Live sidecar proof automation"
+    implemented: true
+    working: true
+    file: "scripts/run_tests.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need a clear automated entrypoint for the local live Rust sidecar proof, including alternate localhost ports when 3031 is unavailable."
+      - working: true
+        agent: "main"
+        comment: "Added Makefile targets for proof-sidecar and live Mongo execution, documented the commands, and verified make proof-sidecar MEMORY_SERVICE_PORT=3032 end to end (all 5 proof steps passed; live sidecar proof 13 passed, 2 skipped)."
+  - task: "Release notes extraction"
+    implemented: true
+    working: true
+    file: "RELEASE_NOTES.md"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to extract release-facing observability, subsystem health, deployment notes, and optional-mode proof status from hardening and repair reports."
+      - working: true
+        agent: "main"
+        comment: "Created RELEASE_NOTES.md with release-facing observability, subsystem health, deployment notes, proof commands, and current limitations derived from HARDENING_REPORT.md and REPAIR_REPORT.md."
+frontend:
+  - task: "Frontend API type-safety evaluation"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/lib/api.js"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need a low-risk recommendation or narrowly scoped implementation for stronger typing around the frontend API client."
+      - working: "NA"
+        agent: "main"
+        comment: "Evaluated frontend/src/lib/api.js against the current jsconfig and lint surface. Recommendation is to keep the current JavaScript build and add strict JSDoc typing to exported API helpers before attempting a full TypeScript migration."
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+test_plan:
+  current_focus:
+    - "Backend persistence extraction"
+    - "Live Mongo /api/status integration"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+agent_communication:
+  - agent: "main"
+    message: "Tracking initialized before implementation. Next steps are the backend persistence split, default proof rerun, opt-in live Mongo coverage, sidecar proof automation review, release notes, and a frontend API type-safety recommendation."
+  - agent: "main"
+    message: "Backend persistence extraction is implemented and the default backend proof surface passes. Next implementation focus is the opt-in live Mongo status test plus a clearer automated live sidecar proof entrypoint."
+  - agent: "main"
+    message: "Backend refactor, optional live Mongo proof, optional live sidecar proof automation, and release notes are implemented. The backend is ready for dedicated testing-agent verification."

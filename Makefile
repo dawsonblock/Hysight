@@ -6,7 +6,9 @@
 	test-contract \
 	test-backend-local \
 	test-backend \
+	test-mongo-live \
 	test-sidecar \
+	proof-sidecar \
 	run-memvid-sidecar \
 	run \
 	run-sidecar \
@@ -16,6 +18,8 @@
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
 PYTEST ?= $(PYTHON) -m pytest
+LIVE_MONGO_URL ?= mongodb://127.0.0.1:27017
+LIVE_MONGO_DB_NAME ?= hysight_live
 MEMORY_SERVICE_PORT ?= 3031
 MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)
 
@@ -43,6 +47,10 @@ test-backend-local:
 test-backend:
 	$(PYTEST) backend/tests -q
 
+test-mongo-live:
+	RUN_MONGO_TESTS=1 MONGO_URL="$(LIVE_MONGO_URL)" DB_NAME="$(LIVE_MONGO_DB_NAME)" \
+		$(PYTEST) backend/tests/test_status_live_mongo.py -q
+
 test-sidecar:
 	@curl --fail --silent "$(MEMORY_SERVICE_URL)/health" >/dev/null || { \
 		echo "test-sidecar requires a healthy memvid sidecar at $(MEMORY_SERVICE_URL)/health. Start the sidecar first with make run-memvid-sidecar, or run make test for the mock-backed proof surface."; \
@@ -50,6 +58,10 @@ test-sidecar:
 	}
 	RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" \
 		$(PYTEST) backend/tests/test_memvid_sidecar.py -q
+
+proof-sidecar:
+	RUN_MEMVID_TESTS=1 MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" \
+		$(PYTHON) scripts/run_tests.py --sidecar
 
 run-memvid-sidecar:
 	MEMORY_SERVICE_PORT="$(MEMORY_SERVICE_PORT)" \

@@ -38,6 +38,13 @@ RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
 # If localhost:3031 is already occupied, move the sidecar and proof together
 MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
 RUN_MEMVID_TESTS=1 MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
+
+# Or use the automated make wrapper around the full live sidecar proof
+make run-memvid-sidecar
+make proof-sidecar
+
+# Optional — live Mongo-backed /api/status proof
+make test-mongo-live
 ```
 
 That is the shortest path to prove the system locally. Everything else below covers setup, configuration, operator workflows, and advanced usage.
@@ -710,6 +717,10 @@ RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
 # If localhost:3031 is busy on macOS or another local service is using it
 MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
 RUN_MEMVID_TESTS=1 MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
+
+# Or use the explicit make wrapper around the same proof command
+make run-memvid-sidecar
+make proof-sidecar
 ```
 
 Or directly:
@@ -721,6 +732,20 @@ RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3032 
 
 The proof runner defaults to `http://localhost:3031`, but it will derive the
 loopback URL from `MEMORY_SERVICE_PORT` when `MEMORY_SERVICE_URL` is unset.
+
+### Live Mongo-backed `/api/status` proof (opt-in locally)
+
+Proves the real Mongo-backed status persistence path against a live MongoDB
+instance without changing the default service-free proof surface:
+
+```bash
+make test-mongo-live
+
+# Override the live Mongo connection when needed
+LIVE_MONGO_URL=mongodb://127.0.0.1:27017 \
+LIVE_MONGO_DB_NAME=hysight_live \
+make test-mongo-live
+```
 
 CI job name: **Backend Live Sidecar Proof**. Push and pull request runs execute
 this supported sidecar mode in CI; `workflow_dispatch` exposes an input so

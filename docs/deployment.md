@@ -86,10 +86,20 @@ make test-backend
 
 # sidecar proof (sidecar must be running; default port is 3031)
 make test-sidecar
+make proof-sidecar
 
 # if localhost:3031 is occupied, override the local sidecar port
 MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
 MEMORY_SERVICE_PORT=3032 make test-sidecar
+MEMORY_SERVICE_PORT=3032 make proof-sidecar
+
+# live Mongo-backed /api/status proof
+make test-mongo-live
+
+# override the live Mongo connection when needed
+LIVE_MONGO_URL=mongodb://127.0.0.1:27017 \
+LIVE_MONGO_DB_NAME=hysight_live \
+make test-mongo-live
 ```
 
 `python scripts/run_tests.py` now runs each proof step with an isolated

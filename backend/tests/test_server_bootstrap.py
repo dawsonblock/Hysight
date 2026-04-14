@@ -10,10 +10,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 memory_config = import_module("memory_service.config")
+persistence_module = import_module("backend.server_persistence")
 server_module = import_module("backend.server")
 paths_module = import_module("hca.paths")
-BackendConfigurationError = server_module.BackendConfigurationError
-_load_settings = server_module._load_settings
+BackendConfigurationError = persistence_module.BackendConfigurationError
+load_backend_settings = persistence_module.load_backend_settings
 create_app = server_module.create_app
 FastAPI = import_module("fastapi").FastAPI
 TestClient = import_module("fastapi.testclient").TestClient
@@ -34,7 +35,7 @@ def test_load_settings_allows_db_disabled_when_env_unset(monkeypatch):
     monkeypatch.delenv("MONGO_URL", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)
 
-    settings = _load_settings()
+    settings = load_backend_settings()
     assert settings.database_enabled is False
     assert settings.mongo_url is None
     assert settings.db_name is None
@@ -48,7 +49,7 @@ def test_load_settings_rejects_partial_backend_env(monkeypatch):
         BackendConfigurationError,
         match="set both MONGO_URL and DB_NAME or unset both",
     ):
-        _load_settings()
+        load_backend_settings()
 
 
 def test_create_app_returns_fastapi_instance():
@@ -138,12 +139,12 @@ def test_subsystems_route_reports_healthy_when_configured_services_are_ready(
             return None
 
     async def _fake_initialize_database(_settings):
-        setattr(server_module, "client", _FakeMongoClient())
-        setattr(server_module, "db", object())
+        setattr(persistence_module, "client", _FakeMongoClient())
+        setattr(persistence_module, "db", object())
 
     monkeypatch.setattr(
-        server_module,
-        "_initialize_database",
+        persistence_module,
+        "initialize_database",
         _fake_initialize_database,
     )
 
@@ -524,11 +525,15 @@ def test_base_compose_does_not_export_sidecar_url():
 
 def test_makefile_exposes_local_sidecar_port_override():
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "LIVE_MONGO_URL ?= mongodb://127.0.0.1:27017" in makefile
+    assert "LIVE_MONGO_DB_NAME ?= hysight_live" in makefile
     assert "MEMORY_SERVICE_PORT ?= 3031" in makefile
     assert (
         "MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)"
         in makefile
     )
+    assert "test-mongo-live" in makefile
+    assert "proof-sidecar" in makefile
     assert "run-memvid-sidecar" in makefile
 
 

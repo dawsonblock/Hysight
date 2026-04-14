@@ -44,9 +44,9 @@ class _FakeDatabase:
 
 @pytest.fixture()
 def status_app_client(app_client, monkeypatch):
-    server_module = import_module("backend.server")
+    persistence_module = import_module("backend.server_persistence")
     fake_db = _FakeDatabase()
-    monkeypatch.setattr(server_module, "db", fake_db)
+    monkeypatch.setattr(persistence_module, "db", fake_db)
     return app_client, fake_db
 
 
