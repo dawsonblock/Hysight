@@ -401,7 +401,7 @@ function UserBubble({ goal }) {
   );
 }
 
-function StreamingCard({ steps, goal }) {
+function StreamingCard({ steps }) {
   return (
     <div data-testid="streaming-card" style={S.agentRow}>
       <div style={S.streamCard}>

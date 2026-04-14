@@ -1,7 +1,10 @@
-# compose.sidecar.yml — overlay for Rust memvid sidecar mode
+# compose.sidecar.yml — optional overlay for the supported Rust memvid sidecar mode
 #
 # Usage:
 #   docker compose -f compose.yml -f compose.sidecar.yml up --build
+#
+# `compose.yml` alone is the default local runtime path. Add this overlay only
+# when you intentionally want the Rust-backed memory sidecar path.
 #
 # This override:
 #   • Adds the memvid-sidecar service
@@ -9,7 +12,6 @@
 #   • Adds a depends_on so the backend waits for the sidecar to be healthy
 
 services:
-
   backend:
     environment:
       MEMORY_BACKEND: rust

@@ -1,0 +1,44 @@
+name: frontend-proof
+
+on:
+    push:
+        paths:
+            - ".github/workflows/frontend-proof.yml"
+            - "frontend/**"
+            - "backend/**"
+            - "contract/**"
+            - "hca/**"
+            - "README.md"
+    pull_request:
+        paths:
+            - ".github/workflows/frontend-proof.yml"
+            - "frontend/**"
+            - "backend/**"
+            - "contract/**"
+            - "hca/**"
+            - "README.md"
+    workflow_dispatch:
+
+jobs:
+    frontend-proof:
+        name: Frontend Proof
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        defaults:
+            run:
+                working-directory: frontend
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: yarn
+                  cache-dependency-path: frontend/yarn.lock
+            - name: Install frontend dependencies
+              run: yarn install --frozen-lockfile
+            - name: Lint frontend
+              run: yarn lint
+            - name: Run frontend tests
+              run: CI=true yarn test --watch=false --runInBand
+            - name: Build frontend
+              run: yarn build

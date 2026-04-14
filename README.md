@@ -18,6 +18,7 @@ A proof-first Hybrid Cognitive Agent runtime with bounded authority, replay-back
 | I want to... | Command |
 | --- | --- |
 | Verify the default local proof surface | `python scripts/run_tests.py` |
+| Verify the frontend operator surface | `cd frontend && yarn lint && CI=true yarn test --watch=false --runInBand && yarn build` |
 | Start the backend | `./scripts/run_backend.sh` |
 | Start the frontend | `cd frontend && yarn start` |
 | Run the optional memvid sidecar | `cargo run --manifest-path memvid_service/Cargo.toml --release` |
@@ -281,6 +282,7 @@ Hysight/
 
 - pytest, httpx for testing
 - black, isort, flake8, mypy for code quality
+- ESLint 9 and Jest via CRACO for frontend proof
 
 ---
 
@@ -452,6 +454,10 @@ The UI will open at `http://localhost:3000`. In local development, `/api`
 requests proxy to the backend at `http://localhost:8000` by default.
 
 The default layout is two-pane: live agent chat on the left and a persistent operator console on the right. The operator console lists recent runs, shows replay-backed workflow and approval state, and lets you inspect stored events and artifact previews without separate manual API calls.
+
+Mongo-backed `/api/status` persistence is optional. If `MONGO_URL` and
+`DB_NAME` are both unset, the backend still serves HCA and memory routes while
+`/api/status` returns `503` by design.
 
 ### (Optional) Run the memvid sidecar
 
@@ -644,6 +650,9 @@ Equivalent direct invocation:
 python scripts/run_tests.py
 ```
 
+This backend proof path is the authoritative local runtime proof. It does not
+claim frontend verification or live Rust sidecar coverage by itself.
+
 ### Individual proof modes
 
 | Proof mode | Command | CI job |
@@ -653,7 +662,25 @@ python scripts/run_tests.py
 | Backend local proof | `pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q` | Backend Local Proof |
 | Backend full proof | `pytest backend/tests -q` | Backend Full Proof |
 
-### Live sidecar proof (opt-in)
+### Frontend proof
+
+The operator UI is under its own CI proof surface in
+`.github/workflows/frontend-proof.yml`.
+
+Run it locally with:
+
+```bash
+cd frontend
+yarn install --frozen-lockfile
+yarn lint
+CI=true yarn test --watch=false --runInBand
+yarn build
+```
+
+This verifies the actual frontend toolchain in use today: dependency install,
+ESLint, Jest, API client boundary tests, and the production build.
+
+### Live sidecar proof (opt-in locally)
 
 Proves real sidecar availability, retrieval, and restart semantics. Requires a
 running memvid sidecar (see [Build the memvid sidecar](#6-optional-build-the-memvid-sidecar)):
@@ -669,17 +696,21 @@ RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3031 
   pytest backend/tests/test_memvid_sidecar.py -q
 ```
 
-CI job name: **Backend Live Sidecar Proof** (opt-in via `workflow_dispatch`).
+CI job name: **Backend Live Sidecar Proof**. Push and pull request runs execute
+this supported sidecar mode in CI; `workflow_dispatch` exposes an input so
+manual runs can skip or include it explicitly.
 
 ### Notes
 
 - The backend local proof validates the FastAPI app, in-process memory routes,
   and HCA runtime behavior without external services.
 - The backend full proof adds mock-backed memvid boundary coverage.
-- The live sidecar proof is the separate opt-in path for the real Rust sidecar.
+- The live sidecar proof remains a separate local opt-in path for the real Rust
+  sidecar, even though CI also exercises that supported mode.
 - `./scripts/proof_local.sh` is the no-logic wrapper around the canonical
   proof authority `python scripts/run_tests.py`.
-- GitHub Actions mirrors these proof modes in `.github/workflows/backend-proof.yml`.
+- GitHub Actions mirrors the backend proof modes in `.github/workflows/backend-proof.yml`
+  and the frontend proof surface in `.github/workflows/frontend-proof.yml`.
 - The backend rejects the legacy `{"query": ...}` memory retrieve body;
   use `{"query_text": ...}` everywhere.
 - CORS is disabled by default; enable with explicit absolute origins via

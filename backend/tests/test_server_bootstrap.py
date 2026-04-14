@@ -218,18 +218,22 @@ def test_frontend_uses_shared_api_client_only():
     direct_backend_url_files = []
     compatibility_route_files = []
     hardcoded_api_route_files = []
+    allowed_frontend_api_files = {
+        "frontend/src/lib/api.js",
+        "frontend/src/lib/api.test.js",
+    }
 
     for path in frontend_root.rglob("*.js"):
         relative_path = path.relative_to(ROOT).as_posix()
         content = path.read_text(encoding="utf-8")
-        if relative_path != "frontend/src/lib/api.js" and "fetch(" in content:
+        if relative_path not in allowed_frontend_api_files and "fetch(" in content:
             direct_fetch_files.append(relative_path)
-        if "http://localhost:8000" in content:
+        if relative_path not in allowed_frontend_api_files and "http://localhost:8000" in content:
             direct_backend_url_files.append(relative_path)
-        if re.search(r"['\"]/?runs(?:/|['\"])", content):
+        if relative_path not in allowed_frontend_api_files and re.search(r"['\"]/?runs(?:/|['\"])", content):
             compatibility_route_files.append(relative_path)
         if (
-            relative_path != "frontend/src/lib/api.js"
+            relative_path not in allowed_frontend_api_files
             and re.search(r"['\"`]\/(?:api|hca)\/", content)
         ):
             hardcoded_api_route_files.append(relative_path)

@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import HCAChat from "@/components/HCAChat";
 import {
   decideRunApproval,
-  getResponseErrorMessage,
   streamRun,
   toErrorMessage,
 } from "@/lib/api";
