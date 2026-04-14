@@ -24,6 +24,12 @@ RetrievalQuery = memory_service.RetrievalQuery
 MemoryController = memory_controller_module.MemoryController
 
 
+def _event_types_for_run(run_id):
+    from hca.storage import iter_events
+
+    return [event["event_type"] for event in iter_events(run_id)]
+
+
 # Memory service tests.
 
 class TestMemoryController:
@@ -83,39 +89,60 @@ class TestHCARuntimeSmoke:
     def test_echo_run_completes(self):
         """Simplest possible run — should complete without approval."""
         from hca.runtime.runtime import Runtime
+        from hca.storage import load_run
 
         rt = Runtime()
         run_id = rt.run("Hello, what can you do?")
         assert run_id is not None
 
-        from hca.storage import load_run
         ctx = load_run(run_id)
         assert ctx is not None
-        assert ctx.state.value in ("completed", "awaiting_approval", "failed")
+        assert ctx.state.value == "completed"
+
+        event_types = _event_types_for_run(run_id)
+        assert event_types[0] == "run_created"
+        assert "execution_finished" in event_types
+        assert "run_completed" in event_types
+        assert "run_failed" not in event_types
 
     def test_run_creates_events(self):
-        """Every run should produce events."""
+        """Every non-approval smoke run should produce a healthy trace."""
         from hca.runtime.runtime import Runtime
-        from hca.storage import iter_events
 
         rt = Runtime()
         run_id = rt.run("Echo hello please")
-        events = list(iter_events(run_id))
-        assert len(events) > 0
-        event_types = {ev["event_type"] for ev in events}
+        event_types = _event_types_for_run(run_id)
+
+        assert len(event_types) > 0
         assert "run_created" in event_types
+        assert "action_selected" in event_types
+        assert "execution_finished" in event_types
+        assert "run_completed" in event_types
+        assert "run_failed" not in event_types
 
     def test_store_goal_produces_approval(self):
         """A 'remember' goal should trigger approval flow."""
         from hca.runtime.runtime import Runtime
         from hca.storage import load_run
+        from hca.storage.approvals import get_pending_requests
 
         rt = Runtime()
         run_id = rt.run("Remember that the sprint ends on Friday")
         ctx = load_run(run_id)
         assert ctx is not None
-        # Either completes or awaits approval — both are valid outcomes
-        assert ctx.state.value in ("completed", "awaiting_approval", "failed")
+        assert ctx.state.value == "awaiting_approval"
+
+        pending_requests = get_pending_requests(run_id)
+        assert len(pending_requests) == 1
+        assert pending_requests[0].action_kind == "store_note"
+
+        event_types = _event_types_for_run(run_id)
+        assert event_types[0] == "run_created"
+        assert "action_selected" in event_types
+        assert "approval_requested" in event_types
+        assert "execution_finished" not in event_types
+        assert "run_completed" not in event_types
+        assert "run_failed" not in event_types
 
 
 # Direct run.

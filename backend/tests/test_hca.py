@@ -1,4 +1,5 @@
 """HCA API backend tests — self-contained, no external services required."""
+import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -70,6 +71,37 @@ def _seed_artifact(run_id: str, artifact_id: str, content: str):
             "metadata": {"args": {"note": "seeded artifact"}},
         },
     )
+
+
+def _key_event_types(summary_payload):
+    return [
+        event.get("type")
+        for event in summary_payload.get("key_events", [])
+        if isinstance(event, dict)
+    ]
+
+
+def _parse_sse_events(body: str):
+    events = []
+    event_name = None
+    data_lines = []
+
+    for line in body.splitlines():
+        if line.startswith("event: "):
+            event_name = line.split(": ", 1)[1]
+        elif line.startswith("data: "):
+            data_lines.append(line.split(": ", 1)[1])
+        elif not line.strip() and event_name is not None:
+            payload = json.loads("\n".join(data_lines)) if data_lines else None
+            events.append((event_name, payload))
+            event_name = None
+            data_lines = []
+
+    if event_name is not None:
+        payload = json.loads("\n".join(data_lines)) if data_lines else None
+        events.append((event_name, payload))
+
+    return events
 
 
 # Root / health.
@@ -176,6 +208,61 @@ def test_get_run_artifacts_and_detail(app_client):
     assert detail["content"] == "artifact content"
     assert detail["size_bytes"] == len("artifact content")
     assert detail["truncated"] is False
+
+
+def test_stream_endpoint_emits_done_event_for_successful_run(app_client):
+    response = app_client.post(
+        "/api/hca/run/stream",
+        json={"goal": "Hello, what can you do?"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(
+        "text/event-stream"
+    )
+
+    events = _parse_sse_events(response.text)
+    assert events[0][0] == "status"
+    assert any(name == "step" for name, _payload in events)
+    assert any(
+        name == "step" and payload.get("event_type") == "run_completed"
+        for name, payload in events
+        if isinstance(payload, dict)
+    )
+
+    done_payload = next(
+        payload for name, payload in events if name == "done"
+    )
+    assert done_payload["state"] == "completed"
+    assert done_payload["discrepancies"] == []
+
+
+def test_stream_endpoint_emits_error_event_when_runtime_raises(
+    app_client,
+    monkeypatch,
+):
+    from hca.runtime.runtime import Runtime  # type: ignore
+
+    def _boom(self, goal, user_id=None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(Runtime, "run", _boom)
+
+    response = app_client.post(
+        "/api/hca/run/stream",
+        json={"goal": "Hello, what can you do?"},
+    )
+
+    assert response.status_code == 200
+    events = _parse_sse_events(response.text)
+    assert events[0][0] == "status"
+    assert any(name == "error" for name, _payload in events)
+    assert not any(name == "done" for name, _payload in events)
+
+    error_payload = next(
+        payload for name, payload in events if name == "error"
+    )
+    assert error_payload == {"label": "boom"}
 
 
 def test_run_summary_uses_recorded_memory_hits_and_metrics(
@@ -453,6 +540,38 @@ def test_run_summary_surfaces_workflow_outcome_and_critic_scores(
     assert data["critique"]["fallback_reason"] == "rule_based_only"
 
 
+def test_memory_retrieval_failure_is_explicit_but_nonfatal(
+    app_client,
+    monkeypatch,
+):
+    import memory_service.singleton as memory_singleton
+
+    def _fail_controller_lookup():
+        raise RuntimeError("memory offline")
+
+    monkeypatch.setattr(
+        memory_singleton,
+        "get_controller",
+        _fail_controller_lookup,
+    )
+
+    response = app_client.post(
+        "/api/hca/run",
+        json={"goal": "What facts are stored in memory?"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["state"] == "completed"
+    assert data["plan"]["memory_retrieval_status"] == "failed"
+    assert data["plan"]["memory_retrieval_error"] == "RuntimeError"
+    assert data["discrepancies"] == []
+
+    key_event_types = _key_event_types(data)
+    assert "run_completed" in key_event_types
+    assert "run_failed" not in key_event_types
+
+
 def test_approve_rejects_non_pending_approval_without_writing_grant(
     app_client,
 ):
@@ -634,12 +753,22 @@ def test_basic_run_completed(app_client):
     assert data.get("state") == "completed"
     assert data.get("plan", {}).get("strategy") is not None
     assert data.get("plan", {}).get("action") is not None
+    assert data.get("approval_id") is None
+    assert data.get("last_approval_decision") is None
+    assert data.get("action_taken", {}).get("kind") is not None
+    assert data.get("action_taken", {}).get("action_id") is not None
+    assert data.get("action_taken", {}).get("requires_approval") is False
     assert data.get("action_result", {}).get("status") == "success"
     assert data.get("latest_receipt", {}).get("status") == "success"
+    assert (
+        data.get("latest_receipt", {}).get("action_id")
+        == data.get("action_taken", {}).get("action_id")
+    )
     assert isinstance(data.get("artifacts"), list)
+    assert data.get("artifacts_count") == len(data.get("artifacts", []))
     assert isinstance(data.get("memory_counts"), dict)
     assert isinstance(data.get("memory_outcomes"), dict)
-    assert isinstance(data.get("discrepancies"), list)
+    assert data.get("discrepancies") == []
     assert data.get("plan", {}).get("planning_mode") is not None
     assert "fallback_reason" in data.get("plan", {})
     assert "memory_retrieval_status" in data.get("plan", {})
@@ -658,6 +787,14 @@ def test_basic_run_completed(app_client):
     assert "terminal_event" in data.get("workflow_outcome", {})
     assert "reason" in data.get("workflow_outcome", {})
     assert isinstance(data.get("metrics"), dict)
+    assert data.get("event_count", 0) > 0
+
+    key_event_types = _key_event_types(data)
+    assert "action_selected" in key_event_types
+    assert "execution_finished" in key_event_types
+    assert "run_completed" in key_event_types
+    assert "approval_requested" not in key_event_types
+    assert "run_failed" not in key_event_types
 
 
 @pytest.mark.slow
@@ -754,6 +891,18 @@ def test_remember_goal_awaiting_approval(app_client):
     data = r.json()
     assert data.get("state") == "awaiting_approval"
     assert data.get("approval_id") is not None
+    assert data.get("last_approval_decision") is None
+    assert data.get("action_taken", {}).get("kind") == "store_note"
+    assert data.get("action_taken", {}).get("requires_approval") is True
+    assert data.get("latest_receipt") is None
+    assert data.get("discrepancies") == []
+
+    key_event_types = _key_event_types(data)
+    assert "action_selected" in key_event_types
+    assert "approval_requested" in key_event_types
+    assert "execution_finished" not in key_event_types
+    assert "run_completed" not in key_event_types
+    assert "run_failed" not in key_event_types
 
 
 @pytest.mark.slow
@@ -766,15 +915,63 @@ def test_approve_action_completes(app_client):
     data = r.json()
     run_id = data.get("run_id")
     approval_id = data.get("approval_id")
-    if data.get("state") != "awaiting_approval" or not approval_id:
-        pytest.skip("Run did not enter awaiting_approval state")
+    assert data.get("state") == "awaiting_approval"
+    assert approval_id is not None
 
     r2 = app_client.post(
         f"/api/hca/run/{run_id}/approve",
         json={"approval_id": approval_id},
     )
     assert r2.status_code == 200
-    assert r2.json().get("state") == "completed"
+    approved = r2.json()
+    assert approved.get("state") == "completed"
+    assert approved.get("approval_id") == approval_id
+    assert approved.get("last_approval_decision") == "granted"
+    assert approved.get("latest_receipt", {}).get("status") == "success"
+    assert approved.get("discrepancies") == []
+    assert approved.get("action_taken", {}).get("kind") == "store_note"
+    assert approved.get("memory_outcomes", {}).get("episodic_memory_writes", 0) >= 1
+
+    key_event_types = _key_event_types(approved)
+    assert "approval_requested" in key_event_types
+    assert "approval_granted" in key_event_types
+    assert "execution_finished" in key_event_types
+    assert "run_completed" in key_event_types
+    assert "run_failed" not in key_event_types
+
+
+@pytest.mark.slow
+def test_deny_action_halts_without_execution(app_client):
+    r = app_client.post(
+        "/api/hca/run",
+        json={"goal": "Please remember that testing was done on Feb 2026"},
+    )
+    assert r.status_code == 200
+    pending = r.json()
+    run_id = pending.get("run_id")
+    approval_id = pending.get("approval_id")
+    assert pending.get("state") == "awaiting_approval"
+    assert approval_id is not None
+
+    denied_response = app_client.post(
+        f"/api/hca/run/{run_id}/deny",
+        json={"approval_id": approval_id},
+    )
+    assert denied_response.status_code == 200
+
+    denied = denied_response.json()
+    assert denied.get("state") == "halted"
+    assert denied.get("approval_id") == approval_id
+    assert denied.get("last_approval_decision") == "denied"
+    assert denied.get("latest_receipt") is None
+    assert denied.get("discrepancies") == []
+
+    key_event_types = _key_event_types(denied)
+    assert "approval_requested" in key_event_types
+    assert "approval_denied" in key_event_types
+    assert "execution_finished" not in key_event_types
+    assert "run_completed" not in key_event_types
+    assert "run_failed" not in key_event_types
 
 
 # Status endpoints.
