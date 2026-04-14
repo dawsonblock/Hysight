@@ -76,6 +76,9 @@ The frontend and operator APIs still talk to the same backend routes (`/api/...`
 # canonical local proof wrapper
 ./scripts/proof_local.sh
 
+# frontend operator proof
+cd frontend && yarn lint && CI=true yarn test --watch=false --runInBand && yarn build
+
 # smoke proof (no sidecar needed)
 make test-bootstrap
 make test-pipeline
@@ -105,6 +108,11 @@ make test-mongo-live
 `python scripts/run_tests.py` now runs each proof step with an isolated
 temporary `HCA_STORAGE_ROOT` and matching `MEMORY_STORAGE_DIR`, so proof does
 not rely on repo-default storage state.
+
+If you use the repo-scoped VS Code verification workflow, prepare
+`test_result.md` first with
+`.github/prompts/prepare-verification-handoff.prompt.md`, then hand backend or
+frontend verification to the corresponding agent under `.github/agents/`.
 
 ---
 

@@ -57,6 +57,7 @@ That is the shortest path to prove the system locally. Everything else below cov
 - [Running the Application](#running-the-application)
 - [API](#api)
 - [Testing](#testing)
+- [Verification Workflow](#verification-workflow)
 
 Hysight is built for teams who want agentic behavior without surrendering control: bounded tools, explicit approvals, replayable execution, and a default workflow that starts with proof instead of promises.
 
@@ -705,6 +706,48 @@ yarn build
 
 This verifies the actual frontend toolchain in use today: dependency install,
 ESLint, Jest, API client boundary tests, and the production build.
+
+## Verification Workflow
+
+Hysight also ships repo-scoped VS Code customizations for verification and
+release-summary work. They are intended to keep proof runs narrow, keep
+`test_result.md` up to date, and make the next verifier explicit instead of
+reconstructing context from chat history.
+
+### Shared handoff file
+
+- `test_result.md` is the coordination file for implementation and verification
+  passes.
+- The protocol block at the top of that file is authoritative and should be
+  preserved exactly.
+- Backend and frontend verifiers record proof evidence, retest needs, and
+  handoff notes there.
+
+### Repo-scoped custom agents
+
+- [`.github/agents/backend-verification.agent.md`](.github/agents/backend-verification.agent.md)
+  validates FastAPI, backend runtime, Mongo-backed status proof, and sidecar
+  proof work.
+- [`.github/agents/frontend-verification.agent.md`](.github/agents/frontend-verification.agent.md)
+  validates React regressions, API-client boundary tests, lint, Jest, and the
+  production build.
+- [`.github/agents/release-notes.agent.md`](.github/agents/release-notes.agent.md)
+  turns [HARDENING_REPORT.md](HARDENING_REPORT.md),
+  [REPAIR_REPORT.md](REPAIR_REPORT.md), and
+  [RELEASE_NOTES.md](RELEASE_NOTES.md) into concise release-facing summaries.
+
+### Recommended handoff flow
+
+1. Run the prompt in
+   [`.github/prompts/prepare-verification-handoff.prompt.md`](.github/prompts/prepare-verification-handoff.prompt.md)
+   to update `test_result.md` before delegating verification.
+2. Invoke the backend or frontend verification agent based on the files and
+   proof surface involved.
+3. Use the release-notes agent when the implementation or repair reports need
+   to be collapsed into release-facing documentation.
+
+The handoff prompt prepares the tracking file and recommends the next verifier;
+it does not run tests by itself.
 
 ### Live sidecar proof (opt-in locally)
 
