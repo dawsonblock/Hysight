@@ -49,6 +49,35 @@ const DONE_SUMMARY = {
   goal: "Prepare release summary",
   state: "awaiting_approval",
   approval_id: "approval-1",
+  approval: {
+    approval_id: "approval-1",
+    status: "pending",
+    expired: false,
+    request: {
+      approval_id: "approval-1",
+      action_id: "action-approval-1",
+      action_kind: "write_artifact",
+      action_class: "artifact_write",
+      reason: "Operator review is required before writing release artifacts.",
+      requested_at: "2026-04-13T15:00:30Z",
+      binding: {
+        tool_name: "write_artifact",
+        target: "artifacts/release-summary.md",
+        action_class: "artifact_write",
+        requires_approval: true,
+        policy_snapshot: {
+          requires_approval: true,
+          retention: "release-approval-policy",
+        },
+        policy_fingerprint: "policy-release-artifact",
+        action_fingerprint: "action-release-summary",
+      },
+    },
+    decision: null,
+    grant: null,
+    consumption: null,
+    corruption_count: 0,
+  },
   plan: {
     strategy: "artifact_authoring_strategy",
     action: "write_artifact",
@@ -146,6 +175,11 @@ test("renders the rich operator summary after a streamed run completes", async (
   expect(screen.getByText("PERCEPTION")).toBeInTheDocument();
   expect(screen.getByText("CRITIQUE")).toBeInTheDocument();
   expect(screen.getByText("WORKFLOW")).toBeInTheDocument();
+  expect(screen.getByText("APPROVAL CONTEXT")).toBeInTheDocument();
+  expect(
+    screen.getByText("Operator review is required before writing release artifacts.")
+  ).toBeInTheDocument();
+  expect(screen.getByText("policy-release-artifact")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Deny" })).toBeInTheDocument();
 

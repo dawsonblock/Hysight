@@ -476,6 +476,8 @@ function AgentCard({
     ? data.workflow_step_history
     : [];
   const actionTaken = data?.action_taken || {};
+  const { request, decision, grant, consumption, binding } =
+    getApprovalContext(data);
   const actionArgs = actionTaken.arguments || {};
   const result = data?.action_result || {};
   const memoryHits = Array.isArray(data?.memory_hits) ? data.memory_hits : [];
@@ -484,6 +486,11 @@ function AgentCard({
     data?.approval_id &&
     !approved &&
     !denied;
+  const hasApprovalContext =
+    isAwaiting ||
+    hasValue(data?.approval_id) ||
+    hasValue(data?.approval) ||
+    hasValue(data?.last_approval_decision);
   const buttonsDisabled = Boolean(pendingAction);
 
   return (
@@ -556,6 +563,86 @@ function AgentCard({
                   <span style={S.dataLabelBlock}>Arguments</span>
                   <pre style={S.jsonPreview}>
                     {formatObjectPreview(actionArgs)}
+                  </pre>
+                </div>
+              )}
+            </Section>
+          )}
+
+          {hasApprovalContext && (
+            <Section label={isAwaiting ? "APPROVAL CONTEXT" : "APPROVAL"}>
+              <DataRow
+                label="Status"
+                value={formatApprovalStatus(data)}
+              />
+              {request?.reason && (
+                <DataRow label="Reason" value={request.reason} />
+              )}
+              {(request?.action_kind || actionTaken.kind) && (
+                <DataRow
+                  label="Requested action"
+                  value={request?.action_kind || actionTaken.kind}
+                  mono
+                />
+              )}
+              {(request?.action_class || binding?.action_class) && (
+                <DataRow
+                  label="Action class"
+                  value={request?.action_class || binding?.action_class}
+                />
+              )}
+              {request?.requested_at && (
+                <DataRow
+                  label="Requested at"
+                  value={formatDateTime(request.requested_at)}
+                />
+              )}
+              {(decision?.decision || data?.last_approval_decision) && (
+                <DataRow
+                  label="Decision"
+                  value={decision?.decision || data?.last_approval_decision}
+                />
+              )}
+              {decision?.reason && (
+                <DataRow label="Decision reason" value={decision.reason} />
+              )}
+              {grant?.granted_at && (
+                <DataRow
+                  label="Granted at"
+                  value={formatDateTime(grant.granted_at)}
+                />
+              )}
+              {consumption?.consumed_at && (
+                <DataRow
+                  label="Consumed at"
+                  value={formatDateTime(consumption.consumed_at)}
+                />
+              )}
+              {binding?.tool_name && (
+                <DataRow label="Bound tool" value={binding.tool_name} mono />
+              )}
+              {binding?.target && (
+                <DataRow label="Bound target" value={binding.target} mono />
+              )}
+              {binding?.policy_fingerprint && (
+                <DataRow
+                  label="Policy fingerprint"
+                  value={binding.policy_fingerprint}
+                  mono
+                />
+              )}
+              {binding?.action_fingerprint && (
+                <DataRow
+                  label="Action fingerprint"
+                  value={binding.action_fingerprint}
+                  mono
+                />
+              )}
+              {hasValue(binding?.policy_snapshot) && (
+                <div style={S.jsonBlock}>
+                  <span style={S.dataLabelBlock}>Policy snapshot</span>
+                  <pre style={S.jsonPreview}>
+                    {formatObjectPreview(binding.policy_snapshot)}
                   </pre>
                 </div>
               )}
@@ -906,6 +993,60 @@ function hasValue(value) {
   }
 
   return true;
+}
+
+function getApprovalContext(data) {
+  const approval =
+    data?.approval && typeof data.approval === "object" ? data.approval : null;
+
+  const request =
+    approval?.request && typeof approval.request === "object"
+      ? approval.request
+      : null;
+  const decision =
+    approval?.decision && typeof approval.decision === "object"
+      ? approval.decision
+      : null;
+  const grant =
+    approval?.grant && typeof approval.grant === "object"
+      ? approval.grant
+      : null;
+  const consumption =
+    approval?.consumption && typeof approval.consumption === "object"
+      ? approval.consumption
+      : null;
+  const binding =
+    request?.binding ||
+    grant?.binding ||
+    decision?.binding ||
+    consumption?.binding ||
+    null;
+
+  return { request, decision, grant, consumption, binding };
+}
+
+function formatApprovalStatus(data) {
+  if (!data) {
+    return "—";
+  }
+
+  if (data.approval?.status) {
+    if (data.approval.status === "pending" && data.approval_id) {
+      return `pending (${data.approval_id})`;
+    }
+
+    return data.approval.status;
+  }
+
+  if (data.last_approval_decision) {
+    return data.last_approval_decision;
+  }
+
+  if (data.approval_id) {
+    return `pending (${data.approval_id})`;
+  }
+
+  return "—";
 }
 
 function formatBoolean(value) {

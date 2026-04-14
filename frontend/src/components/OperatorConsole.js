@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   decideRunApproval,
   getRunArtifactDetail,
+  getSubsystems,
   getRunSummary,
   listRunArtifacts,
   listRunEvents,
@@ -87,6 +88,9 @@ export default function OperatorConsole({
   );
   const [runsLoading, setRunsLoading] = useState(false);
   const [runsError, setRunsError] = useState("");
+  const [subsystems, setSubsystems] = useState(null);
+  const [subsystemsLoading, setSubsystemsLoading] = useState(false);
+  const [subsystemsError, setSubsystemsError] = useState("");
 
   const [runDetail, setRunDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -144,6 +148,39 @@ export default function OperatorConsole({
       cancelled = true;
     };
   }, [localRefreshToken, refreshToken, runQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSubsystems() {
+      setSubsystemsLoading(true);
+      setSubsystemsError("");
+
+      try {
+        const data = await getSubsystems();
+
+        if (!cancelled) {
+          setSubsystems(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSubsystems(null);
+          setSubsystemsError(
+            toErrorMessage(error, "Unable to load subsystem health.")
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setSubsystemsLoading(false);
+        }
+      }
+    }
+
+    loadSubsystems();
+    return () => {
+      cancelled = true;
+    };
+  }, [localRefreshToken, refreshToken]);
 
   useEffect(() => {
     try {
@@ -440,6 +477,12 @@ export default function OperatorConsole({
         ]}
       />
 
+      <SubsystemStatusStrip
+        subsystems={subsystems}
+        loading={subsystemsLoading}
+        error={subsystemsError}
+      />
+
       <FocusedRunCard
         run={selectedRunSnapshot}
         loading={detailLoading}
@@ -696,6 +739,8 @@ function FocusedRunCard({
 
   const signal = summarizeRunSignal(run);
   const canResolveApproval = isApprovalActionable(run);
+  const { request, binding } = getApprovalContext(run);
+  const approvalTokens = approvalBindingTokens(binding);
 
   return (
     <section
@@ -768,8 +813,28 @@ function FocusedRunCard({
             <span style={S.focusActionId}>{shortenIdentifier(run.approval_id)}</span>
           </div>
 
+          {hasValue(request?.reason) && (
+            <div style={S.focusActionContext}>{request.reason}</div>
+          )}
+
+          {approvalTokens.length > 0 && <TokenList values={approvalTokens} mono />}
+
+          {hasValue(binding?.policy_snapshot) && (
+            <section style={S.section}>
+              <div style={S.sectionLabel}>Policy snapshot</div>
+              <pre style={S.focusActionPayload}>
+                {formatPayload(binding.policy_snapshot)}
+              </pre>
+            </section>
+          )}
+
           {hasValue(run.action_taken?.arguments) && (
-            <pre style={S.focusActionPayload}>{formatPayload(run.action_taken.arguments)}</pre>
+            <section style={S.section}>
+              <div style={S.sectionLabel}>Pending arguments</div>
+              <pre style={S.focusActionPayload}>
+                {formatPayload(run.action_taken.arguments)}
+              </pre>
+            </section>
           )}
 
           <div style={S.focusActionButtons}>
@@ -813,6 +878,8 @@ function OverviewPanel({ run }) {
   const actionTaken = run.action_taken || {};
   const actionResult = run.action_result || {};
   const activeWorkflow = run.active_workflow || {};
+  const { approval, request, decision, grant, consumption, binding } =
+    getApprovalContext(run);
   const workflowBudget = run.workflow_budget || {};
   const workflowCheckpoint = run.workflow_checkpoint || {};
   const workflowOutcome = run.workflow_outcome || {};
@@ -1010,6 +1077,80 @@ function OverviewPanel({ run }) {
         ]}
       />
 
+      {(hasValue(run.approval_id) ||
+        hasValue(approval) ||
+        hasValue(run.last_approval_decision)) && (
+        <>
+          <FactSection
+            label="Approval"
+            items={[
+              { label: "Status", value: formatApprovalStatus(run) },
+              { label: "Approval id", value: run.approval_id, mono: true },
+              { label: "Request reason", value: request?.reason },
+              {
+                label: "Requested action",
+                value: request?.action_kind || actionTaken.kind || plan.action,
+              },
+              {
+                label: "Action class",
+                value: request?.action_class || binding?.action_class,
+              },
+              {
+                label: "Requested at",
+                value: request?.requested_at
+                  ? formatDateTime(request.requested_at)
+                  : "",
+              },
+              {
+                label: "Decision",
+                value: decision?.decision || run.last_approval_decision,
+              },
+              { label: "Decision actor", value: decision?.actor },
+              { label: "Decision reason", value: decision?.reason },
+              { label: "Granted by", value: grant?.actor },
+              {
+                label: "Granted at",
+                value: grant?.granted_at ? formatDateTime(grant.granted_at) : "",
+              },
+              {
+                label: "Consumed at",
+                value: consumption?.consumed_at
+                  ? formatDateTime(consumption.consumed_at)
+                  : "",
+              },
+              { label: "Binding tool", value: binding?.tool_name, mono: true },
+              { label: "Binding target", value: binding?.target, mono: true },
+              {
+                label: "Policy fingerprint",
+                value: binding?.policy_fingerprint,
+                mono: true,
+              },
+              {
+                label: "Action fingerprint",
+                value: binding?.action_fingerprint,
+                mono: true,
+              },
+              {
+                label: "Corruption count",
+                value:
+                  typeof approval?.corruption_count === "number"
+                    ? String(approval.corruption_count)
+                    : "",
+              },
+            ]}
+          />
+
+          {hasValue(binding?.policy_snapshot) && (
+            <section style={S.section}>
+              <div style={S.sectionLabel}>Approval policy snapshot</div>
+              <pre style={S.payloadPreview}>
+                {formatPayload(binding.policy_snapshot)}
+              </pre>
+            </section>
+          )}
+        </>
+      )}
+
       <FactSection
         label="Metrics"
         items={[
@@ -1156,10 +1297,81 @@ function OverviewPanel({ run }) {
   );
 }
 
+function SubsystemStatusStrip({ subsystems, loading, error }) {
+  if (loading) {
+    return <PanelMessage text="Loading subsystem health…" />;
+  }
+
+  if (error) {
+    return <PanelMessage text={error} tone="error" />;
+  }
+
+  if (!subsystems) {
+    return null;
+  }
+
+  const memoryMode = subsystems.memory.uses_sidecar
+    ? `${formatSnakeLabel(subsystems.memory.backend)} sidecar`
+    : `${formatSnakeLabel(subsystems.memory.backend)} in-process`;
+  const memoryHint = [
+    memoryMode,
+    subsystems.memory.service_url,
+    subsystems.memory.detail,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+
+  return (
+    <section style={S.section}>
+      <div style={S.panelHeaderRow}>
+        <div style={S.sectionLabel}>Subsystem health</div>
+        <div style={S.sectionCount}>{formatSnakeLabel(subsystems.status)}</div>
+      </div>
+
+      <MetricStrip
+        compact
+        items={[
+          {
+            label: "Environment",
+            value: formatSnakeLabel(subsystems.status),
+            hint: "backend, memory, storage, and LLM readiness",
+            tone: toneForSubsystemStatus(subsystems.status),
+          },
+          {
+            label: "Database",
+            value: formatSnakeLabel(subsystems.database.status),
+            hint: subsystems.database.detail,
+            tone: toneForSubsystemStatus(subsystems.database.status),
+          },
+          {
+            label: "Memory",
+            value: formatSnakeLabel(subsystems.memory.status),
+            hint: memoryHint,
+            tone: toneForSubsystemStatus(subsystems.memory.status),
+          },
+          {
+            label: "Storage",
+            value: formatSnakeLabel(subsystems.storage.status),
+            hint: subsystems.storage.detail,
+            tone: toneForSubsystemStatus(subsystems.storage.status),
+          },
+          {
+            label: "LLM",
+            value: formatSnakeLabel(subsystems.llm.status),
+            hint: subsystems.llm.detail,
+            tone: toneForSubsystemStatus(subsystems.llm.status),
+          },
+        ]}
+      />
+    </section>
+  );
+}
+
 function ReplayDigestCard({ run }) {
   const signal = summarizeRunSignal(run);
   const actionTaken = run.action_taken || {};
   const critique = run.critique || {};
+  const { request } = getApprovalContext(run);
   const insightItems = [
     critique.verdict
       ? {
@@ -1179,7 +1391,9 @@ function ReplayDigestCard({ run }) {
       ? {
           tone: "attention",
           label: "Approval",
-          text: `${actionTaken.kind || run.plan?.action || "Action"} is waiting for operator sign-off.`,
+          text:
+            request?.reason ||
+            `${actionTaken.kind || run.plan?.action || "Action"} is waiting for operator sign-off.`,
         }
       : null,
     Array.isArray(run.discrepancies) && run.discrepancies.length > 0
@@ -2043,6 +2257,69 @@ function formatApprovalStatus(run) {
   return "—";
 }
 
+function toneForSubsystemStatus(status) {
+  if (["healthy", "configured", "writable"].includes(status)) {
+    return "success";
+  }
+
+  if (["degraded", "disabled", "missing"].includes(status)) {
+    return "attention";
+  }
+
+  if (["unhealthy", "unavailable"].includes(status)) {
+    return "danger";
+  }
+
+  return "default";
+}
+
+function getApprovalContext(run) {
+  const approval =
+    run?.approval && typeof run.approval === "object" ? run.approval : null;
+
+  const request =
+    approval?.request && typeof approval.request === "object"
+      ? approval.request
+      : null;
+  const decision =
+    approval?.decision && typeof approval.decision === "object"
+      ? approval.decision
+      : null;
+  const grant =
+    approval?.grant && typeof approval.grant === "object"
+      ? approval.grant
+      : null;
+  const consumption =
+    approval?.consumption && typeof approval.consumption === "object"
+      ? approval.consumption
+      : null;
+  const binding =
+    request?.binding ||
+    grant?.binding ||
+    decision?.binding ||
+    consumption?.binding ||
+    null;
+
+  return { approval, request, decision, grant, consumption, binding };
+}
+
+function approvalBindingTokens(binding) {
+  if (!binding || typeof binding !== "object") {
+    return [];
+  }
+
+  return [
+    binding.tool_name ? `tool ${binding.tool_name}` : null,
+    binding.target ? `target ${binding.target}` : null,
+    binding.policy_fingerprint
+      ? `policy ${shortenIdentifier(binding.policy_fingerprint)}`
+      : null,
+    binding.action_fingerprint
+      ? `action ${shortenIdentifier(binding.action_fingerprint)}`
+      : null,
+  ].filter(Boolean);
+}
+
 function formatDateTime(value) {
   if (!value) {
     return "—";
@@ -2774,6 +3051,11 @@ const S = {
     fontFamily: "'JetBrains Mono', monospace",
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
+  },
+  focusActionContext: {
+    fontSize: 13,
+    lineHeight: 1.55,
+    color: "#475569",
   },
   focusActionButtons: {
     display: "flex",

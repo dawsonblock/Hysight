@@ -459,6 +459,10 @@ Mongo-backed `/api/status` persistence is optional. If `MONGO_URL` and
 `DB_NAME` are both unset, the backend still serves HCA and memory routes while
 `/api/status` returns `503` by design.
 
+The operator surface also exposes `GET /api/subsystems`, which always reports
+the current database, memory, storage, and LLM readiness state even when
+Mongo-backed status persistence is disabled.
+
 ### (Optional) Run the memvid sidecar
 
 ```bash
@@ -507,6 +511,7 @@ All agent operations are available via the REST API:
 | `GET` | `/api/` | Backend root message |
 | `POST` | `/api/status` | Create a persisted status check when Mongo is configured |
 | `GET` | `/api/status` | List persisted status checks when Mongo is configured |
+| `GET` | `/api/subsystems` | Report database, memory, storage, and LLM subsystem health |
 | `POST` | `/api/hca/run` | Create and execute a new HCA run |
 | `POST` | `/api/hca/run/stream` | Stream run progress via server-sent events |
 | `GET` | `/api/hca/runs` | List recent replay-backed run summaries |
@@ -529,6 +534,9 @@ shown below. There is no separate UI-only state model.
 ```bash
 # List recent runs
 curl "http://localhost:8000/api/hca/runs?limit=5"
+
+# Inspect backend subsystem readiness and degraded-mode state
+curl "http://localhost:8000/api/subsystems"
 
 # Fetch the newest events for a specific run
 curl "http://localhost:8000/api/hca/run/<run-id>/events?limit=20"

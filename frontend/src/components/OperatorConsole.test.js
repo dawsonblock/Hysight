@@ -4,6 +4,7 @@ import OperatorConsole from "@/components/OperatorConsole";
 import {
   decideRunApproval,
   getRunArtifactDetail,
+  getSubsystems,
   getRunSummary,
   listRunArtifacts,
   listRunEvents,
@@ -15,6 +16,7 @@ import { toast } from "@/hooks/use-toast";
 jest.mock("@/lib/api", () => ({
   decideRunApproval: jest.fn(),
   getRunArtifactDetail: jest.fn(),
+  getSubsystems: jest.fn(),
   getRunSummary: jest.fn(),
   listRunArtifacts: jest.fn(),
   listRunEvents: jest.fn(),
@@ -46,6 +48,67 @@ const RUN_RECORDS = [
     artifacts_count: 2,
   },
 ];
+
+const APPROVAL_BINDING = {
+  tool_name: "store_note",
+  target: "storage/memory/operator-note.md",
+  action_class: "memory_write",
+  requires_approval: true,
+  policy_snapshot: {
+    requires_approval: true,
+    retention: "operator_review",
+  },
+  policy_fingerprint: "policy-store-note",
+  action_fingerprint: "action-store-note",
+};
+
+const PENDING_APPROVAL = {
+  approval_id: "approval-1",
+  status: "pending",
+  expired: false,
+  request: {
+    approval_id: "approval-1",
+    action_id: "action-approval-1",
+    action_kind: "store_note",
+    action_class: "memory_write",
+    binding: APPROVAL_BINDING,
+    reason: "Write access is gated for operator review.",
+    requested_at: "2026-04-13T15:10:00Z",
+    expires_at: null,
+  },
+  decision: null,
+  grant: null,
+  consumption: null,
+  corruption_count: 0,
+};
+
+const SUBSYSTEMS = {
+  status: "degraded",
+  database: {
+    enabled: false,
+    status: "disabled",
+    detail:
+      "Mongo-backed /api/status persistence is disabled because MONGO_URL and DB_NAME are unset",
+  },
+  memory: {
+    backend: "python",
+    uses_sidecar: false,
+    status: "healthy",
+    detail: "Python in-process memory backend is active",
+    service_url: null,
+  },
+  storage: {
+    status: "writable",
+    detail: "HCA storage root and memory storage are writable",
+    root: "/tmp/hca",
+    memory_dir: "/tmp/hca/memory",
+  },
+  llm: {
+    status: "missing",
+    detail:
+      "EMERGENT_LLM_KEY is missing; LLM-backed modules will fall back when possible",
+  },
+};
 
 const RUN_DETAIL = {
   run_id: "run-completed",
@@ -176,7 +239,7 @@ const RUN_AWAITING_DETAIL = {
   action_result: { status: null, error: null },
   latest_receipt: null,
   approval_id: "approval-1",
-  approval: { status: "pending" },
+  approval: PENDING_APPROVAL,
   last_approval_decision: null,
   artifacts_count: 0,
   event_count: 6,
@@ -210,7 +273,24 @@ const RUN_APPROVED_DETAIL = {
   ...RUN_AWAITING_DETAIL,
   state: "completed",
   updated_at: "2026-04-13T15:12:00Z",
-  approval: { status: "granted" },
+  approval: {
+    ...PENDING_APPROVAL,
+    status: "granted",
+    decision: {
+      approval_id: "approval-1",
+      decision: "granted",
+      actor: "user",
+      reason: "Approved by operator",
+    },
+    grant: {
+      approval_id: "approval-1",
+      token: "eval-token",
+      actor: "user",
+      binding: APPROVAL_BINDING,
+      granted_at: "2026-04-13T15:11:30Z",
+      expires_at: null,
+    },
+  },
   last_approval_decision: "granted",
   action_result: {
     status: "success",
@@ -231,7 +311,16 @@ const RUN_DENIED_DETAIL = {
   ...RUN_AWAITING_DETAIL,
   state: "halted",
   updated_at: "2026-04-13T15:11:00Z",
-  approval: { status: "denied" },
+  approval: {
+    ...PENDING_APPROVAL,
+    status: "denied",
+    decision: {
+      approval_id: "approval-1",
+      decision: "denied",
+      actor: "user",
+      reason: "Denied by operator",
+    },
+  },
   last_approval_decision: "denied",
   event_count: 7,
   workflow_outcome: {
@@ -382,6 +471,7 @@ function renderConsole({
 beforeEach(() => {
   window.localStorage.clear();
   decideRunApproval.mockReset();
+  getSubsystems.mockResolvedValue(SUBSYSTEMS);
   listRuns.mockResolvedValue({ records: RUN_RECORDS, total: 2 });
   getRunSummary.mockImplementation(async (runId) => {
     return runId === "run-awaiting" ? RUN_AWAITING_DETAIL : RUN_DETAIL;
@@ -423,6 +513,21 @@ test("renders replay-backed overview fields and filters the run list", async () 
 
   expect(screen.queryByText("Needs approval follow-up")).not.toBeInTheDocument();
   expect(screen.getAllByText("Successful retrieval").length).toBeGreaterThan(0);
+});
+
+test("renders subsystem health and approval context for pending runs", async () => {
+  renderConsole({ selectedRunId: "run-awaiting" });
+
+  expect(await screen.findByText("Subsystem health")).toBeInTheDocument();
+  expect((await screen.findAllByText("Degraded")).length).toBeGreaterThan(0);
+  expect(
+    (await screen.findAllByText("Write access is gated for operator review.")).length
+  ).toBeGreaterThan(0);
+  expect(await screen.findByText("Approval policy snapshot")).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(getSubsystems).toHaveBeenCalledTimes(1);
+  });
 });
 
 test("restores the events tab and filters event inspection results", async () => {

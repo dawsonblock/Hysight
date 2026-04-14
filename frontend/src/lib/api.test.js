@@ -100,6 +100,51 @@ describe("frontend API client boundary", () => {
     );
   });
 
+  test("getSubsystems reads the canonical subsystem endpoint and validates the response", async () => {
+    const { getSubsystems } = loadApiModule();
+
+    global.fetch.mockResolvedValue(
+      createJsonResponse({
+        status: "degraded",
+        database: {
+          enabled: false,
+          status: "disabled",
+          detail: "database disabled",
+        },
+        memory: {
+          backend: "python",
+          uses_sidecar: false,
+          status: "healthy",
+          detail: "memory ready",
+          service_url: null,
+        },
+        storage: {
+          status: "writable",
+          detail: "storage ready",
+          root: "/tmp/hca",
+          memory_dir: "/tmp/hca/memory",
+        },
+        llm: {
+          status: "missing",
+          detail: "llm key missing",
+        },
+      })
+    );
+
+    await expect(getSubsystems()).resolves.toMatchObject({
+      status: "degraded",
+      memory: {
+        backend: "python",
+        status: "healthy",
+      },
+      storage: {
+        status: "writable",
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/subsystems", undefined);
+  });
+
   test("fetchJson rejects an unexpected response shape from the backend boundary", async () => {
     const { fetchJson } = loadApiModule();
     const { z } = require("zod");

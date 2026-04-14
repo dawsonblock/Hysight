@@ -8,6 +8,8 @@ This package is the React frontend for Hysight. It uses the Create React App too
 - The frontend dev server proxies `/api` requests to the backend automatically, so no environment variable is required for the default local workflow.
 - Set `REACT_APP_BACKEND_URL` only when you need to target a different backend origin without relying on the dev proxy.
 - Chat streaming uses `POST /api/hca/run/stream`.
+- The operator console reads `GET /api/subsystems` to surface degraded dependencies and operating mode.
+- Replay-backed approval context in chat and the operator console comes from the run summary returned by `GET /api/hca/run/{run_id}` and the approve/deny routes.
 - The memory browser uses `GET /api/hca/memory/list` and `DELETE /api/hca/memory/{memory_id}`.
 
 ## Install
