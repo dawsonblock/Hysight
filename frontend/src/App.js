@@ -111,6 +111,7 @@ function App() {
             selectedRunId={selectedRunId}
             onSelectRun={handleSelectRun}
             refreshToken={operatorRefreshToken}
+            onRunObserved={handleRunObserved}
           />
         </div>
 

@@ -7,6 +7,7 @@ import {
   streamRun,
   toErrorMessage,
 } from "@/lib/api";
+import { summarizeApprovalToast } from "@/lib/run-presentation";
 import { toast } from "@/hooks/use-toast";
 
 // Events worth showing in the live trace (filter out internal plumbing)
@@ -975,16 +976,6 @@ function formatObjectPreview(value) {
   } catch {
     return "{}";
   }
-}
-
-function summarizeApprovalToast(data, decision) {
-  const stateLabel = data?.state ? data.state.replace(/_/g, " ") : "updated";
-  const outcome = data?.workflow_outcome?.reason || data?.action_result?.error;
-  const baseMessage = decision === "approve"
-    ? `Run ${data?.run_id || ""} resumed and is now ${stateLabel}.`
-    : `Run ${data?.run_id || ""} is now ${stateLabel}.`;
-
-  return outcome ? `${baseMessage} ${outcome}` : baseMessage;
 }
 
 function showRunToast(summary) {

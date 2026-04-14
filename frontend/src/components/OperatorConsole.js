@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  decideRunApproval,
   getRunArtifactDetail,
   getRunSummary,
   listRunArtifacts,
@@ -7,6 +8,8 @@ import {
   listRuns,
   toErrorMessage,
 } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
+import { summarizeApprovalToast } from "@/lib/run-presentation";
 
 const RUN_PAGE_SIZE = 10;
 const RUN_FETCH_LIMIT = 100;
@@ -68,6 +71,7 @@ export default function OperatorConsole({
   selectedRunId,
   onSelectRun,
   refreshToken,
+  onRunObserved,
 }) {
   const [runs, setRuns] = useState([]);
   const [totalRuns, setTotalRuns] = useState(0);
@@ -97,6 +101,9 @@ export default function OperatorConsole({
   const [artifactDetail, setArtifactDetail] = useState(null);
   const [artifactLoading, setArtifactLoading] = useState(false);
   const [artifactError, setArtifactError] = useState("");
+  const [localRefreshToken, setLocalRefreshToken] = useState(0);
+  const [approvalPendingDecision, setApprovalPendingDecision] = useState(null);
+  const [approvalError, setApprovalError] = useState("");
   const [activeTab, setActiveTab] = useState(() => {
     const storedTab = readStoredValue(STORAGE_KEYS.operatorTab, "overview");
     return TABS.includes(storedTab) ? storedTab : "overview";
@@ -136,7 +143,7 @@ export default function OperatorConsole({
     return () => {
       cancelled = true;
     };
-  }, [refreshToken, runQuery]);
+  }, [localRefreshToken, refreshToken, runQuery]);
 
   useEffect(() => {
     try {
@@ -187,12 +194,21 @@ export default function OperatorConsole({
     runQuery.trim().length > 0 ||
     runStateFilter !== FILTER_ALL ||
     runStrategyFilter !== FILTER_ALL;
+  const selectedRunRecord =
+    runs.find((run) => run.run_id === selectedRunId) || null;
+  const selectedRunSnapshot = runDetail || selectedRunRecord;
+  const runStateSummary = summarizeRunPortfolio(filteredRuns);
 
   useEffect(() => {
     if (runPage > maxRunPage) {
       setRunPage(maxRunPage);
     }
   }, [maxRunPage, runPage]);
+
+  useEffect(() => {
+    setApprovalPendingDecision(null);
+    setApprovalError("");
+  }, [selectedRunId]);
 
   useEffect(() => {
     if (!selectedRunId && filteredRuns.length > 0) {
@@ -259,7 +275,7 @@ export default function OperatorConsole({
     return () => {
       cancelled = true;
     };
-  }, [refreshToken, selectedRunId]);
+  }, [localRefreshToken, refreshToken, selectedRunId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,6 +323,52 @@ export default function OperatorConsole({
     setRunPage(0);
   };
 
+  const handleApprovalDecision = async (decision) => {
+    if (!selectedRunId || !selectedRunSnapshot?.approval_id) {
+      return;
+    }
+
+    setApprovalPendingDecision(decision);
+    setApprovalError("");
+
+    try {
+      const data = await decideRunApproval(
+        selectedRunId,
+        decision,
+        selectedRunSnapshot.approval_id
+      );
+
+      toast({
+        title: decision === "approve" ? "Approval granted" : "Approval denied",
+        description: summarizeApprovalToast(data, decision),
+        variant: data?.state === "failed" ? "destructive" : "default",
+      });
+
+      setRunDetail(data);
+      setSelectedArtifactId(null);
+      setArtifactDetail(null);
+      setArtifactError("");
+      setDetailError("");
+      setApprovalPendingDecision(null);
+      setLocalRefreshToken((currentValue) => currentValue + 1);
+      onRunObserved?.(data?.run_id || selectedRunId);
+    } catch (error) {
+      const message = toErrorMessage(
+        error,
+        decision === "approve" ? "Approval failed." : "Deny failed."
+      );
+
+      toast({
+        title: decision === "approve" ? "Approval failed" : "Deny failed",
+        description: message,
+        variant: "destructive",
+      });
+
+      setApprovalPendingDecision(null);
+      setApprovalError(message);
+    }
+  };
+
   return (
     <aside style={S.root}>
       <div style={S.header}>
@@ -334,6 +396,58 @@ export default function OperatorConsole({
           {hasRunFilters ? "Clear filters" : "Latest run"}
         </button>
       </div>
+
+      <MetricStrip
+        items={[
+          {
+            label: "Visible runs",
+            value: filteredRuns.length,
+            hint:
+              totalRuns > runs.length
+                ? `latest ${runs.length} loaded`
+                : "full local window",
+          },
+          {
+            label: "Needs sign-off",
+            value: runStateSummary.awaiting_approval,
+            hint:
+              runStateSummary.awaiting_approval > 0
+                ? "operator action pending"
+                : "no pending approvals",
+            tone: "attention",
+          },
+          {
+            label: "Closed loop",
+            value: runStateSummary.completed,
+            hint:
+              runStateSummary.completed > 0
+                ? "completed replay surfaces"
+                : "none completed yet",
+            tone: "success",
+          },
+          {
+            label: "Exceptions",
+            value: runStateSummary.failed + runStateSummary.halted,
+            hint:
+              runStateSummary.failed + runStateSummary.halted > 0
+                ? "failed or operator-stopped"
+                : "healthy recent window",
+            tone:
+              runStateSummary.failed + runStateSummary.halted > 0
+                ? "danger"
+                : "default",
+          },
+        ]}
+      />
+
+      <FocusedRunCard
+        run={selectedRunSnapshot}
+        loading={detailLoading}
+        pendingDecision={approvalPendingDecision}
+        approvalError={approvalError}
+        onApprove={() => handleApprovalDecision("approve")}
+        onDeny={() => handleApprovalDecision("deny")}
+      />
 
       <div style={S.searchRow}>
         <input
@@ -491,7 +605,14 @@ export default function OperatorConsole({
                 ...(activeTab === tab ? S.tabActive : null),
               }}
             >
-              {tab}
+              {formatTabLabel(
+                tab,
+                tab === "events"
+                  ? eventTotal || events.length
+                  : tab === "artifacts"
+                    ? artifactTotal || artifacts.length
+                    : null
+              )}
             </button>
           ))}
         </div>
@@ -547,7 +668,7 @@ function RunRow({ run, selected, onClick }) {
             borderColor: meta.border,
           }}
         >
-          {run.state}
+          {formatStateLabel(run.state)}
         </span>
         <span style={S.runTime}>{formatDateTime(run.updated_at)}</span>
       </div>
@@ -558,6 +679,130 @@ function RunRow({ run, selected, onClick }) {
         <span>{run.artifacts_count} artifacts</span>
       </div>
     </button>
+  );
+}
+
+function FocusedRunCard({
+  run,
+  loading,
+  pendingDecision,
+  approvalError,
+  onApprove,
+  onDeny,
+}) {
+  if (!run && !loading) {
+    return null;
+  }
+
+  const signal = summarizeRunSignal(run);
+  const canResolveApproval = isApprovalActionable(run);
+
+  return (
+    <section
+      style={{
+        ...S.focusCard,
+        ...(signal.tone === "attention"
+          ? S.focusCardAttention
+          : signal.tone === "danger"
+            ? S.focusCardDanger
+            : signal.tone === "success"
+              ? S.focusCardSuccess
+              : null),
+      }}
+    >
+      <div style={S.focusHeader}>
+        <div>
+          <div style={S.focusEyebrow}>Focused run</div>
+          <div style={S.focusTitle}>{run?.goal || "Loading replay surface…"}</div>
+          <div style={S.focusSubtitle}>{signal.summary}</div>
+        </div>
+        <span
+          style={{
+            ...S.focusBadge,
+            color: signal.badge.color,
+            background: signal.badge.bg,
+            borderColor: signal.badge.border,
+          }}
+        >
+          {signal.label}
+        </span>
+      </div>
+
+      <MetricStrip
+        compact
+        items={[
+          {
+            label: "Run",
+            value: shortenIdentifier(run?.run_id),
+            hint: run?.run_id,
+            mono: true,
+          },
+          {
+            label: "Action",
+            value: run?.action_taken?.kind || run?.plan?.action || "—",
+            hint: formatStrategyLabel(run?.plan?.strategy) || "No strategy",
+          },
+          {
+            label: "Approval",
+            value: formatApprovalStatus(run),
+            hint: hasValue(run?.approval_id) ? "approval binding active" : "no approval bound",
+            mono: hasValue(run?.approval_id),
+          },
+          {
+            label: "Duration",
+            value: formatDuration(run?.metrics?.run_duration_ms),
+            hint: `${run?.event_count ?? 0} events • ${run?.artifacts_count ?? 0} artifacts`,
+          },
+        ]}
+      />
+
+      {canResolveApproval && (
+        <div style={S.focusActionCard}>
+          <div style={S.focusActionHeader}>
+            <div>
+              <div style={S.focusActionEyebrow}>Operator action required</div>
+              <div style={S.focusActionTitle}>
+                {run.action_taken?.kind || run.plan?.action || "Action"} is waiting for sign-off.
+              </div>
+            </div>
+            <span style={S.focusActionId}>{shortenIdentifier(run.approval_id)}</span>
+          </div>
+
+          {hasValue(run.action_taken?.arguments) && (
+            <pre style={S.focusActionPayload}>{formatPayload(run.action_taken.arguments)}</pre>
+          )}
+
+          <div style={S.focusActionButtons}>
+            <button
+              data-testid="operator-approve-btn"
+              type="button"
+              onClick={onApprove}
+              disabled={pendingDecision !== null}
+              style={{
+                ...S.focusApproveBtn,
+                opacity: pendingDecision !== null ? 0.7 : 1,
+              }}
+            >
+              {pendingDecision === "approve" ? "Approving..." : "Approve"}
+            </button>
+            <button
+              data-testid="operator-deny-btn"
+              type="button"
+              onClick={onDeny}
+              disabled={pendingDecision !== null}
+              style={{
+                ...S.focusDenyBtn,
+                opacity: pendingDecision !== null ? 0.7 : 1,
+              }}
+            >
+              {pendingDecision === "deny" ? "Denying..." : "Deny"}
+            </button>
+          </div>
+
+          {approvalError && <div style={S.focusActionError}>{approvalError}</div>}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -593,11 +838,13 @@ function OverviewPanel({ run }) {
 
   return (
     <div style={S.detailBody}>
+      <ReplayDigestCard run={run} />
+
       <div style={S.summaryCard}>
         <div style={S.summaryGoal}>{run.goal}</div>
         <div style={S.summaryGrid}>
           <SummaryField label="Run ID" value={run.run_id} mono />
-          <SummaryField label="State" value={run.state} />
+          <SummaryField label="State" value={formatStateLabel(run.state)} />
           <SummaryField label="Created" value={formatDateTime(run.created_at)} />
           <SummaryField label="Updated" value={formatDateTime(run.updated_at)} />
           <SummaryField label="Strategy" value={plan.strategy || "—"} />
@@ -909,6 +1156,126 @@ function OverviewPanel({ run }) {
   );
 }
 
+function ReplayDigestCard({ run }) {
+  const signal = summarizeRunSignal(run);
+  const actionTaken = run.action_taken || {};
+  const critique = run.critique || {};
+  const insightItems = [
+    critique.verdict
+      ? {
+          tone:
+            critique.verdict === "approved"
+              ? "success"
+              : critique.verdict === "revise"
+                ? "attention"
+                : "default",
+          label: "Critique",
+          text: `${formatSnakeLabel(critique.verdict)}${
+            critique.issues?.length ? ` • ${critique.issues[0]}` : ""
+          }`,
+        }
+      : null,
+    hasValue(run.approval_id)
+      ? {
+          tone: "attention",
+          label: "Approval",
+          text: `${actionTaken.kind || run.plan?.action || "Action"} is waiting for operator sign-off.`,
+        }
+      : null,
+    Array.isArray(run.discrepancies) && run.discrepancies.length > 0
+      ? {
+          tone: "danger",
+          label: "Discrepancies",
+          text: `${run.discrepancies.length} replay mismatch${
+            run.discrepancies.length === 1 ? "" : "es"
+          } detected.`,
+        }
+      : null,
+  ].filter(Boolean);
+
+  return (
+    <section style={S.digestCard}>
+      <div style={S.digestHeader}>
+        <div>
+          <div style={S.digestEyebrow}>Replay digest</div>
+          <div style={S.digestTitle}>{run.goal}</div>
+          <div style={S.digestSummary}>{signal.summary}</div>
+        </div>
+        <span
+          style={{
+            ...S.focusBadge,
+            color: signal.badge.color,
+            background: signal.badge.bg,
+            borderColor: signal.badge.border,
+          }}
+        >
+          {signal.label}
+        </span>
+      </div>
+
+      <MetricStrip
+        compact
+        items={[
+          {
+            label: "Action",
+            value: actionTaken.kind || run.plan?.action || "—",
+            hint: formatStrategyLabel(run.plan?.strategy) || "No strategy",
+          },
+          {
+            label: "Latest receipt",
+            value: run.latest_receipt?.status || run.action_result?.status || "—",
+            hint: run.workflow_outcome?.terminal_event || "no terminal receipt",
+          },
+          {
+            label: "Approval",
+            value: formatApprovalStatus(run),
+            hint: formatBoolean(actionTaken.requires_approval),
+            mono: hasValue(run.approval_id),
+          },
+          {
+            label: "Latency",
+            value: formatDuration(run.metrics?.run_duration_ms),
+            hint: formatLatencySummary(run.metrics?.tool_latency),
+          },
+          {
+            label: "Events",
+            value: String(run.event_count ?? 0),
+            hint: `${run.key_events?.length || 0} key signals`,
+          },
+          {
+            label: "Artifacts",
+            value: String(run.artifacts_count ?? 0),
+            hint: `${run.workflow_artifacts?.length || 0} workflow-linked`,
+          },
+        ]}
+      />
+
+      {insightItems.length > 0 && (
+        <div style={S.insightList}>
+          {insightItems.map((item) => (
+            <div
+              key={`${item.label}-${item.text}`}
+              style={{
+                ...S.insightCard,
+                ...(item.tone === "attention"
+                  ? S.insightCardAttention
+                  : item.tone === "danger"
+                    ? S.insightCardDanger
+                    : item.tone === "success"
+                      ? S.insightCardSuccess
+                      : null),
+              }}
+            >
+              <div style={S.insightLabel}>{item.label}</div>
+              <div style={S.insightText}>{item.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function EventsPanel({ events, total }) {
   const [eventQuery, setEventQuery] = useState("");
   const [eventTypeFilter, setEventTypeFilter] = useState(FILTER_ALL);
@@ -972,6 +1339,28 @@ function EventsPanel({ events, total }) {
 
   return (
     <div style={S.detailBody}>
+      <MetricStrip
+        compact
+        items={[
+          {
+            label: "Loaded",
+            value: events.length,
+            hint: total > events.length ? `of ${total} total` : "full event slice",
+          },
+          {
+            label: "Key events",
+            value: events.filter((event) => event.is_key_event).length,
+            hint: keyEventsOnly ? "key-only filter active" : "operator-worthy markers",
+            tone: "attention",
+          },
+          {
+            label: "Visible",
+            value: filteredEvents.length,
+            hint: eventTypeFilter === FILTER_ALL ? "all event types" : formatSnakeLabel(eventTypeFilter),
+          },
+        ]}
+      />
+
       <div style={S.panelHeaderRow}>
         <div style={S.sectionLabel}>Events ({total})</div>
         <div style={S.sectionCount}>
@@ -1173,6 +1562,31 @@ function ArtifactsPanel({
 
   return (
     <div style={S.detailBody}>
+      <MetricStrip
+        compact
+        items={[
+          {
+            label: "Loaded",
+            value: artifacts.length,
+            hint: total > artifacts.length ? `of ${total} total` : "full artifact slice",
+          },
+          {
+            label: "Previewable",
+            value: artifacts.filter((artifact) => artifact.content_available).length,
+            hint: "inline preview ready",
+            tone: "success",
+          },
+          {
+            label: "Kinds",
+            value: artifactKinds.length,
+            hint:
+              artifactKindFilter === FILTER_ALL
+                ? "all artifact families"
+                : formatSnakeLabel(artifactKindFilter),
+          },
+        ]}
+      />
+
       <div style={S.panelHeaderRow}>
         <div style={S.sectionLabel}>Artifacts ({total})</div>
         <div style={S.sectionCount}>
@@ -1355,6 +1769,41 @@ function SummaryField({ label, value, mono = false }) {
   );
 }
 
+function MetricStrip({ items, compact = false }) {
+  const visibleItems = items.filter((item) => hasValue(item?.value));
+
+  if (visibleItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div style={{ ...S.metricStrip, ...(compact ? S.metricStripCompact : null) }}>
+      {visibleItems.map((item) => (
+        <div
+          key={item.label}
+          style={{
+            ...S.metricCard,
+            ...(compact ? S.metricCardCompact : null),
+            ...(item.tone === "attention"
+              ? S.metricCardAttention
+              : item.tone === "danger"
+                ? S.metricCardDanger
+                : item.tone === "success"
+                  ? S.metricCardSuccess
+                  : null),
+          }}
+        >
+          <div style={S.metricLabel}>{item.label}</div>
+          <div style={{ ...S.metricValue, ...(item.mono ? S.summaryMono : null) }}>
+            {item.value}
+          </div>
+          {hasValue(item.hint) && <div style={S.metricHint}>{item.hint}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PanelMessage({ text, tone = "default" }) {
   return (
     <div
@@ -1465,6 +1914,14 @@ function formatStrategyLabel(value) {
   return STRATEGY_LABELS[value] || formatSnakeLabel(value);
 }
 
+function formatStateLabel(value) {
+  if (!value) {
+    return "—";
+  }
+
+  return formatSnakeLabel(value);
+}
+
 function formatBoolean(value) {
   return value ? "Yes" : "No";
 }
@@ -1563,6 +2020,18 @@ function formatWorkflowOutcome(outcome) {
 }
 
 function formatApprovalStatus(run) {
+  if (!run) {
+    return "—";
+  }
+
+  if (run.approval?.status) {
+    if (run.approval?.status === "pending" && run.approval_id) {
+      return `pending (${run.approval_id})`;
+    }
+
+    return run.approval.status;
+  }
+
   if (run.last_approval_decision) {
     return run.last_approval_decision;
   }
@@ -1622,6 +2091,119 @@ function matchesQueryText(queryText, values) {
   );
 }
 
+function formatTabLabel(tab, count) {
+  if (typeof count !== "number") {
+    return formatSnakeLabel(tab);
+  }
+
+  return `${formatSnakeLabel(tab)}${count > 0 ? ` ${count}` : ""}`;
+}
+
+function shortenIdentifier(value) {
+  if (!value) {
+    return "—";
+  }
+
+  const text = String(value);
+  return text.length > 18 ? `${text.slice(0, 8)}…${text.slice(-6)}` : text;
+}
+
+function summarizeRunPortfolio(runs) {
+  return runs.reduce(
+    (summary, run) => {
+      if (run.state === "awaiting_approval") {
+        summary.awaiting_approval += 1;
+      } else if (run.state === "completed") {
+        summary.completed += 1;
+      } else if (run.state === "failed") {
+        summary.failed += 1;
+      } else if (run.state === "halted") {
+        summary.halted += 1;
+      }
+
+      return summary;
+    },
+    {
+      awaiting_approval: 0,
+      completed: 0,
+      failed: 0,
+      halted: 0,
+    }
+  );
+}
+
+function summarizeRunSignal(run) {
+  if (!run) {
+    return {
+      tone: "default",
+      label: "Loading",
+      summary: "Fetching the current replay-backed selection.",
+      badge: DEFAULT_STATE_META,
+    };
+  }
+
+  const badge = STATE_META[run.state] || DEFAULT_STATE_META;
+  const actionLabel = run.action_taken?.kind || run.plan?.action || "action";
+
+  if (run.state === "awaiting_approval") {
+    return {
+      tone: "attention",
+      label: "Needs sign-off",
+      summary: `${actionLabel} is waiting for operator approval before execution can resume.`,
+      badge,
+    };
+  }
+
+  if (run.state === "completed") {
+    return {
+      tone: "success",
+      label: "Closed loop",
+      summary: `${actionLabel} completed with replay data, receipts, and artifacts ready for review.`,
+      badge,
+    };
+  }
+
+  if (run.state === "failed") {
+    return {
+      tone: "danger",
+      label: "Needs investigation",
+      summary: `${actionLabel} failed. Check critique, discrepancies, and event history before retrying.`,
+      badge,
+    };
+  }
+
+  if (run.state === "halted") {
+    return {
+      tone: "danger",
+      label: "Operator stopped",
+      summary: `${actionLabel} was halted after a denial or stop condition. Replay is ready for review.`,
+      badge,
+    };
+  }
+
+  return {
+    tone: "default",
+    label: formatStateLabel(run.state),
+    summary: `${actionLabel} is staged in the replay surface with ${run.event_count ?? 0} recorded events.`,
+    badge,
+  };
+}
+
+function isApprovalActionable(run) {
+  if (!run || run.state !== "awaiting_approval") {
+    return false;
+  }
+
+  if (!hasValue(run.approval_id)) {
+    return false;
+  }
+
+  if (run.approval?.status && run.approval.status !== "pending") {
+    return false;
+  }
+
+  return run.action_taken?.requires_approval !== false;
+}
 const S = {
   root: {
     display: "flex",
@@ -1659,6 +2241,196 @@ const S = {
     lineHeight: 1.5,
     color: "#64748b",
   },
+  metricStrip: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+    gap: 8,
+  },
+  metricStripCompact: {
+    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+  },
+  metricCard: {
+    border: "1px solid rgba(186,230,253,0.9)",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(240,249,255,0.92) 100%)",
+    borderRadius: 16,
+    padding: "10px 12px",
+    minWidth: 0,
+  },
+  metricCardCompact: {
+    borderRadius: 14,
+    padding: "9px 11px",
+  },
+  metricCardAttention: {
+    borderColor: "#ddd6fe",
+    background:
+      "linear-gradient(180deg, rgba(250,245,255,0.98) 0%, rgba(245,243,255,0.92) 100%)",
+  },
+  metricCardSuccess: {
+    borderColor: "#a7f3d0",
+    background:
+      "linear-gradient(180deg, rgba(240,253,244,0.98) 0%, rgba(236,253,245,0.92) 100%)",
+  },
+  metricCardDanger: {
+    borderColor: "#fecaca",
+    background:
+      "linear-gradient(180deg, rgba(255,241,242,0.98) 0%, rgba(254,242,242,0.92) 100%)",
+  },
+  metricLabel: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    fontWeight: 800,
+    color: "#64748b",
+    marginBottom: 6,
+  },
+  metricValue: {
+    fontSize: 18,
+    lineHeight: 1.15,
+    fontWeight: 800,
+    color: "#0f172a",
+    wordBreak: "break-word",
+  },
+  metricHint: {
+    marginTop: 5,
+    fontSize: 12,
+    lineHeight: 1.4,
+    color: "#64748b",
+  },
+  focusCard: {
+    border: "1px solid rgba(186,230,253,0.95)",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(239,246,255,0.95) 100%)",
+    borderRadius: 20,
+    padding: "14px 14px 12px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  focusCardAttention: {
+    borderColor: "#ddd6fe",
+    background:
+      "linear-gradient(180deg, rgba(250,245,255,0.98) 0%, rgba(245,243,255,0.94) 100%)",
+  },
+  focusCardSuccess: {
+    borderColor: "#a7f3d0",
+    background:
+      "linear-gradient(180deg, rgba(240,253,244,0.98) 0%, rgba(236,253,245,0.94) 100%)",
+  },
+  focusCardDanger: {
+    borderColor: "#fecaca",
+    background:
+      "linear-gradient(180deg, rgba(255,241,242,0.98) 0%, rgba(254,242,242,0.94) 100%)",
+  },
+  focusHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  focusEyebrow: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    fontWeight: 800,
+    color: "#475569",
+    marginBottom: 4,
+  },
+  focusTitle: {
+    fontSize: 18,
+    lineHeight: 1.25,
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  focusSubtitle: {
+    marginTop: 5,
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: "#475569",
+  },
+  focusBadge: {
+    flexShrink: 0,
+    border: "1px solid #cbd5e1",
+    borderRadius: 999,
+    padding: "6px 10px",
+    fontSize: 11,
+    lineHeight: 1.2,
+    fontWeight: 800,
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  },
+  digestCard: {
+    border: "1px solid #dbeafe",
+    borderRadius: 18,
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)",
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  digestHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  digestEyebrow: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    fontWeight: 800,
+    color: "#0891b2",
+    marginBottom: 4,
+  },
+  digestTitle: {
+    fontSize: 22,
+    lineHeight: 1.25,
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  digestSummary: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 1.55,
+    color: "#475569",
+  },
+  insightList: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: 8,
+  },
+  insightCard: {
+    border: "1px solid #e2e8f0",
+    borderRadius: 14,
+    background: "rgba(255,255,255,0.92)",
+    padding: "10px 11px",
+  },
+  insightCardAttention: {
+    borderColor: "#ddd6fe",
+    background: "#faf5ff",
+  },
+  insightCardSuccess: {
+    borderColor: "#a7f3d0",
+    background: "#f0fdf4",
+  },
+  insightCardDanger: {
+    borderColor: "#fecaca",
+    background: "#fff1f2",
+  },
+  insightLabel: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    fontWeight: 800,
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  insightText: {
+    fontSize: 13,
+    lineHeight: 1.45,
+    color: "#0f172a",
+  },
   refreshBtn: {
     border: "1px solid #bae6fd",
     background: "#ecfeff",
@@ -1671,6 +2443,7 @@ const S = {
   },
   searchRow: {
     display: "flex",
+    flexWrap: "wrap",
     gap: 8,
   },
   searchInput: {
@@ -1832,6 +2605,7 @@ const S = {
   },
   tabs: {
     display: "flex",
+    flexWrap: "wrap",
     gap: 8,
     marginBottom: 12,
   },
@@ -1875,7 +2649,7 @@ const S = {
   },
   summaryGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
     gap: 10,
   },
   summaryField: {
@@ -1903,7 +2677,7 @@ const S = {
   },
   infoGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
     gap: 10,
   },
   section: {
@@ -1938,11 +2712,102 @@ const S = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+    flexWrap: "wrap",
     gap: 8,
   },
   toolbarRow: {
     display: "flex",
+    flexWrap: "wrap",
     gap: 8,
+  },
+  focusActionCard: {
+    border: "1px solid #ddd6fe",
+    borderRadius: 16,
+    background: "rgba(255,255,255,0.92)",
+    padding: 12,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  focusActionHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  focusActionEyebrow: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    fontWeight: 800,
+    color: "#7c3aed",
+    marginBottom: 4,
+  },
+  focusActionTitle: {
+    fontSize: 14,
+    lineHeight: 1.45,
+    fontWeight: 700,
+    color: "#0f172a",
+  },
+  focusActionId: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px 8px",
+    borderRadius: 999,
+    border: "1px solid #ddd6fe",
+    background: "#f5f3ff",
+    color: "#6d28d9",
+    fontSize: 11,
+    fontWeight: 700,
+    fontFamily: "'JetBrains Mono', monospace",
+  },
+  focusActionPayload: {
+    margin: 0,
+    padding: 12,
+    borderRadius: 14,
+    border: "1px solid #e2e8f0",
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: 12,
+    lineHeight: 1.55,
+    fontFamily: "'JetBrains Mono', monospace",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },
+  focusActionButtons: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  focusApproveBtn: {
+    border: "1px solid #86efac",
+    background: "#dcfce7",
+    color: "#166534",
+    borderRadius: 12,
+    padding: "10px 14px",
+    fontSize: 13,
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  focusDenyBtn: {
+    border: "1px solid #fecaca",
+    background: "#fee2e2",
+    color: "#b91c1c",
+    borderRadius: 12,
+    padding: "10px 14px",
+    fontSize: 13,
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  focusActionError: {
+    border: "1px solid #fecaca",
+    background: "#fff1f2",
+    color: "#b91c1c",
+    borderRadius: 12,
+    padding: "10px 12px",
+    fontSize: 12,
+    lineHeight: 1.5,
   },
   toolbarInput: {
     flex: 1,

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import OperatorConsole from "@/components/OperatorConsole";
 import {
+  decideRunApproval,
   getRunArtifactDetail,
   getRunSummary,
   listRunArtifacts,
@@ -9,14 +10,20 @@ import {
   listRuns,
   toErrorMessage,
 } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 jest.mock("@/lib/api", () => ({
+  decideRunApproval: jest.fn(),
   getRunArtifactDetail: jest.fn(),
   getRunSummary: jest.fn(),
   listRunArtifacts: jest.fn(),
   listRunEvents: jest.fn(),
   listRuns: jest.fn(),
   toErrorMessage: jest.fn((error, fallback) => error?.message || fallback),
+}));
+
+jest.mock("@/hooks/use-toast", () => ({
+  toast: jest.fn(),
 }));
 
 const RUN_RECORDS = [
@@ -132,6 +139,108 @@ const RUN_DETAIL = {
   },
 };
 
+const RUN_AWAITING_DETAIL = {
+  run_id: "run-awaiting",
+  goal: "Needs approval follow-up",
+  state: "awaiting_approval",
+  created_at: "2026-04-13T15:09:00Z",
+  updated_at: "2026-04-13T15:10:00Z",
+  plan: {
+    strategy: "artifact_authoring_strategy",
+    action: "store_note",
+    planning_mode: "rule_based_fallback",
+    confidence: 0.55,
+    rationale: "The requested note should be stored after operator approval.",
+  },
+  perception: {
+    intent_class: "store_note",
+    intent: "store",
+    perception_mode: "rule_based_fallback",
+    llm_attempted: true,
+  },
+  critique: {
+    verdict: "revise",
+    alignment: 0.7,
+    feasibility: 0.8,
+    safety: 0.9,
+    confidence_delta: -0.05,
+    llm_powered: false,
+    issues: ["Approval required before writing the note."],
+    rationale: "Write access is gated for operator review.",
+  },
+  action_taken: {
+    kind: "store_note",
+    arguments: { note: "Needs approval follow-up" },
+    requires_approval: true,
+  },
+  action_result: { status: null, error: null },
+  latest_receipt: null,
+  approval_id: "approval-1",
+  approval: { status: "pending" },
+  last_approval_decision: null,
+  artifacts_count: 0,
+  event_count: 6,
+  memory_counts: { episodic: 0 },
+  memory_outcomes: { episodic_memory_writes: 0 },
+  active_workflow: null,
+  workflow_budget: null,
+  workflow_checkpoint: null,
+  workflow_step_history: [],
+  workflow_artifacts: [],
+  workflow_outcome: { terminal_event: null, reason: null, next_step_id: null },
+  discrepancies: [],
+  memory_hits: [],
+  key_events: [
+    {
+      type: "approval_requested",
+      actor: "runtime",
+      timestamp: "2026-04-13T15:10:00Z",
+      summary: "Approval requested (id=approval-1)",
+    },
+  ],
+  metrics: {
+    run_duration_ms: 1600,
+    tool_latency: { count: 0, total_ms: 0, max_ms: 0, last_ms: null },
+    memory_retrieval_latency: { count: 0, total_ms: 0, max_ms: 0, last_ms: null },
+    memory_commit_latency: { count: 0, total_ms: 0, max_ms: 0, last_ms: null },
+  },
+};
+
+const RUN_APPROVED_DETAIL = {
+  ...RUN_AWAITING_DETAIL,
+  state: "completed",
+  updated_at: "2026-04-13T15:12:00Z",
+  approval: { status: "granted" },
+  last_approval_decision: "granted",
+  action_result: {
+    status: "success",
+    outputs: { note_path: "storage/runs/run-awaiting/artifacts/note.txt" },
+    error: null,
+  },
+  latest_receipt: { status: "success" },
+  artifacts_count: 1,
+  event_count: 9,
+  workflow_outcome: {
+    terminal_event: "run_completed",
+    reason: "note stored",
+    next_step_id: null,
+  },
+};
+
+const RUN_DENIED_DETAIL = {
+  ...RUN_AWAITING_DETAIL,
+  state: "halted",
+  updated_at: "2026-04-13T15:11:00Z",
+  approval: { status: "denied" },
+  last_approval_decision: "denied",
+  event_count: 7,
+  workflow_outcome: {
+    terminal_event: "approval_denied",
+    reason: "operator denied request",
+    next_step_id: null,
+  },
+};
+
 const RUN_EVENTS = {
   run_id: "run-completed",
   total: 3,
@@ -226,32 +335,70 @@ const RUN_TRACE_ARTIFACT_DETAIL = {
   truncated: false,
 };
 
-function renderConsole(activeTab = null) {
+const RUN_AWAITING_EVENTS = {
+  run_id: "run-awaiting",
+  total: 1,
+  records: [
+    {
+      event_id: "event-awaiting-1",
+      run_id: "run-awaiting",
+      event_type: "approval_requested",
+      actor: "runtime",
+      timestamp: "2026-04-13T15:10:00Z",
+      summary: "Action needs approval",
+      payload: { approval_id: "approval-1", reason: "write access" },
+      prior_state: "running",
+      next_state: "awaiting_approval",
+      is_key_event: true,
+    },
+  ],
+};
+
+const RUN_AWAITING_ARTIFACTS = {
+  run_id: "run-awaiting",
+  total: 0,
+  records: [],
+};
+
+function renderConsole({
+  activeTab = null,
+  selectedRunId = "run-completed",
+  onRunObserved = jest.fn(),
+} = {}) {
   if (activeTab) {
     window.localStorage.setItem("hysight:operator-tab", activeTab);
   }
 
   return render(
     <OperatorConsole
-      selectedRunId="run-completed"
+      selectedRunId={selectedRunId}
       onSelectRun={jest.fn()}
       refreshToken={0}
+      onRunObserved={onRunObserved}
     />
   );
 }
 
 beforeEach(() => {
   window.localStorage.clear();
+  decideRunApproval.mockReset();
   listRuns.mockResolvedValue({ records: RUN_RECORDS, total: 2 });
-  getRunSummary.mockResolvedValue(RUN_DETAIL);
-  listRunEvents.mockResolvedValue(RUN_EVENTS);
-  listRunArtifacts.mockResolvedValue(RUN_ARTIFACTS);
+  getRunSummary.mockImplementation(async (runId) => {
+    return runId === "run-awaiting" ? RUN_AWAITING_DETAIL : RUN_DETAIL;
+  });
+  listRunEvents.mockImplementation(async (runId) => {
+    return runId === "run-awaiting" ? RUN_AWAITING_EVENTS : RUN_EVENTS;
+  });
+  listRunArtifacts.mockImplementation(async (runId) => {
+    return runId === "run-awaiting" ? RUN_AWAITING_ARTIFACTS : RUN_ARTIFACTS;
+  });
   getRunArtifactDetail.mockImplementation(async (_runId, artifactId) => {
     return artifactId === "artifact-2"
       ? RUN_TRACE_ARTIFACT_DETAIL
       : RUN_ARTIFACT_DETAIL;
   });
   toErrorMessage.mockImplementation((error, fallback) => error?.message || fallback);
+  toast.mockReset();
 });
 
 afterEach(() => {
@@ -263,9 +410,12 @@ test("renders replay-backed overview fields and filters the run list", async () 
 
   renderConsole();
 
+  expect(await screen.findByText("Focused run")).toBeInTheDocument();
+  expect(screen.getByText("Needs sign-off")).toBeInTheDocument();
+  expect(await screen.findByText("Replay digest")).toBeInTheDocument();
   expect(await screen.findByText("Planning")).toBeInTheDocument();
   expect(screen.getByText("Perception")).toBeInTheDocument();
-  expect(screen.getByText("Critique")).toBeInTheDocument();
+  expect(screen.getAllByText("Critique").length).toBeGreaterThan(0);
   expect(screen.getByText("Workflow steps")).toBeInTheDocument();
   expect(screen.getByText("Needs approval follow-up")).toBeInTheDocument();
 
@@ -278,8 +428,9 @@ test("renders replay-backed overview fields and filters the run list", async () 
 test("restores the events tab and filters event inspection results", async () => {
   const user = userEvent.setup();
 
-  renderConsole("events");
+  renderConsole({ activeTab: "events" });
 
+  expect(await screen.findByText("Key events")).toBeInTheDocument();
   const filterInput = await screen.findByPlaceholderText(
     "Filter by type, actor, summary, or payload"
   );
@@ -298,8 +449,9 @@ test("restores the events tab and filters event inspection results", async () =>
 test("filters artifacts and loads the selected artifact detail", async () => {
   const user = userEvent.setup();
 
-  renderConsole("artifacts");
+  renderConsole({ activeTab: "artifacts" });
 
+  expect(await screen.findByText("Previewable")).toBeInTheDocument();
   const artifactFilter = await screen.findByPlaceholderText(
     "Filter by kind, path, workflow, or action"
   );
@@ -315,5 +467,52 @@ test("filters artifacts and loads the selected artifact detail", async () => {
   await waitFor(() => {
     expect(screen.queryByText("artifacts/release-summary.md")).not.toBeInTheDocument();
     expect(screen.getAllByText("artifacts/retrieval-trace.json").length).toBeGreaterThan(0);
+  });
+});
+
+test("allows approving a pending run directly from the replay console", async () => {
+  const user = userEvent.setup();
+  const onRunObserved = jest.fn();
+
+  decideRunApproval.mockResolvedValue(RUN_APPROVED_DETAIL);
+
+  renderConsole({ selectedRunId: "run-awaiting", onRunObserved });
+
+  expect(await screen.findByTestId("operator-approve-btn")).toBeInTheDocument();
+  expect(screen.getByTestId("operator-deny-btn")).toBeInTheDocument();
+
+  await user.click(screen.getByTestId("operator-approve-btn"));
+
+  await waitFor(() => {
+    expect(decideRunApproval).toHaveBeenCalledWith(
+      "run-awaiting",
+      "approve",
+      "approval-1"
+    );
+    expect(onRunObserved).toHaveBeenCalledWith("run-awaiting");
+    expect(screen.queryByTestId("operator-approve-btn")).not.toBeInTheDocument();
+  });
+});
+
+test("allows denying a pending run directly from the replay console", async () => {
+  const user = userEvent.setup();
+  const onRunObserved = jest.fn();
+
+  decideRunApproval.mockResolvedValue(RUN_DENIED_DETAIL);
+
+  renderConsole({ selectedRunId: "run-awaiting", onRunObserved });
+
+  expect(await screen.findByTestId("operator-deny-btn")).toBeInTheDocument();
+
+  await user.click(screen.getByTestId("operator-deny-btn"));
+
+  await waitFor(() => {
+    expect(decideRunApproval).toHaveBeenCalledWith(
+      "run-awaiting",
+      "deny",
+      "approval-1"
+    );
+    expect(onRunObserved).toHaveBeenCalledWith("run-awaiting");
+    expect(screen.queryByTestId("operator-deny-btn")).not.toBeInTheDocument();
   });
 });
