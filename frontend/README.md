@@ -14,7 +14,21 @@ This package is the React frontend for Hysight. It uses the Create React App too
 
 ## Install
 
-This package declares Yarn 1 as its package manager.
+This package declares Yarn 1 as its package manager and targets Node 20 to
+match `.github/workflows/frontend-proof.yml`.
+
+If you use a version manager, switch to the pinned runtime first:
+
+```bash
+cd frontend
+
+# nvm
+nvm install 20
+nvm use
+
+# or any tool that reads .node-version
+cat .node-version
+```
 
 ```bash
 yarn install

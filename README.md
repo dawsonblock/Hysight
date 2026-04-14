@@ -308,7 +308,7 @@ Hysight/
 ## Prerequisites
 
 - Python 3.9+
-- Node.js 18+ and Yarn 1
+- Node.js 20.x and Yarn 1
 - MongoDB 6+ if you want the optional `/api/status` persistence endpoints
 - Rust toolchain (only required to build the `memvid-sidecar`)
 
@@ -361,6 +361,11 @@ Or, without `make`:
 ```bash
 python -m pip install -r backend/requirements-dev.txt
 ```
+
+For frontend work, switch to the repo's Node target before running Yarn
+commands. The frontend package now ships `frontend/.nvmrc` and
+`frontend/.node-version` pinned to Node 20 so local runs can match the CI
+workflow.
 
 If you only need the backend runtime and not the proof surface:
 
