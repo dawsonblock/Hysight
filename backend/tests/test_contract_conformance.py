@@ -124,6 +124,67 @@ def test_hca_run_detail_contract(app_client):
     assert_contract_payload("GET /api/hca/run/{run_id}", response.json())
 
 
+def test_hca_run_detail_contract_with_pending_approval(app_client):
+    response = app_client.post(
+        "/api/hca/run",
+        json={
+            "goal": "Please remember that contract approval coverage is required",
+            "user_id": None,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["state"] == "awaiting_approval"
+    assert_contract_payload("POST /api/hca/run", data)
+
+    detail_response = app_client.get(f"/api/hca/run/{data['run_id']}")
+    assert detail_response.status_code == 200
+    assert_contract_payload(
+        "GET /api/hca/run/{run_id}",
+        detail_response.json(),
+    )
+
+
+def test_hca_approve_contract(app_client):
+    pending_response = app_client.post(
+        "/api/hca/run",
+        json={
+            "goal": "Please remember that contract approvals should complete",
+            "user_id": None,
+        },
+    )
+    assert pending_response.status_code == 200
+    pending = pending_response.json()
+    approval_id = pending["approval_id"]
+
+    response = app_client.post(
+        f"/api/hca/run/{pending['run_id']}/approve",
+        json={"approval_id": approval_id},
+    )
+    assert response.status_code == 200
+    assert_contract_payload("POST /api/hca/run/{run_id}/approve", response.json())
+
+
+def test_hca_deny_contract(app_client):
+    pending_response = app_client.post(
+        "/api/hca/run",
+        json={
+            "goal": "Please remember that contract approvals can be denied",
+            "user_id": None,
+        },
+    )
+    assert pending_response.status_code == 200
+    pending = pending_response.json()
+    approval_id = pending["approval_id"]
+
+    response = app_client.post(
+        f"/api/hca/run/{pending['run_id']}/deny",
+        json={"approval_id": approval_id},
+    )
+    assert response.status_code == 200
+    assert_contract_payload("POST /api/hca/run/{run_id}/deny", response.json())
+
+
 def test_hca_runs_list_contract(app_client):
     test_hca_module = import_module("backend.tests.test_hca")
 

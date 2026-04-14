@@ -217,6 +217,13 @@ Replay and memory guarantees:
 - External memory-controller ingestion is best-effort, but emits `external_memory_written` or `external_memory_write_failed` events instead of failing silently.
 - Command execution, when used, stays bounded to allowlisted argument arrays, repo-relative cwd, timeouts, and truncated output.
 
+Approvals fail closed on replay:
+
+- Resume only proceeds when the replay-backed approval record still exists and matches the pending approval for the run.
+- Denied or consumed approvals halt or reject resumption instead of falling through to execution.
+- Approval resume re-validates the canonical action binding before consuming approval, so tampered or stale selected-action payloads are rejected.
+- Approval decisions stay authoritative in append-only approval records and replay output rather than trusting stale in-memory run context alone.
+
 ---
 
 ## Repository Structure

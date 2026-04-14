@@ -265,6 +265,56 @@ def test_stream_endpoint_emits_error_event_when_runtime_raises(
     assert error_payload == {"label": "boom"}
 
 
+def test_stream_endpoint_emits_done_event_for_halted_run(app_client, monkeypatch):
+    from hca.runtime.runtime import Runtime  # type: ignore
+
+    pending_response = app_client.post(
+        "/api/hca/run",
+        json={"goal": "Please remember that stream denial parity matters"},
+    )
+    assert pending_response.status_code == 200
+    pending = pending_response.json()
+    run_id = pending["run_id"]
+    approval_id = pending["approval_id"]
+
+    deny_response = app_client.post(
+        f"/api/hca/run/{run_id}/deny",
+        json={"approval_id": approval_id},
+    )
+    assert deny_response.status_code == 200
+    denied = deny_response.json()
+    assert denied["state"] == "halted"
+
+    def _return_halted(self, goal, user_id=None):
+        return run_id
+
+    monkeypatch.setattr(Runtime, "run", _return_halted)
+
+    response = app_client.post(
+        "/api/hca/run/stream",
+        json={"goal": "Please remember that stream denial parity matters"},
+    )
+
+    assert response.status_code == 200
+    events = _parse_sse_events(response.text)
+    done_payload = next(
+        payload for name, payload in events if name == "done"
+    )
+    key_event_types = {
+        payload.get("event_type")
+        for name, payload in events
+        if name == "step" and isinstance(payload, dict)
+    }
+
+    assert "approval_denied" in key_event_types
+    assert "run_completed" not in key_event_types
+    assert done_payload["run_id"] == run_id
+    assert done_payload["state"] == "halted"
+    assert done_payload["latest_receipt"] is None
+    assert done_payload["last_approval_decision"] == "denied"
+    assert done_payload["discrepancies"] == []
+
+
 def test_run_summary_uses_recorded_memory_hits_and_metrics(
     app_client,
     monkeypatch,

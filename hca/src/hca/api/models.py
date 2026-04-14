@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -103,6 +103,73 @@ class RunMetricsResponse(RunAPIModel):
     )
 
 
+class RunActionBindingResponse(RunAPIModel):
+    tool_name: str
+    target: Optional[str] = None
+    normalized_arguments: Dict[str, Any] = Field(default_factory=dict)
+    action_class: Optional[Literal["low", "medium", "high"]] = None
+    requires_approval: bool = False
+    policy_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    policy_fingerprint: str
+    action_fingerprint: str
+
+
+class RunApprovalRequestResponse(RunAPIModel):
+    approval_id: str
+    run_id: str
+    action_id: str
+    action_kind: Optional[str] = None
+    action_class: Literal["low", "medium", "high"]
+    binding: Optional[RunActionBindingResponse] = None
+    reason: str
+    requested_at: datetime
+    expires_at: Optional[datetime] = None
+
+
+class RunApprovalDecisionResponse(RunAPIModel):
+    approval_id: str
+    decision: Literal["granted", "denied"]
+    actor: str = "user"
+    reason: Optional[str] = None
+    binding: Optional[RunActionBindingResponse] = None
+    decided_at: datetime
+    expires_at: Optional[datetime] = None
+
+
+class RunApprovalGrantResponse(RunAPIModel):
+    approval_id: str
+    token: str
+    actor: str = "user"
+    binding: Optional[RunActionBindingResponse] = None
+    granted_at: datetime
+    expires_at: Optional[datetime] = None
+
+
+class RunApprovalConsumptionResponse(RunAPIModel):
+    approval_id: str
+    token: str
+    binding: Optional[RunActionBindingResponse] = None
+    consumed_at: datetime
+
+
+class RunApprovalResponse(RunAPIModel):
+    approval_id: str
+    status: Literal[
+        "pending",
+        "granted",
+        "denied",
+        "expired",
+        "consumed",
+        "missing",
+    ]
+    expired: bool = False
+    request: Optional[RunApprovalRequestResponse] = None
+    decision: Optional[RunApprovalDecisionResponse] = None
+    grant: Optional[RunApprovalGrantResponse] = None
+    consumption: Optional[RunApprovalConsumptionResponse] = None
+    corruption_count: int = 0
+
+
 class RunSummaryResponse(RunAPIModel):
     run_id: str
     goal: str
@@ -119,7 +186,7 @@ class RunSummaryResponse(RunAPIModel):
     action_taken: RunActionResponse = Field(default_factory=RunActionResponse)
     action_result: RunResultResponse = Field(default_factory=RunResultResponse)
     approval_id: Optional[str] = None
-    approval: Optional[Dict[str, Any]] = None
+    approval: Optional[RunApprovalResponse] = None
     last_approval_decision: Optional[str] = None
     latest_receipt: Optional[Dict[str, Any]] = None
     artifacts: List[Dict[str, Any]] = Field(default_factory=list)

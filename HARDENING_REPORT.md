@@ -10,6 +10,8 @@ This document records the production-hardening work completed in the current imp
 - The backend now exposes `GET /api/subsystems` as the operator-facing source of truth for database, memory, storage, and LLM readiness.
 - The replay console now renders subsystem health and replay-backed approval reason, binding, and policy context.
 - The live chat approval card now renders the same replay-backed approval context instead of only showing approval status and action arguments.
+- The public run-summary contract now pins the structured `approval` payload instead of treating it as a loose object.
+- The backend proof surface now includes a halted-run SSE `done` case so non-success terminal summaries are proven to stay replay-backed.
 
 ## Behavior Notes
 
@@ -45,6 +47,22 @@ cd frontend && yarn eslint src/lib/api.js src/lib/api.test.js src/components/Ope
 
 Result: passed
 
+- Default backend proof surface:
+
+```bash
+python scripts/run_tests.py
+```
+
+Result: `HCA pipeline proof 7 passed`, `Backend local proof 68 passed`, `Contract conformance proof 18 passed`, `Backend full proof 98 passed, 3 skipped`
+
+- Full frontend proof surface:
+
+```bash
+cd frontend && yarn lint && CI=true yarn test --watch=false --runInBand && yarn build
+```
+
+Result: `5 passed test suites`, `14 passed tests`, build passed
+
 ## Files Touched
 
 - `hca/src/hca/storage/runs.py`
@@ -68,5 +86,5 @@ Result: passed
 
 ## Remaining Work Outside This Pass
 
-- Run the wider repo proof surface if a release candidate is being cut.
+- Optional supported-mode proof only: run `RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar` against a healthy local sidecar and separately verify real Mongo-backed `/api/status` behavior if release scope requires those modes.
 - Add any release-specific observability or deployment notes separately from this hardening record.

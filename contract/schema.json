@@ -12,6 +12,10 @@
     "FlexibleObject": {
       "type": "object"
     },
+    "ActionClass": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
     "RunState": {
       "type": "string",
       "enum": [
@@ -31,6 +35,17 @@
         "completed",
         "failed",
         "halted"
+      ]
+    },
+    "ApprovalStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "granted",
+        "denied",
+        "expired",
+        "consumed",
+        "missing"
       ]
     },
     "Provenance": {
@@ -507,6 +522,193 @@
         "error": { "type": ["string", "null"] }
       }
     },
+    "ActionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool_name",
+        "target",
+        "normalized_arguments",
+        "action_class",
+        "requires_approval",
+        "policy_snapshot",
+        "policy_fingerprint",
+        "action_fingerprint"
+      ],
+      "properties": {
+        "tool_name": { "type": "string" },
+        "target": { "type": ["string", "null"] },
+        "normalized_arguments": { "$ref": "#/definitions/FlexibleObject" },
+        "action_class": {
+          "anyOf": [
+            { "$ref": "#/definitions/ActionClass" },
+            { "type": "null" }
+          ]
+        },
+        "requires_approval": { "type": "boolean" },
+        "policy_snapshot": { "$ref": "#/definitions/FlexibleObject" },
+        "policy_fingerprint": { "type": "string" },
+        "action_fingerprint": { "type": "string" }
+      }
+    },
+    "ApprovalRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval_id",
+        "run_id",
+        "action_id",
+        "action_kind",
+        "action_class",
+        "binding",
+        "reason",
+        "requested_at",
+        "expires_at"
+      ],
+      "properties": {
+        "approval_id": { "type": "string" },
+        "run_id": { "type": "string" },
+        "action_id": { "type": "string" },
+        "action_kind": { "type": ["string", "null"] },
+        "action_class": { "$ref": "#/definitions/ActionClass" },
+        "binding": {
+          "anyOf": [
+            { "$ref": "#/definitions/ActionBinding" },
+            { "type": "null" }
+          ]
+        },
+        "reason": { "type": "string" },
+        "requested_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "ApprovalDecisionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval_id",
+        "decision",
+        "actor",
+        "reason",
+        "binding",
+        "decided_at",
+        "expires_at"
+      ],
+      "properties": {
+        "approval_id": { "type": "string" },
+        "decision": {
+          "type": "string",
+          "enum": ["granted", "denied"]
+        },
+        "actor": { "type": "string" },
+        "reason": { "type": ["string", "null"] },
+        "binding": {
+          "anyOf": [
+            { "$ref": "#/definitions/ActionBinding" },
+            { "type": "null" }
+          ]
+        },
+        "decided_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "ApprovalGrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval_id",
+        "token",
+        "actor",
+        "binding",
+        "granted_at",
+        "expires_at"
+      ],
+      "properties": {
+        "approval_id": { "type": "string" },
+        "token": { "type": "string" },
+        "actor": { "type": "string" },
+        "binding": {
+          "anyOf": [
+            { "$ref": "#/definitions/ActionBinding" },
+            { "type": "null" }
+          ]
+        },
+        "granted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "ApprovalConsumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval_id", "token", "binding", "consumed_at"],
+      "properties": {
+        "approval_id": { "type": "string" },
+        "token": { "type": "string" },
+        "binding": {
+          "anyOf": [
+            { "$ref": "#/definitions/ActionBinding" },
+            { "type": "null" }
+          ]
+        },
+        "consumed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "ApprovalDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval_id",
+        "status",
+        "expired",
+        "request",
+        "decision",
+        "grant",
+        "consumption",
+        "corruption_count"
+      ],
+      "properties": {
+        "approval_id": { "type": "string" },
+        "status": { "$ref": "#/definitions/ApprovalStatus" },
+        "expired": { "type": "boolean" },
+        "request": {
+          "anyOf": [
+            { "$ref": "#/definitions/ApprovalRequest" },
+            { "type": "null" }
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            { "$ref": "#/definitions/ApprovalDecisionRecord" },
+            { "type": "null" }
+          ]
+        },
+        "grant": {
+          "anyOf": [
+            { "$ref": "#/definitions/ApprovalGrant" },
+            { "type": "null" }
+          ]
+        },
+        "consumption": {
+          "anyOf": [
+            { "$ref": "#/definitions/ApprovalConsumption" },
+            { "type": "null" }
+          ]
+        },
+        "corruption_count": { "type": "integer", "minimum": 0 }
+      }
+    },
     "RunMemoryHitResponse": {
       "type": "object",
       "additionalProperties": false,
@@ -800,7 +1002,12 @@
         "action_taken": { "$ref": "#/definitions/RunActionTakenResponse" },
         "action_result": { "$ref": "#/definitions/RunActionResultResponse" },
         "approval_id": { "type": ["string", "null"] },
-        "approval": { "type": ["object", "null"] },
+        "approval": {
+          "anyOf": [
+            { "$ref": "#/definitions/ApprovalDetail" },
+            { "type": "null" }
+          ]
+        },
         "last_approval_decision": { "type": ["string", "null"] },
         "latest_receipt": { "type": ["object", "null"] },
         "artifacts": {
