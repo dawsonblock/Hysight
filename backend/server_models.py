@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,3 +23,37 @@ class StatusCheck(BackendModel):
 
 class StatusCheckCreate(BackendModel):
     client_name: str
+
+
+class DatabaseSubsystemStatus(BackendModel):
+    enabled: bool
+    status: str
+    detail: str
+
+
+class MemorySubsystemStatus(BackendModel):
+    backend: str
+    uses_sidecar: bool
+    status: str
+    detail: str
+    service_url: Optional[str] = None
+
+
+class StorageSubsystemStatus(BackendModel):
+    status: str
+    detail: str
+    root: str
+    memory_dir: str
+
+
+class LLMSubsystemStatus(BackendModel):
+    status: str
+    detail: str
+
+
+class SubsystemsResponse(BackendModel):
+    status: str
+    database: DatabaseSubsystemStatus
+    memory: MemorySubsystemStatus
+    storage: StorageSubsystemStatus
+    llm: LLMSubsystemStatus

@@ -1,5 +1,6 @@
 import pytest
 
+import hca.api.runtime_actions as runtime_actions
 from hca.common.enums import RuntimeState
 from hca.common.types import ApprovalGrant
 from hca.runtime.runtime import Runtime
@@ -61,6 +62,45 @@ def test_reused_token_fails():
     with pytest.raises(ValueError) as exc:
         rt.resume(run_id, approval_id, token)
     assert "run has no pending approval" in str(exc.value)
+
+
+def test_auto_grant_pending_approval_uses_randomized_eval_token(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    rt = Runtime()
+    run_id = rt.run("remember milk")
+    pending = get_pending_requests(run_id)
+    approval_id = pending[0].approval_id
+    observed: dict[str, str] = {}
+
+    def _capture_grant(
+        granted_run_id: str,
+        granted_approval_id: str,
+        *,
+        token: str,
+        actor: str = "user",
+        expires_at=None,
+    ) -> str:
+        observed["run_id"] = granted_run_id
+        observed["approval_id"] = granted_approval_id
+        observed["token"] = token
+        observed["actor"] = actor
+        return granted_run_id
+
+    monkeypatch.setattr(runtime_actions, "grant_pending_approval", _capture_grant)
+
+    assert runtime_actions.auto_grant_pending_approval(run_id, actor="eval") == run_id
+    assert observed == {
+        "run_id": run_id,
+        "approval_id": approval_id,
+        "token": observed["token"],
+        "actor": "eval",
+    }
+    assert observed["token"].startswith("eval-")
+    assert observed["token"] != f"eval-{approval_id}"
 
 
 if __name__ == "__main__":

@@ -127,7 +127,13 @@ class Runtime:
             approval = None
 
         replay_state = str(replayed.get("state") or context.state.value)
-        if replay_state != RuntimeState.awaiting_approval.value:
+        pending_from_storage = (
+            approval is not None and approval.get("status") == "pending"
+        )
+        if replay_state != RuntimeState.awaiting_approval.value and not (
+            context.state == RuntimeState.awaiting_approval
+            and pending_from_storage
+        ):
             if approval is not None and approval.get("status") is not None:
                 status = str(approval["status"]).replace("_", " ")
                 raise ValueError(f"approval is {status}")

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Callable, List
+from typing import Any, Awaitable, Callable, List
 
 from fastapi import APIRouter
 
@@ -7,6 +7,7 @@ from backend.server_models import (
     APIRootResponse,
     StatusCheck,
     StatusCheckCreate,
+    SubsystemsResponse,
 )
 
 
@@ -14,6 +15,7 @@ def register_status_routes(
     router: APIRouter,
     *,
     require_db: Callable[[], Any],
+    get_subsystems: Callable[[], Awaitable[SubsystemsResponse]],
 ) -> None:
     @router.get("/", response_model=APIRootResponse)
     async def root():
@@ -36,3 +38,7 @@ def register_status_routes(
             if isinstance(check.get("timestamp"), str):
                 check["timestamp"] = datetime.fromisoformat(check["timestamp"])
         return checks
+
+    @router.get("/subsystems", response_model=SubsystemsResponse)
+    async def get_subsystem_status():
+        return await get_subsystems()

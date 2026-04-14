@@ -64,6 +64,108 @@ def test_root_route_works_without_db(monkeypatch):
     assert r.status_code == 200
 
 
+def test_subsystems_route_reports_supported_python_mode_without_db(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.delenv("MONGO_URL", raising=False)
+    monkeypatch.delenv("DB_NAME", raising=False)
+    monkeypatch.delenv("EMERGENT_LLM_KEY", raising=False)
+    storage_dir = tmp_path / "storage"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(storage_dir / "memory"))
+
+    with TestClient(create_app()) as client:
+        response = client.get("/api/subsystems")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["database"] == {
+        "enabled": False,
+        "status": "disabled",
+        "detail": (
+            "Mongo-backed /api/status persistence is disabled because "
+            "MONGO_URL and DB_NAME are unset"
+        ),
+    }
+    assert data["memory"] == {
+        "backend": "python",
+        "uses_sidecar": False,
+        "status": "healthy",
+        "detail": "Python in-process memory backend is active",
+        "service_url": None,
+    }
+    assert data["storage"]["status"] == "writable"
+    assert data["storage"]["root"] == str(storage_dir.resolve())
+    assert data["storage"]["memory_dir"] == str(
+        (storage_dir / "memory").resolve()
+    )
+    assert data["llm"] == {
+        "status": "missing",
+        "detail": (
+            "EMERGENT_LLM_KEY is missing; LLM-backed modules will fall back when possible"
+        ),
+    }
+
+
+@pytest.mark.filterwarnings(_ASYNCIO_DEPRECATION_FILTER)
+def test_subsystems_route_reports_healthy_when_configured_services_are_ready(
+    monkeypatch,
+    tmp_path,
+):
+    storage_dir = tmp_path / "storage"
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("DB_NAME", "hysight")
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(storage_dir / "memory"))
+    monkeypatch.setenv("EMERGENT_LLM_KEY", "test-key")
+
+    class _FakeAdmin:
+        async def command(self, name: str):
+            assert name == "ping"
+            return {"ok": 1}
+
+    class _FakeMongoClient:
+        def __init__(self):
+            self.admin = _FakeAdmin()
+
+        def close(self):
+            return None
+
+    async def _fake_initialize_database(_settings):
+        setattr(server_module, "client", _FakeMongoClient())
+        setattr(server_module, "db", object())
+
+    monkeypatch.setattr(
+        server_module,
+        "_initialize_database",
+        _fake_initialize_database,
+    )
+
+    with TestClient(create_app()) as client:
+        response = client.get("/api/subsystems")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["database"] == {
+        "enabled": True,
+        "status": "healthy",
+        "detail": "Mongo-backed /api/status persistence is reachable",
+    }
+    assert data["memory"]["status"] == "healthy"
+    assert data["storage"]["status"] == "writable"
+    assert data["llm"] == {
+        "status": "configured",
+        "detail": "EMERGENT_LLM_KEY is configured",
+    }
+
+
 def test_memory_retrieve_route_works_without_db(monkeypatch, tmp_path):
     """Memory retrieve route works in-process with no Mongo configured."""
     import memory_service.singleton as _ms_singleton

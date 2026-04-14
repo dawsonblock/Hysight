@@ -94,7 +94,13 @@ def require_pending_approval_selection(run_id: str, approval_id: str):
         if isinstance(candidate_id, str):
             pending_approval_id = candidate_id
 
-    if replay_state != "awaiting_approval" or pending_approval_id is None:
+    if (
+        replay_state != "awaiting_approval"
+        and not (
+            context.state.value == "awaiting_approval"
+            and pending_approval_id is not None
+        )
+    ) or pending_approval_id is None:
         raise HTTPException(
             status_code=400,
             detail="Run has no pending approval",

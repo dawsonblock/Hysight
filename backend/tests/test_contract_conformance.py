@@ -96,6 +96,12 @@ def test_status_list_contract(status_app_client):
     assert_contract_payload("GET /api/status", response.json())
 
 
+def test_subsystems_contract(app_client):
+    response = app_client.get("/api/subsystems")
+    assert response.status_code == 200
+    assert_contract_payload("GET /api/subsystems", response.json())
+
+
 def test_hca_run_create_contract(app_client):
     response = app_client.post(
         "/api/hca/run",

@@ -974,6 +974,75 @@ def test_deny_action_halts_without_execution(app_client):
     assert "run_failed" not in key_event_types
 
 
+@pytest.mark.slow
+def test_approve_action_recovers_from_stale_run_context(app_client):
+    from hca.common.enums import RuntimeState  # type: ignore
+    from hca.storage.runs import load_run, save_run  # type: ignore
+
+    response = app_client.post(
+        "/api/hca/run",
+        json={"goal": "Please remember that approvals need recovery tests"},
+    )
+    assert response.status_code == 200
+    pending = response.json()
+    run_id = pending["run_id"]
+    approval_id = pending["approval_id"]
+
+    context = load_run(run_id)
+    assert context is not None
+    context.state = RuntimeState.completed
+    context.pending_approval_id = None
+    save_run(context)
+
+    approval_response = app_client.post(
+        f"/api/hca/run/{run_id}/approve",
+        json={"approval_id": approval_id},
+    )
+    assert approval_response.status_code == 200
+    approved = approval_response.json()
+    assert approved["state"] == "completed"
+    assert approved["approval_id"] == approval_id
+    assert approved["last_approval_decision"] == "granted"
+    assert approved["discrepancies"] == []
+
+
+@pytest.mark.slow
+def test_approve_rejects_when_context_is_stale_but_replay_is_terminal(
+    app_client,
+):
+    from hca.common.enums import RuntimeState  # type: ignore
+    from hca.storage.runs import load_run, save_run  # type: ignore
+
+    response = app_client.post(
+        "/api/hca/run",
+        json={"goal": "Please remember that replay should stay authoritative"},
+    )
+    assert response.status_code == 200
+    pending = response.json()
+    run_id = pending["run_id"]
+    approval_id = pending["approval_id"]
+
+    denied_response = app_client.post(
+        f"/api/hca/run/{run_id}/deny",
+        json={"approval_id": approval_id},
+    )
+    assert denied_response.status_code == 200
+    assert denied_response.json()["state"] == "halted"
+
+    context = load_run(run_id)
+    assert context is not None
+    context.state = RuntimeState.awaiting_approval
+    context.pending_approval_id = approval_id
+    save_run(context)
+
+    approval_response = app_client.post(
+        f"/api/hca/run/{run_id}/approve",
+        json={"approval_id": approval_id},
+    )
+    assert approval_response.status_code == 400
+    assert approval_response.json()["detail"] == "Run has no pending approval"
+
+
 # Status endpoints.
 
 
@@ -981,3 +1050,15 @@ def test_status_route_returns_503_without_db(app_client):
     """app_client deletes MONGO_URL so the status route must return 503."""
     r = app_client.post("/api/status", json={"client_name": "test"})
     assert r.status_code == 503
+
+
+def test_subsystems_route_surfaces_mode_and_optional_status(app_client):
+    response = app_client.get("/api/subsystems")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["database"]["status"] == "disabled"
+    assert data["memory"]["backend"] == "python"
+    assert data["memory"]["status"] == "healthy"
+    assert data["storage"]["status"] == "writable"
+    assert data["llm"]["status"] == "missing"

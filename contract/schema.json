@@ -307,6 +307,66 @@
       "type": "array",
       "items": { "$ref": "#/definitions/StatusCheck" }
     },
+    "DatabaseSubsystemStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "status", "detail"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "status": { "type": "string" },
+        "detail": { "type": "string" }
+      }
+    },
+    "MemorySubsystemStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend",
+        "uses_sidecar",
+        "status",
+        "detail",
+        "service_url"
+      ],
+      "properties": {
+        "backend": { "type": "string" },
+        "uses_sidecar": { "type": "boolean" },
+        "status": { "type": "string" },
+        "detail": { "type": "string" },
+        "service_url": { "type": ["string", "null"] }
+      }
+    },
+    "StorageSubsystemStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "detail", "root", "memory_dir"],
+      "properties": {
+        "status": { "type": "string" },
+        "detail": { "type": "string" },
+        "root": { "type": "string" },
+        "memory_dir": { "type": "string" }
+      }
+    },
+    "LLMSubsystemStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "detail"],
+      "properties": {
+        "status": { "type": "string" },
+        "detail": { "type": "string" }
+      }
+    },
+    "SubsystemsResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "database", "memory", "storage", "llm"],
+      "properties": {
+        "status": { "type": "string" },
+        "database": { "$ref": "#/definitions/DatabaseSubsystemStatus" },
+        "memory": { "$ref": "#/definitions/MemorySubsystemStatus" },
+        "storage": { "$ref": "#/definitions/StorageSubsystemStatus" },
+        "llm": { "$ref": "#/definitions/LLMSubsystemStatus" }
+      }
+    },
     "HCARunRequest": {
       "type": "object",
       "additionalProperties": false,
@@ -821,6 +881,9 @@
     },
     "GET /api/status": {
       "response": { "$ref": "#/definitions/StatusCheckListResponse" }
+    },
+    "GET /api/subsystems": {
+      "response": { "$ref": "#/definitions/SubsystemsResponse" }
     },
     "POST /api/hca/run": {
       "request": { "$ref": "#/definitions/HCARunRequest" },
