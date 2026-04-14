@@ -61,7 +61,7 @@ def test_reused_token_fails():
     # Second resume with same token fails
     with pytest.raises(ValueError) as exc:
         rt.resume(run_id, approval_id, token)
-    assert "run has no pending approval" in str(exc.value)
+    assert "approval is consumed" in str(exc.value)
 
 
 def test_auto_grant_pending_approval_uses_randomized_eval_token(

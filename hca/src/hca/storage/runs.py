@@ -21,6 +21,7 @@ from hca.paths import run_storage_path
 
 _RUN_LOCKS: dict[str, threading.RLock] = {}
 _RUN_LOCKS_GUARD = threading.Lock()
+_RUN_LOCK_DEPTH = threading.local()
 
 
 def _run_path(run_id: str) -> Path:
@@ -54,22 +55,38 @@ def _fsync_directory(path: Path) -> None:
         os.close(directory_fd)
 
 
+def _thread_lock_depths() -> dict[str, int]:
+    depths = getattr(_RUN_LOCK_DEPTH, "depths", None)
+    if depths is None:
+        depths = {}
+        _RUN_LOCK_DEPTH.depths = depths
+    return depths
+
+
 @contextmanager
 def run_operation_lock(run_id: str) -> Iterator[None]:
     """Serialize read-modify-write operations for a single run."""
 
     process_lock = _run_lock(run_id)
     process_lock.acquire()
+    depths = _thread_lock_depths()
+    depth = depths.get(run_id, 0)
+    depths[run_id] = depth + 1
     file_handle = None
 
     try:
-        if fcntl is not None:
+        if depth == 0 and fcntl is not None:
             lock_path = _run_lock_path(run_id)
             os.makedirs(lock_path.parent, exist_ok=True)
             file_handle = open(lock_path, "a+", encoding="utf-8")
             fcntl.flock(file_handle.fileno(), fcntl.LOCK_EX)
         yield
     finally:
+        remaining_depth = depths.get(run_id, 1) - 1
+        if remaining_depth <= 0:
+            depths.pop(run_id, None)
+        else:
+            depths[run_id] = remaining_depth
         if file_handle is not None:
             try:
                 fcntl.flock(file_handle.fileno(), fcntl.LOCK_UN)

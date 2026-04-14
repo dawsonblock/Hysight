@@ -11,6 +11,99 @@ export const API_BASE_URL = normalizedBackendUrl
 
 const looseObjectSchema = z.object({}).passthrough();
 
+const actionBindingSchema = z.object({
+  tool_name: z.string(),
+  target: z.string().nullable().optional(),
+  normalized_arguments: z.record(z.unknown()).optional(),
+  action_class: z.string().nullable().optional(),
+  requires_approval: z.boolean().optional(),
+  policy_snapshot: z.record(z.unknown()).optional(),
+  policy_fingerprint: z.string().optional(),
+  action_fingerprint: z.string().optional(),
+}).passthrough();
+
+const approvalRequestSchema = z.object({
+  approval_id: z.string(),
+  action_id: z.string().optional(),
+  action_kind: z.string().nullable().optional(),
+  action_class: z.string().nullable().optional(),
+  binding: actionBindingSchema.nullish(),
+  reason: z.string().optional(),
+  requested_at: z.string().nullish(),
+  expires_at: z.string().nullish(),
+}).passthrough();
+
+const approvalDecisionSchema = z.object({
+  approval_id: z.string(),
+  decision: z.string(),
+  actor: z.string().optional(),
+  reason: z.string().nullable().optional(),
+  binding: actionBindingSchema.nullish(),
+  decided_at: z.string().nullish(),
+  expires_at: z.string().nullish(),
+}).passthrough();
+
+const approvalGrantSchema = z.object({
+  approval_id: z.string(),
+  token: z.string().optional(),
+  actor: z.string().optional(),
+  binding: actionBindingSchema.nullish(),
+  granted_at: z.string().nullish(),
+  expires_at: z.string().nullish(),
+}).passthrough();
+
+const approvalConsumptionSchema = z.object({
+  approval_id: z.string(),
+  token: z.string().optional(),
+  binding: actionBindingSchema.nullish(),
+  consumed_at: z.string().nullish(),
+}).passthrough();
+
+const approvalSchema = z.object({
+  approval_id: z.string(),
+  status: z.string(),
+  expired: z.boolean().optional(),
+  request: approvalRequestSchema.nullish(),
+  decision: approvalDecisionSchema.nullish(),
+  grant: approvalGrantSchema.nullish(),
+  consumption: approvalConsumptionSchema.nullish(),
+  corruption_count: z.number().int().nonnegative().optional(),
+}).passthrough();
+
+const databaseSubsystemSchema = z.object({
+  enabled: z.boolean(),
+  status: z.string(),
+  detail: z.string(),
+}).passthrough();
+
+const memorySubsystemSchema = z.object({
+  backend: z.string(),
+  uses_sidecar: z.boolean(),
+  status: z.string(),
+  detail: z.string(),
+  service_url: z.string().nullable().optional(),
+}).passthrough();
+
+const storageSubsystemSchema = z.object({
+  status: z.string(),
+  detail: z.string(),
+  root: z.string(),
+  memory_dir: z.string(),
+}).passthrough();
+
+const llmSubsystemSchema = z.object({
+  status: z.string(),
+  detail: z.string(),
+}).passthrough();
+
+const subsystemsResponseSchema = z.object({
+  status: z.string(),
+  database: databaseSubsystemSchema,
+  memory: memorySubsystemSchema,
+  storage: storageSubsystemSchema,
+  llm: llmSubsystemSchema,
+}).passthrough();
+
 const runSummarySchema = z.object({
   run_id: z.string(),
   goal: z.string(),
@@ -35,6 +128,8 @@ const runSummarySchema = z.object({
   artifacts_count: z.number().int().nonnegative().optional(),
   event_count: z.number().int().nonnegative().optional(),
   approval_id: z.string().nullable().optional(),
+  approval: approvalSchema.nullish(),
+  last_approval_decision: z.string().nullable().optional(),
   metrics: looseObjectSchema.optional(),
 }).passthrough();
 
@@ -230,6 +325,10 @@ export function decideRunApproval(runId, decision, approvalId) {
     },
     runSummarySchema
   );
+}
+
+export function getSubsystems() {
+  return fetchJson("/subsystems", undefined, subsystemsResponseSchema);
 }
 
 export function listRuns({ query, limit, offset }) {

@@ -114,6 +114,8 @@ class Runtime:
         self,
         run_id: str,
         approval_id: str,
+        *,
+        allowed_statuses: tuple[str, ...] = ("pending",),
     ) -> tuple[RunContext, Dict[str, Any], Optional[Dict[str, Any]]]:
         context = load_run(run_id)
         if not context:
@@ -128,7 +130,8 @@ class Runtime:
 
         replay_state = str(replayed.get("state") or context.state.value)
         pending_from_storage = (
-            approval is not None and approval.get("status") == "pending"
+            approval is not None
+            and approval.get("status") in allowed_statuses
         )
         if replay_state != RuntimeState.awaiting_approval.value and not (
             context.state == RuntimeState.awaiting_approval
@@ -140,7 +143,7 @@ class Runtime:
             raise ValueError("run is not awaiting approval")
 
         authoritative_pending_id = None
-        if approval is not None and approval.get("status") == "pending":
+        if approval is not None and approval.get("status") in allowed_statuses:
             candidate_id = approval.get("approval_id")
             if isinstance(candidate_id, str):
                 authoritative_pending_id = candidate_id
@@ -153,7 +156,10 @@ class Runtime:
             raise ValueError("run has no pending approval")
         if authoritative_pending_id != approval_id:
             raise ValueError("approval id does not match pending approval")
-        if approval is not None and approval.get("status") != "pending":
+        if (
+            approval is not None
+            and approval.get("status") not in allowed_statuses
+        ):
             status = str(approval["status"]).replace("_", " ")
             raise ValueError(f"approval is {status}")
 
@@ -1038,10 +1044,30 @@ class Runtime:
 
     def resume(self, run_id: str, approval_id: str, token: str) -> str:
         with run_operation_lock(run_id):
+            context = load_run(run_id)
+            if not context:
+                raise ValueError(f"Run {run_id} not found")
+
+            from hca.runtime.replay import reconstruct_state
+
+            replayed = reconstruct_state(run_id)
+            approval = replayed.get("approval")
+            if (
+                isinstance(approval, dict)
+                and approval.get("approval_id") == approval_id
+                and approval.get("status") == "denied"
+            ):
+                self._current_state = context.state
+                return self._halt_run(
+                    context,
+                    f"Approval {approval_id} denied",
+                )
+
             context, replayed, _approval = (
                 self._load_authoritative_pending_approval(
                     run_id,
                     approval_id,
+                    allowed_statuses=("pending", "granted"),
                 )
             )
             validation = validate_resume_approval(
