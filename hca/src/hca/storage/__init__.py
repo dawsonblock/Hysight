@@ -1,7 +1,7 @@
 """Storage package exports."""
 
 from hca.storage.event_log import append_event, iter_events
-from hca.storage.runs import save_run, load_run
+from hca.storage.runs import save_run, load_run, run_operation_lock
 from hca.storage.receipts import append_receipt, iter_receipts
 from hca.storage.approvals import (
     append_request,
@@ -31,6 +31,7 @@ __all__ = [
     "iter_events",
     "save_run",
     "load_run",
+    "run_operation_lock",
     "append_receipt",
     "iter_receipts",
     "append_request",

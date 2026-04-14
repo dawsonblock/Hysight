@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from typing import Optional
 
+from hca.runtime.replay import reconstruct_state
 from hca.runtime.runtime import Runtime
-from hca.storage import load_run
 
 
 def run_goal(goal: str, user_id: Optional[str] = None) -> str:
@@ -47,12 +48,20 @@ def auto_grant_pending_approval(
     actor: str,
     token_prefix: str = "eval",
 ) -> str:
-    context = load_run(run_id)
-    if context is None or context.pending_approval_id is None:
+    """Grant the current approval for evaluation-only harness flows."""
+
+    replay = reconstruct_state(run_id)
+    approval = replay.get("approval")
+    if not isinstance(approval, dict) or approval.get("status") != "pending":
         return run_id
 
-    approval_id = context.pending_approval_id
-    token = f"{token_prefix}-{approval_id}"
+    approval_id = approval.get("approval_id") or replay.get(
+        "pending_approval_id"
+    )
+    if not isinstance(approval_id, str):
+        return run_id
+
+    token = f"{token_prefix}-{uuid.uuid4().hex}"
     return grant_pending_approval(
         run_id,
         approval_id,

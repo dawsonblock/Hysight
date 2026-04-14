@@ -78,8 +78,23 @@ def require_pending_approval_selection(run_id: str, approval_id: str):
     from hca.storage.approvals import get_request
 
     context = require_run_context(run_id)
-    pending_approval_id = context.pending_approval_id
-    if pending_approval_id is None:
+    replay = reconstruct_state(run_id)
+    replay_state = str(replay.get("state") or context.state.value)
+    approval = replay.get("approval")
+    if not isinstance(approval, dict):
+        approval = None
+
+    pending_approval_id = None
+    if approval is not None and approval.get("status") == "pending":
+        candidate_id = approval.get("approval_id")
+        if isinstance(candidate_id, str):
+            pending_approval_id = candidate_id
+    if pending_approval_id is None and replay_state == "awaiting_approval":
+        candidate_id = replay.get("pending_approval_id")
+        if isinstance(candidate_id, str):
+            pending_approval_id = candidate_id
+
+    if replay_state != "awaiting_approval" or pending_approval_id is None:
         raise HTTPException(
             status_code=400,
             detail="Run has no pending approval",

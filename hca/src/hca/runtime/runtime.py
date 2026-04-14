@@ -58,6 +58,7 @@ from hca.storage import (
     append_request as append_approval_request,
     append_snapshot,
     load_run,
+    run_operation_lock,
     save_run,
 )
 from hca.workspace.broadcast import broadcast
@@ -98,6 +99,70 @@ class Runtime:
     def _persist_context(self, context: RunContext) -> None:
         context.updated_at = utc_now()
         save_run(context)
+
+    def _set_pending_approval(
+        self,
+        context: RunContext,
+        approval_id: Optional[str],
+    ) -> None:
+        if context.pending_approval_id == approval_id:
+            return
+        context.pending_approval_id = approval_id
+        self._persist_context(context)
+
+    def _load_authoritative_pending_approval(
+        self,
+        run_id: str,
+        approval_id: str,
+    ) -> tuple[RunContext, Dict[str, Any], Optional[Dict[str, Any]]]:
+        context = load_run(run_id)
+        if not context:
+            raise ValueError(f"Run {run_id} not found")
+
+        from hca.runtime.replay import reconstruct_state
+
+        replayed = reconstruct_state(run_id)
+        approval = replayed.get("approval")
+        if not isinstance(approval, dict):
+            approval = None
+
+        replay_state = str(replayed.get("state") or context.state.value)
+        if replay_state != RuntimeState.awaiting_approval.value:
+            if approval is not None and approval.get("status") is not None:
+                status = str(approval["status"]).replace("_", " ")
+                raise ValueError(f"approval is {status}")
+            raise ValueError("run is not awaiting approval")
+
+        authoritative_pending_id = None
+        if approval is not None and approval.get("status") == "pending":
+            candidate_id = approval.get("approval_id")
+            if isinstance(candidate_id, str):
+                authoritative_pending_id = candidate_id
+        if authoritative_pending_id is None:
+            candidate_id = replayed.get("pending_approval_id")
+            if isinstance(candidate_id, str):
+                authoritative_pending_id = candidate_id
+
+        if authoritative_pending_id is None:
+            raise ValueError("run has no pending approval")
+        if authoritative_pending_id != approval_id:
+            raise ValueError("approval id does not match pending approval")
+        if approval is not None and approval.get("status") != "pending":
+            status = str(approval["status"]).replace("_", " ")
+            raise ValueError(f"approval is {status}")
+
+        needs_persist = False
+        if context.state != RuntimeState.awaiting_approval:
+            context.state = RuntimeState.awaiting_approval
+            needs_persist = True
+        if context.pending_approval_id != approval_id:
+            context.pending_approval_id = approval_id
+            needs_persist = True
+        if needs_persist:
+            self._persist_context(context)
+
+        self._current_state = context.state
+        return context, replayed, approval
 
     def _set_state(
         self,
@@ -274,8 +339,7 @@ class Runtime:
             expires_at=utc_now() + timedelta(minutes=15),
         )
         append_approval_request(context.run_id, request)
-        context.pending_approval_id = approval_id
-        self._persist_context(context)
+        self._set_pending_approval(context, approval_id)
         append_event(
             context,
             EventType.approval_requested,
@@ -932,156 +996,152 @@ class Runtime:
         actor: str = "user",
         expires_at: Optional[datetime] = None,
     ) -> str:
-        context = load_run(run_id)
-        if not context:
-            raise ValueError(f"Run {run_id} not found")
-
-        self._current_state = context.state
-        self._require_matching_pending_approval(context, approval_id)
-        append_approval_grant(
-            run_id,
-            ApprovalGrant(
-                approval_id=approval_id,
-                token=token,
-                actor=actor,
-                expires_at=expires_at,
-            ),
-        )
-        return self.resume(run_id, approval_id, token)
+        with run_operation_lock(run_id):
+            self._load_authoritative_pending_approval(run_id, approval_id)
+            append_approval_grant(
+                run_id,
+                ApprovalGrant(
+                    approval_id=approval_id,
+                    token=token,
+                    actor=actor,
+                    expires_at=expires_at,
+                ),
+            )
+            return self.resume(run_id, approval_id, token)
 
     def deny_approval(
         self, run_id: str, approval_id: str, reason: str = "Denied by user"
     ) -> str:
-        context = load_run(run_id)
-        if not context:
-            raise ValueError(f"Run {run_id} not found")
-
-        self._current_state = context.state
-        self._require_matching_pending_approval(context, approval_id)
-        context.pending_approval_id = approval_id
-        self._persist_context(context)
-        append_approval_denial(run_id, approval_id, reason=reason)
-        append_event(
-            context,
-            EventType.approval_denied,
-            "runtime",
-            {"approval_id": approval_id, "reason": reason},
-        )
-        return self._halt_run(
-            context, f"Approval {approval_id} denied: {reason}"
-        )
+        with run_operation_lock(run_id):
+            context, _replayed, _approval = (
+                self._load_authoritative_pending_approval(
+                    run_id,
+                    approval_id,
+                )
+            )
+            append_approval_denial(run_id, approval_id, reason=reason)
+            append_event(
+                context,
+                EventType.approval_denied,
+                "runtime",
+                {"approval_id": approval_id, "reason": reason},
+            )
+            return self._halt_run(
+                context, f"Approval {approval_id} denied: {reason}"
+            )
 
     def resume(self, run_id: str, approval_id: str, token: str) -> str:
-        context = load_run(run_id)
-        if not context:
-            raise ValueError(f"Run {run_id} not found")
-
-        self._current_state = context.state
-        self._require_matching_pending_approval(context, approval_id)
-        validation = validate_resume_approval(run_id, approval_id, token)
-        if not validation["ok"]:
-            reason = validation["reason"] or "invalid_approval"
-            status = validation["resolved_status"]
-            if status == "denied":
-                return self._halt_run(
-                    context, f"Approval {approval_id} denied"
+        with run_operation_lock(run_id):
+            context, replayed, _approval = (
+                self._load_authoritative_pending_approval(
+                    run_id,
+                    approval_id,
                 )
-            if status == "expired":
+            )
+            validation = validate_resume_approval(
+                run_id,
+                approval_id,
+                token,
+            )
+            if not validation["ok"]:
+                reason = validation["reason"] or "invalid_approval"
+                status = validation["resolved_status"]
+                if status == "denied":
+                    return self._halt_run(
+                        context, f"Approval {approval_id} denied"
+                    )
+                if status == "expired":
+                    self._set_state(
+                        context,
+                        RuntimeState.failed,
+                        {"reason": reason, "approval_id": approval_id},
+                    )
+                    self._write_snapshot(context, [], None)
+                raise ValueError(reason.replace("_", " "))
+
+            action_data = replayed.get("selected_action")
+            if not isinstance(action_data, dict):
                 self._set_state(
                     context,
                     RuntimeState.failed,
-                    {"reason": reason, "approval_id": approval_id},
+                    {"reason": "selected_action_unrecoverable"},
                 )
                 self._write_snapshot(context, [], None)
-            raise ValueError(reason.replace("_", " "))
+                raise ValueError(
+                    "Could not reconstruct selected action from events"
+                )
 
-        from hca.runtime.replay import reconstruct_state
-
-        replayed = reconstruct_state(run_id)
-        action_data = replayed.get("selected_action")
-        if not isinstance(action_data, dict):
-            self._set_state(
-                context,
-                RuntimeState.failed,
-                {"reason": "selected_action_unrecoverable"},
-            )
-            self._write_snapshot(context, [], None)
-            raise ValueError(
-                "Could not reconstruct selected action from events"
-            )
-
-        try:
-            candidate = canonicalize_action_candidate(
-                ActionCandidate.model_validate(action_data)
-            )
-        except (KeyError, ToolValidationError) as exc:
-            self._set_state(
-                context,
-                RuntimeState.failed,
-                {
-                    "reason": "selected_action_binding_invalid",
-                    "approval_id": approval_id,
-                },
-            )
-            self._write_snapshot(context, [], None)
-            raise ValueError(
-                "Could not validate selected action from events"
-            ) from exc
-
-        if not candidate.requires_approval:
-            raise ValueError("selected action is not approval gated")
-
-        validation = validate_resume_approval(
-            run_id,
-            approval_id,
-            token,
-            candidate=candidate,
-        )
-        if not validation["ok"]:
-            reason = validation["reason"] or "invalid_approval"
-            if reason in {
-                "approved_action_mismatch",
-                "approval_binding_corrupted",
-            }:
+            try:
+                candidate = canonicalize_action_candidate(
+                    ActionCandidate.model_validate(action_data)
+                )
+            except (KeyError, ToolValidationError) as exc:
                 self._set_state(
                     context,
                     RuntimeState.failed,
-                    {"reason": reason, "approval_id": approval_id},
+                    {
+                        "reason": "selected_action_binding_invalid",
+                        "approval_id": approval_id,
+                    },
                 )
-                self._write_snapshot(context, [], candidate)
-            raise ValueError(reason.replace("_", " "))
+                self._write_snapshot(context, [], None)
+                raise ValueError(
+                    "Could not validate selected action from events"
+                ) from exc
 
-        append_event(
-            context,
-            EventType.approval_granted,
-            "runtime",
-            {
-                "approval_id": approval_id,
-                "token": token,
-                "action_fingerprint": (
-                    candidate.binding.action_fingerprint
-                    if candidate.binding is not None
-                    else None
+            if not candidate.requires_approval:
+                raise ValueError("selected action is not approval gated")
+
+            validation = validate_resume_approval(
+                run_id,
+                approval_id,
+                token,
+                candidate=candidate,
+            )
+            if not validation["ok"]:
+                reason = validation["reason"] or "invalid_approval"
+                if reason in {
+                    "approved_action_mismatch",
+                    "approval_binding_corrupted",
+                }:
+                    self._set_state(
+                        context,
+                        RuntimeState.failed,
+                        {"reason": reason, "approval_id": approval_id},
+                    )
+                    self._write_snapshot(context, [], candidate)
+                raise ValueError(reason.replace("_", " "))
+
+            append_event(
+                context,
+                EventType.approval_granted,
+                "runtime",
+                {
+                    "approval_id": approval_id,
+                    "token": token,
+                    "action_fingerprint": (
+                        candidate.binding.action_fingerprint
+                        if candidate.binding is not None
+                        else None
+                    ),
+                },
+            )
+            append_approval_consumption(
+                run_id,
+                ApprovalConsumption(
+                    approval_id=approval_id,
+                    token=token,
+                    binding=candidate.binding,
                 ),
-            },
-        )
-        append_approval_consumption(
-            run_id,
-            ApprovalConsumption(
-                approval_id=approval_id,
-                token=token,
-                binding=candidate.binding,
-            ),
-        )
-        context.pending_approval_id = None
-        self._persist_context(context)
+            )
+            self._set_pending_approval(context, None)
 
-        return self._execute_and_complete(
-            context,
-            candidate,
-            approved=True,
-            approval_id=approval_id,
-        )
+            return self._execute_and_complete(
+                context,
+                candidate,
+                approved=True,
+                approval_id=approval_id,
+            )
 
     def _step(self, context: RunContext) -> str:
         self._set_state(context, RuntimeState.initializing)
@@ -1251,8 +1311,7 @@ class Runtime:
                         workspace=workspace,
                     )
 
-                context.pending_approval_id = None
-                self._persist_context(context)
+                self._set_pending_approval(context, None)
                 return self._execute_and_complete(
                     context,
                     best_candidate,
@@ -1303,8 +1362,7 @@ class Runtime:
                 workspace=workspace,
             )
 
-        context.pending_approval_id = None
-        self._persist_context(context)
+        self._set_pending_approval(context, None)
         return self._execute_and_complete(
             context,
             best_candidate,
