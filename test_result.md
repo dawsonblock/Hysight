@@ -198,6 +198,20 @@ backend:
         agent: "main"
         comment: "Created RELEASE_NOTES.md with release-facing observability, subsystem health, deployment notes, proof commands, and current limitations derived from HARDENING_REPORT.md and REPAIR_REPORT.md."
 frontend:
+  - task: "Frontend proof surface verification"
+    implemented: true
+    working: true
+    file: "frontend/package.json"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Starting a proactive frontend verification pass for the current branch. No active frontend source diff was detected, so the plan is to validate the documented frontend proof surface beginning with the API-client boundary test and widening to lint, full Jest, and build."
+      - working: true
+        agent: "testing"
+        comment: "Verified the documented frontend proof surface successfully. Results: API-client boundary test 5 passed via src/lib/api.test.js, eslint passed, full Jest surface 5 suites and 14 tests passed, and the production build completed successfully with main JS 173.52 kB gzip and CSS 9.2 kB gzip."
   - task: "Frontend API type-safety evaluation"
     implemented: true
     working: "NA"
@@ -215,7 +229,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: false
 test_plan:
   current_focus: []
@@ -233,3 +247,7 @@ agent_communication:
     message: "Starting backend verification for the current branch. Focus: targeted adapter-layer checks for backend/server.py and backend/tests/test_server_bootstrap.py, then the opt-in live Mongo and sidecar proof paths."
   - agent: "testing"
     message: "Verification complete. Targeted bootstrap regression passed (30 passed), the opt-in live Mongo Make target passed (1 passed), and the documented live sidecar proof path passed end to end via make proof-sidecar (all 5 proof steps passed). No new backend issues were found in this verification pass."
+  - agent: "testing"
+    message: "Starting frontend verification for the current branch. No active frontend source diff was detected, so the verification scope is the documented frontend proof surface: API-client boundary, lint, full Jest, and build."
+  - agent: "testing"
+    message: "Frontend verification complete. The API-client boundary test passed, eslint passed, all 5 frontend Jest suites passed, and the production build succeeded. No frontend regressions were found in this verification pass."
