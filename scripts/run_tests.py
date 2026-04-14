@@ -106,6 +106,11 @@ REQUIRED_TEST_DEPS = (
     "jsonschema",
 )
 
+LIVE_SIDECAR_ENV_KEYS = (
+    "RUN_MEMVID_TESTS",
+    "MEMORY_SERVICE_URL",
+)
+
 
 def _isolated_proof_env(storage_root: pathlib.Path) -> Dict[str, str]:
     return {
@@ -170,8 +175,9 @@ def _run_step(step: Step) -> int:
         isolated_env = _isolated_proof_env(isolated_dir)
 
     env = dict(os.environ)
-    if step.get("isolated_storage") and "MEMORY_SERVICE_URL" not in extra_env:
-        env.pop("MEMORY_SERVICE_URL", None)
+    for key in LIVE_SIDECAR_ENV_KEYS:
+        if key not in extra_env:
+            env.pop(key, None)
     env.update(isolated_env)
     env.update(extra_env)
 

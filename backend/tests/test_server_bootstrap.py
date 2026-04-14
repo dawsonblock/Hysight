@@ -528,7 +528,10 @@ def test_proof_runner_uses_explicit_isolated_storage_env():
     )
     assert "isolated_storage" in proof_runner
     assert '"MEMORY_BACKEND": "python"' in proof_runner
-    assert 'env.pop("MEMORY_SERVICE_URL", None)' in proof_runner
+    assert "LIVE_SIDECAR_ENV_KEYS" in proof_runner
+    assert '"RUN_MEMVID_TESTS"' in proof_runner
+    assert '"MEMORY_SERVICE_URL"' in proof_runner
+    assert 'env.pop(key, None)' in proof_runner
     assert 'tempfile.mkdtemp(prefix="hysight-proof-")' in proof_runner
 
 
