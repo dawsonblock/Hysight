@@ -4,26 +4,36 @@ on:
   push:
     paths:
       - ".github/workflows/backend-proof.yml"
+      - "BOOTSTRAP.md"
+      - "Makefile"
       - "backend/**"
       - "contract/**"
+      - "frontend/src/lib/api.fixtures.generated.json"
+      - "frontend/src/lib/api.js"
       - "hca/**"
       - "memvid/**"
       - "memvid_service/**"
       - "memory_service/**"
       - "pyproject.toml"
       - "README.md"
+      - "scripts/**"
       - "tests/**"
   pull_request:
     paths:
       - ".github/workflows/backend-proof.yml"
+      - "BOOTSTRAP.md"
+      - "Makefile"
       - "backend/**"
       - "contract/**"
+      - "frontend/src/lib/api.fixtures.generated.json"
+      - "frontend/src/lib/api.js"
       - "hca/**"
       - "memvid/**"
       - "memvid_service/**"
       - "memory_service/**"
       - "pyproject.toml"
       - "README.md"
+      - "scripts/**"
       - "tests/**"
   workflow_dispatch:
     inputs:
@@ -55,12 +65,35 @@ jobs:
             backend/requirements.txt
             backend/requirements-test.txt
             hca/pyproject.toml
+      - name: Run repo integrity sentinel
+        run: python scripts/check_repo_integrity.py
       - name: Bootstrap test environment
         run: |
           python -m pip install --upgrade pip
-          make test-bootstrap
+          make venv
       - name: Run baseline local proof surface
-        run: python scripts/run_tests.py
+        run: make test
+      - name: Print baseline proof summary
+        if: always()
+        run: python - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("artifacts/proof/baseline.json")
+if not path.exists():
+    raise SystemExit("baseline receipt missing")
+payload = json.loads(path.read_text(encoding="utf-8"))
+print(
+    f"baseline outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']} failed={payload['failed_test_count']} errors={payload['error_test_count']}"
+)
+PY
+      - name: Upload baseline proof receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-proof-receipt
+          path: artifacts/proof/baseline.json
+          if-no-files-found: error
 
   hca-smoke:
     name: HCA Smoke Proof
@@ -78,12 +111,32 @@ jobs:
             backend/requirements.txt
             backend/requirements-test.txt
             hca/pyproject.toml
+      - name: Run repo integrity sentinel
+        run: python scripts/check_repo_integrity.py
       - name: Bootstrap test environment
         run: |
           python -m pip install --upgrade pip
-          make test-bootstrap
+          make venv
       - name: Run make test-pipeline
         run: make test-pipeline
+      - name: Print HCA smoke proof summary
+        if: always()
+        run: python - <<'PY'
+import json
+from pathlib import Path
+path = Path("artifacts/proof/pipeline.json")
+if not path.exists():
+    raise SystemExit("pipeline receipt missing")
+payload = json.loads(path.read_text(encoding="utf-8"))
+print(f"pipeline outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+PY
+      - name: Upload HCA smoke proof receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hca-smoke-proof-receipt
+          path: artifacts/proof/pipeline.json
+          if-no-files-found: error
 
   contract-conformance:
     name: Contract Conformance Proof
@@ -101,12 +154,32 @@ jobs:
             backend/requirements.txt
             backend/requirements-test.txt
             hca/pyproject.toml
+      - name: Run repo integrity sentinel
+        run: python scripts/check_repo_integrity.py
       - name: Bootstrap test environment
         run: |
           python -m pip install --upgrade pip
-          make test-bootstrap
+          make venv
       - name: Run make test-contract
         run: make test-contract
+      - name: Print contract proof summary
+        if: always()
+        run: python - <<'PY'
+import json
+from pathlib import Path
+path = Path("artifacts/proof/contract.json")
+if not path.exists():
+    raise SystemExit("contract receipt missing")
+payload = json.loads(path.read_text(encoding="utf-8"))
+print(f"contract outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+PY
+      - name: Upload contract proof receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-proof-receipt
+          path: artifacts/proof/contract.json
+          if-no-files-found: error
 
   backend-baseline:
     name: Backend Baseline Proof
@@ -124,12 +197,32 @@ jobs:
             backend/requirements.txt
             backend/requirements-test.txt
             hca/pyproject.toml
+      - name: Run repo integrity sentinel
+        run: python scripts/check_repo_integrity.py
       - name: Bootstrap test environment
         run: |
           python -m pip install --upgrade pip
-          make test-bootstrap
+          make venv
       - name: Run make test-backend-baseline
         run: make test-backend-baseline
+      - name: Print backend baseline proof summary
+        if: always()
+        run: python - <<'PY'
+import json
+from pathlib import Path
+path = Path("artifacts/proof/backend-baseline.json")
+if not path.exists():
+    raise SystemExit("backend baseline receipt missing")
+payload = json.loads(path.read_text(encoding="utf-8"))
+print(f"backend-baseline outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+PY
+      - name: Upload backend baseline proof receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-baseline-proof-receipt
+          path: artifacts/proof/backend-baseline.json
+          if-no-files-found: error
 
   backend-integration:
     name: Backend Integration Proof
@@ -147,12 +240,58 @@ jobs:
             backend/requirements.txt
             backend/requirements-test.txt
             hca/pyproject.toml
+      - name: Run repo integrity sentinel
+        run: python scripts/check_repo_integrity.py
       - name: Bootstrap test environment
         run: |
           python -m pip install --upgrade pip
-          make test-bootstrap
+          make venv
+          make test-bootstrap-integration
       - name: Run make test-backend-integration
         run: make test-backend-integration
+      - name: Print backend integration proof summary
+        if: always()
+        run: python - <<'PY'
+import json
+from pathlib import Path
+path = Path("artifacts/proof/integration.json")
+if not path.exists():
+    raise SystemExit("integration receipt missing")
+payload = json.loads(path.read_text(encoding="utf-8"))
+print(f"integration outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+PY
+      - name: Upload backend integration proof receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-integration-proof-receipt
+          path: artifacts/proof/integration.json
+          if-no-files-found: error
+
+  fixture-drift:
+    name: Fixture Drift Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements-core.txt
+            backend/requirements-integration.txt
+            backend/requirements.txt
+            backend/requirements-test.txt
+            hca/pyproject.toml
+      - name: Run repo integrity sentinel
+        run: python scripts/check_repo_integrity.py
+      - name: Bootstrap test environment
+        run: |
+          python -m pip install --upgrade pip
+          make venv
+      - name: Run gated fixture drift check
+        run: make test-fixture-drift
 
   backend-live-mongo:
     name: Backend Live Mongo Proof
@@ -171,9 +310,12 @@ jobs:
             backend/requirements.txt
             backend/requirements-test.txt
             hca/pyproject.toml
+      - name: Run repo integrity sentinel
+        run: python scripts/check_repo_integrity.py
       - name: Bootstrap integration test environment
         run: |
           python -m pip install --upgrade pip
+          make venv
           make test-bootstrap-integration
       - name: Run make proof-mongo-live
         env:
@@ -181,12 +323,25 @@ jobs:
           LIVE_MONGO_DB_NAME: hysight_live_ci
           LIVE_MONGO_IMAGE: mongo:7
         run: make proof-mongo-live
+      - name: Print live Mongo proof summary
+        if: always()
+        run: python - <<'PY'
+import json
+from pathlib import Path
+path = Path("artifacts/proof/live-mongo.json")
+if not path.exists():
+    raise SystemExit("live Mongo receipt missing")
+payload = json.loads(path.read_text(encoding="utf-8"))
+print(f"live-mongo outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+PY
       - name: Upload live Mongo proof receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-live-mongo-proof-receipt
-          path: test_reports/proof_receipts/backend-live-mongo-proof.json
+          path: |
+            artifacts/proof/live-mongo.json
+            artifacts/proof/history/live-mongo-*.json
           if-no-files-found: warn
 
   backend-live-sidecar:
@@ -206,10 +361,12 @@ jobs:
             backend/requirements.txt
             backend/requirements-test.txt
             hca/pyproject.toml
+      - name: Run repo integrity sentinel
+        run: python scripts/check_repo_integrity.py
       - name: Bootstrap test environment
         run: |
           python -m pip install --upgrade pip
-          make test-bootstrap
+          make venv
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Start memvid sidecar
@@ -219,12 +376,24 @@ jobs:
           MEMORY_SERVICE_URL: http://localhost:3031
           MEMORY_SERVICE_PORT: 3031
         run: make proof-sidecar
+      - name: Print live sidecar proof summary
+        if: always()
+        run: python - <<'PY'
+import json
+from pathlib import Path
+path = Path("artifacts/proof/live-sidecar.json")
+if not path.exists():
+    raise SystemExit("live sidecar receipt missing")
+payload = json.loads(path.read_text(encoding="utf-8"))
+print(f"live-sidecar outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+PY
       - name: Upload live sidecar proof receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-live-sidecar-proof-receipt
           path: |
-            test_reports/proof_receipts/backend-live-sidecar-proof.json
+            artifacts/proof/live-sidecar.json
+            artifacts/proof/history/live-sidecar-*.json
             test_reports/proof-sidecar.log
           if-no-files-found: warn

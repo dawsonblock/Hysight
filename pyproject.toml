@@ -3,6 +3,7 @@ markers = [
     "baseline: default service-free proof tier",
     "integration: opt-in proof tier for backend boundary tests",
     "live: opt-in proof tier for live-service backend tests",
+    "fixture_drift: opt-in backend/frontend generated fixture drift check",
     "slow: marks tests as slow-running — requires real HCA Runtime (deselect with '-m \"not slow\"')",
 ]
 filterwarnings = ["ignore:.*python_multipart.*:PendingDeprecationWarning"]

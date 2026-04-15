@@ -184,13 +184,16 @@ class _FakeSidecar:
 
 
 @pytest.fixture(autouse=True)
-def sidecar():
+def sidecar(request):
     """Provide one isolated sidecar backend per test.
 
     Mock mode gets a fresh in-memory store every test; live mode hits the real
     service only when explicitly enabled.
     """
-    if _USE_REAL_SIDECAR:
+    use_real_sidecar = _USE_REAL_SIDECAR and request.node.get_closest_marker(
+        "live"
+    ) is not None
+    if use_real_sidecar:
         yield None
         return
 

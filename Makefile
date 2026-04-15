@@ -1,4 +1,5 @@
 .PHONY: \
+	dev \
 	venv \
 	test-bootstrap \
 	test-bootstrap-integration \
@@ -12,6 +13,7 @@
 	test-mongo-live \
 	test-sidecar \
 	proof-sidecar \
+	test-fixture-drift \
 	run-memvid-sidecar \
 	run \
 	run-sidecar \
@@ -30,9 +32,13 @@ LIVE_MONGO_IMAGE ?= mongo:7
 MEMORY_SERVICE_PORT ?= 3031
 MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)
 
+dev: venv
+
 venv:
 	python -m venv $(VENV_DIR)
-	@echo "Created $(VENV_DIR). Activate it with: source $(VENV_DIR)/bin/activate"
+	$(abspath $(VENV_DIR))/bin/python -m pip install --upgrade pip
+	$(abspath $(VENV_DIR))/bin/python -m pip install -r backend/requirements-test.txt
+	@echo "Created $(VENV_DIR), installed baseline requirements, and installed editable ./hca. Next: make test"
 
 test-bootstrap:
 	$(PIP) install -r backend/requirements-test.txt
@@ -47,39 +53,34 @@ test:
 	$(PYTHON) scripts/run_tests.py
 
 test-pipeline:
-	$(PYTEST) tests/test_hca_pipeline.py -q
+	$(PYTHON) scripts/run_tests.py --baseline-step pipeline
 
 test-contract:
-	$(PYTEST) backend/tests/test_contract_conformance.py -q
+	$(PYTHON) scripts/run_tests.py --baseline-step contract
 
 test-backend-baseline:
-	$(PYTEST) \
-		backend/tests/test_hca.py \
-		backend/tests/test_memory.py \
-		backend/tests/test_server_bootstrap.py \
-		-q
+	$(PYTHON) scripts/run_tests.py --baseline-step backend-baseline
 
 test-backend-integration:
-	$(PYTEST) backend/tests/test_memvid_sidecar.py -q --run-integration
+	$(PYTHON) scripts/run_tests.py --integration
 
 proof-mongo-live:
 	$(PYTHON) scripts/proof_mongo_live.py --image "$(LIVE_MONGO_IMAGE)" --port "$(LIVE_MONGO_PORT)" --db-name "$(LIVE_MONGO_DB_NAME)"
 
 test-mongo-live:
 	RUN_MONGO_TESTS=1 MONGO_URL="$(LIVE_MONGO_URL)" DB_NAME="$(LIVE_MONGO_DB_NAME)" \
-		$(PYTEST) backend/tests/test_status_live_mongo.py -q --run-live
+		$(PYTHON) scripts/run_tests.py --mongo-live
 
 test-sidecar:
-	@curl --fail --silent "$(MEMORY_SERVICE_URL)/health" >/dev/null || { \
-		echo "test-sidecar requires a healthy memvid sidecar at $(MEMORY_SERVICE_URL)/health. Start the sidecar first with make run-memvid-sidecar."; \
-		exit 1; \
-	}
 	RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" \
-		$(PYTEST) backend/tests/test_memvid_sidecar.py -q --run-live
+		$(PYTHON) scripts/run_tests.py --sidecar
 
 proof-sidecar:
 	MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" MEMORY_SERVICE_PORT="$(MEMORY_SERVICE_PORT)" \
 		$(PYTHON) scripts/proof_sidecar.py
+
+test-fixture-drift:
+	$(PYTEST) backend/tests/test_server_bootstrap.py -q --check-fixture-drift -k generated_frontend_api_fixtures_match_backend_export
 
 run-memvid-sidecar:
 	MEMORY_SERVICE_PORT="$(MEMORY_SERVICE_PORT)" \

@@ -1,49 +1,107 @@
 #!/usr/bin/env python3
-"""Write machine-readable proof receipts for optional proof surfaces."""
+"""Write machine-readable proof receipts for Hysight proof surfaces."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterable, List
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_RECEIPT_DIR = REPO_ROOT / "test_reports" / "proof_receipts"
+DEFAULT_RECEIPT_DIR = REPO_ROOT / "artifacts" / "proof"
+
+COUNT_KEYS = (
+    "total_test_count",
+    "passed_test_count",
+    "skipped_test_count",
+    "failed_test_count",
+    "error_test_count",
+)
 
 
-def _junit_counts(junit_xml: Path | None) -> tuple[Dict[str, int], str | None]:
-    counts = {
-        "total_test_count": 0,
-        "passed_test_count": 0,
-        "skipped_test_count": 0,
-        "failed_test_count": 0,
-        "error_test_count": 0,
-    }
+def empty_test_counts() -> Dict[str, int]:
+    return {key: 0 for key in COUNT_KEYS}
+
+
+def merge_test_counts(*counts_list: Iterable[Dict[str, int]]) -> Dict[str, int]:
+    merged = empty_test_counts()
+    for counts in counts_list:
+        for key in COUNT_KEYS:
+            merged[key] += int(counts.get(key, 0))
+    return merged
+
+
+def _strip_xml_namespace(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def summarize_junit_xml(
+    junit_xml: Path | None,
+) -> tuple[Dict[str, int], List[Dict[str, str]], str | None]:
+    counts = empty_test_counts()
+    skipped_cases: List[Dict[str, str]] = []
     if junit_xml is None or not junit_xml.exists():
-        return counts, None
+        return counts, skipped_cases, None
 
     try:
         root = ET.parse(junit_xml).getroot()
     except ET.ParseError as exc:
-        return counts, f"invalid junit xml: {exc}"
+        return counts, skipped_cases, f"invalid junit xml: {exc}"
 
-    tests = int(root.attrib.get("tests", 0))
-    skipped = int(root.attrib.get("skipped", 0))
-    failures = int(root.attrib.get("failures", 0))
-    errors = int(root.attrib.get("errors", 0))
-    counts["total_test_count"] = tests
-    counts["skipped_test_count"] = skipped
-    counts["failed_test_count"] = failures
-    counts["error_test_count"] = errors
-    counts["passed_test_count"] = max(tests - skipped - failures - errors, 0)
-    return counts, None
+    testcases = [
+        testcase
+        for testcase in root.iter()
+        if _strip_xml_namespace(testcase.tag) == "testcase"
+    ]
+    if not testcases:
+        tests = int(root.attrib.get("tests", 0))
+        skipped = int(root.attrib.get("skipped", 0))
+        failures = int(root.attrib.get("failures", 0))
+        errors = int(root.attrib.get("errors", 0))
+        counts["total_test_count"] = tests
+        counts["skipped_test_count"] = skipped
+        counts["failed_test_count"] = failures
+        counts["error_test_count"] = errors
+        counts["passed_test_count"] = max(tests - skipped - failures - errors, 0)
+        return counts, skipped_cases, None
+
+    counts["total_test_count"] = len(testcases)
+    for testcase in testcases:
+        outcome = None
+        for child in list(testcase):
+            child_tag = _strip_xml_namespace(child.tag)
+            if child_tag == "skipped":
+                counts["skipped_test_count"] += 1
+                skipped_cases.append(
+                    {
+                        "classname": testcase.attrib.get("classname", ""),
+                        "name": testcase.attrib.get("name", ""),
+                        "message": child.attrib.get("message", "")
+                        or (child.text or "").strip(),
+                    }
+                )
+                outcome = "skipped"
+                break
+            if child_tag == "failure":
+                counts["failed_test_count"] += 1
+                outcome = "failed"
+                break
+            if child_tag == "error":
+                counts["error_test_count"] += 1
+                outcome = "error"
+                break
+        if outcome is None:
+            counts["passed_test_count"] += 1
+
+    return counts, skipped_cases, None
 
 
 def _resolve_commit_sha() -> str:
@@ -75,28 +133,40 @@ def write_proof_receipt(
     service_endpoint: str,
     command: str,
     junit_xml: Path | None = None,
+    counts: Dict[str, int] | None = None,
     outcome: str,
     failure_reason: str | None = None,
     metadata: Dict[str, Any] | None = None,
 ) -> Path:
-    counts, junit_error = _junit_counts(junit_xml)
+    resolved_counts = counts or empty_test_counts()
+    skipped_cases: List[Dict[str, str]] = []
+    junit_error = None
+    if counts is None:
+        resolved_counts, skipped_cases, junit_error = summarize_junit_xml(junit_xml)
+
+    timestamp = datetime.now(timezone.utc).isoformat()
     receipt = {
-        "schema_version": 1,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "schema_version": 2,
+        "timestamp": timestamp,
+        "generated_at": timestamp,
         "commit_sha": _resolve_commit_sha(),
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
         "proof_tier": proof_tier,
         "environment_mode": environment_mode,
         "service_connection_mode": service_connection_mode,
         "service_endpoint": service_endpoint,
         "command": command,
         "outcome": outcome,
-        **counts,
+        **resolved_counts,
         "junit_xml": (
             str(junit_xml.relative_to(REPO_ROOT))
             if junit_xml is not None and junit_xml.exists()
             else None
         ),
     }
+    if skipped_cases:
+        receipt["skipped_cases"] = skipped_cases
     if failure_reason:
         receipt["failure_reason"] = failure_reason
     if junit_error:
@@ -121,6 +191,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--service-endpoint", required=True)
     parser.add_argument("--command", required=True)
     parser.add_argument("--junit-xml", type=Path)
+    parser.add_argument("--counts-json")
     parser.add_argument("--outcome", required=True)
     parser.add_argument("--failure-reason")
     return parser.parse_args()
@@ -128,6 +199,9 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    counts = None
+    if args.counts_json:
+        counts = json.loads(args.counts_json)
     output_path = write_proof_receipt(
         output_path=args.output,
         proof_tier=args.proof_tier,
@@ -136,6 +210,7 @@ def main() -> int:
         service_endpoint=args.service_endpoint,
         command=args.command,
         junit_xml=args.junit_xml,
+        counts=counts,
         outcome=args.outcome,
         failure_reason=args.failure_reason,
     )

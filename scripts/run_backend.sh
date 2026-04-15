@@ -10,6 +10,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
 EXPECTED_HCA_AUTHORITY="The Python runtime package lives under ./hca and is installed editable as part of repo bootstrap."
+BOOTSTRAP_HINT="See BOOTSTRAP.md for the supported bootstrap path."
 
 # Change to repo root early so relative imports (memory_service, hca) are
 # resolvable by Python regardless of the caller's working directory.
@@ -84,6 +85,7 @@ echo ""
 # Python
 if ! command -v python &>/dev/null && ! command -v python3 &>/dev/null; then
   echo "ERROR: python not found. Install Python 3.11+ and try again." >&2
+  echo "       $BOOTSTRAP_HINT" >&2
   exit 1
 fi
 if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
@@ -96,7 +98,8 @@ PYTHON="${PYTHON:-$DEFAULT_PYTHON}"
 # uvicorn
 if ! "$PYTHON" -c "import uvicorn" 2>/dev/null; then
   echo "ERROR: uvicorn not installed." >&2
-  echo "       Run: pip install -r backend/requirements-core.txt" >&2
+  echo "       Run: make venv" >&2
+  echo "       $BOOTSTRAP_HINT" >&2
   exit 1
 fi
 
@@ -118,15 +121,15 @@ then
   echo "ERROR: $EXPECTED_HCA_AUTHORITY" >&2
   echo "       Repair:" >&2
   echo "         make venv" >&2
-  echo "         source .venv/bin/activate" >&2
-  echo "         make test-bootstrap" >&2
+  echo "       $BOOTSTRAP_HINT" >&2
   exit 1
 fi
 
 # memory_service importable
 if ! "$PYTHON" -c "import memory_service" 2>/dev/null; then
   echo "ERROR: memory_service package not found on sys.path." >&2
-  echo "       Run from the repo root, or: pip install -r backend/requirements-test.txt" >&2
+  echo "       Run: make venv" >&2
+  echo "       $BOOTSTRAP_HINT" >&2
   exit 1
 fi
 
@@ -139,6 +142,7 @@ if [ "$MEMORY_BACKEND" = "rust" ]; then
   if [ -z "${MEMORY_SERVICE_URL:-}" ]; then
     echo "ERROR: MEMORY_BACKEND=rust requires MEMORY_SERVICE_URL to be set." >&2
     echo "       Example: MEMORY_SERVICE_URL=http://localhost:3031" >&2
+    echo "       $BOOTSTRAP_HINT" >&2
     exit 1
   fi
   echo "Probing sidecar at $MEMORY_SERVICE_URL/health …"
@@ -148,6 +152,7 @@ if [ "$MEMORY_BACKEND" = "rust" ]; then
     echo "       Start the sidecar first:" >&2
     echo "         cargo run --manifest-path memvid_service/Cargo.toml --release" >&2
     echo "       Or use Docker: docker compose -f compose.yml -f compose.sidecar.yml up" >&2
+    echo "       $BOOTSTRAP_HINT" >&2
     exit 1
   fi
   echo "Sidecar healthy ✓"

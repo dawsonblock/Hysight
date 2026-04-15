@@ -379,9 +379,10 @@
     "SubsystemsResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "replay_authority", "hca_runtime_authority", "database", "memory", "storage", "llm"],
+      "required": ["status", "consistency_check_passed", "replay_authority", "hca_runtime_authority", "database", "memory", "storage", "llm"],
       "properties": {
         "status": { "type": "string" },
+        "consistency_check_passed": { "type": "boolean" },
         "replay_authority": { "type": "string" },
         "hca_runtime_authority": { "type": "string" },
         "database": { "$ref": "#/definitions/DatabaseSubsystemStatus" },

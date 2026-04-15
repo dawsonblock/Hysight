@@ -88,6 +88,7 @@ def build_fixtures() -> dict[str, object]:
 
     subsystem_fixture = SubsystemsResponse(
         status="degraded",
+        consistency_check_passed=True,
         replay_authority="local_store",
         hca_runtime_authority="python_hca_runtime",
         database=DatabaseSubsystemStatus(

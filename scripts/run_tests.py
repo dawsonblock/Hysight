@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Universal test runner for Hysight.
+"""Single proof authority for Hysight.
 
 Default mode runs only the supported service-free local baseline proof surface:
 
@@ -15,27 +15,29 @@ Optional proof tiers are explicit and do not broaden the baseline contract:
 
     MEMORY_SERVICE_PORT=3032 \
     python scripts/run_tests.py --sidecar
-
-Proof modes and their corresponding CI job names:
-- Baseline local proof    → CI: Baseline Local Proof Surface
-- HCA pipeline proof      → CI: HCA Smoke Proof
-- Contract conformance    → CI: Contract Conformance Proof
-- Backend baseline proof  → CI: Backend Baseline Proof
-- Backend integration     → CI: Backend Integration Proof   (--integration)
-- Live Mongo proof        → CI: Backend Live Mongo Proof    (--mongo-live)
-- Live sidecar proof      → CI: Backend Live Sidecar Proof  (--sidecar)
 """
+
+from __future__ import annotations
 
 import argparse
 import importlib
 import importlib.util
+import json
 import os
 import pathlib
+import re
 import shlex
 import subprocess
 import sys
 import tempfile
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Sequence
+
+from proof_receipt import (
+    merge_test_counts,
+    summarize_junit_xml,
+    write_proof_receipt,
+)
 
 DEFAULT_MEMORY_SERVICE_PORT = (
     os.environ.get("MEMORY_SERVICE_PORT", "").strip() or "3031"
@@ -54,23 +56,76 @@ LIVE_MONGO_DB_NAME = os.environ.get(
     "hysight_live",
 )
 
-# Repo root is two levels up from this file (scripts/run_tests.py → repo root).
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXPECTED_HCA_PACKAGE_DIR = (REPO_ROOT / "hca" / "src" / "hca").resolve()
 PACKAGE_AUTHORITY_SENTENCE = (
     "The Python runtime package lives under ./hca and is installed editable as part of repo bootstrap."
 )
+BOOTSTRAP_GUIDE = "BOOTSTRAP.md"
+BOOTSTRAP_HINT = f"See {BOOTSTRAP_GUIDE} for the supported bootstrap path."
+REPO_VENV_DIR = (REPO_ROOT / ".venv").resolve()
+PROOF_ARTIFACT_DIR = REPO_ROOT / "artifacts" / "proof"
+PROOF_HISTORY_DIR = PROOF_ARTIFACT_DIR / "history"
+JUNIT_DIR = REPO_ROOT / "test_reports" / "pytest"
+OPTIONAL_PROOF_STALENESS_DAYS = int(
+    os.environ.get("HYSIGHT_OPTIONAL_PROOF_STALENESS_DAYS", "30")
+)
+PROOF_ENVIRONMENT_MODE_ENV = "HYSIGHT_PROOF_ENVIRONMENT_MODE"
+PROOF_SERVICE_CONNECTION_MODE_ENV = "HYSIGHT_PROOF_SERVICE_CONNECTION_MODE"
+
+COLLECTION_ISSUE_PATTERNS = {
+    "pytest_collection_warning": re.compile(r"PytestCollectionWarning"),
+    "pytest_unknown_mark_warning": re.compile(r"PytestUnknownMarkWarning"),
+    "collection_error": re.compile(r"ERROR collecting "),
+    "zero_items_collected": re.compile(r"collected 0 items"),
+}
 
 # ---------------------------------------------------------------------------
 # Proof surface definition
 # ---------------------------------------------------------------------------
 
 Step = Dict[str, Any]
+StepResult = Dict[str, Any]
+
+STEP_JUNIT_FILENAMES = {
+    "pipeline": "hca-pipeline-proof.xml",
+    "backend-baseline": "backend-baseline-proof.xml",
+    "contract": "contract-conformance-proof.xml",
+    "integration": "backend-integration-proof.xml",
+    "mongo-live": "backend-live-mongo-proof.xml",
+    "sidecar": "backend-live-sidecar-proof.xml",
+}
+
+EXPECTED_BASELINE_STEP_COUNTS = {
+    "pipeline": {
+        "total_test_count": 7,
+        "passed_test_count": 7,
+        "skipped_test_count": 0,
+        "failed_test_count": 0,
+        "error_test_count": 0,
+    },
+    "backend-baseline": {
+        "total_test_count": 74,
+        "passed_test_count": 74,
+        "skipped_test_count": 0,
+        "failed_test_count": 0,
+        "error_test_count": 0,
+    },
+    "contract": {
+        "total_test_count": 18,
+        "passed_test_count": 18,
+        "skipped_test_count": 0,
+        "failed_test_count": 0,
+        "error_test_count": 0,
+    },
+}
 
 
 BASELINE_STEPS: List[Step] = [
     {
+        "id": "pipeline",
         "name": "HCA pipeline proof",
+        "receipt_name": "pipeline",
         "isolated_storage": True,
         "cmd": [
             sys.executable, "-m", "pytest",
@@ -78,7 +133,9 @@ BASELINE_STEPS: List[Step] = [
         ],
     },
     {
+        "id": "backend-baseline",
         "name": "Backend baseline proof",
+        "receipt_name": "backend-baseline",
         "isolated_storage": True,
         "cmd": [
             sys.executable, "-m", "pytest",
@@ -89,7 +146,9 @@ BASELINE_STEPS: List[Step] = [
         ],
     },
     {
+        "id": "contract",
         "name": "Contract conformance proof",
+        "receipt_name": "contract",
         "isolated_storage": True,
         "cmd": [
             sys.executable, "-m", "pytest",
@@ -99,7 +158,9 @@ BASELINE_STEPS: List[Step] = [
 ]
 
 INTEGRATION_STEP: Step = {
+    "id": "integration",
     "name": "Backend integration proof",
+    "receipt_name": "integration",
     "isolated_storage": True,
     "cmd": [
         sys.executable, "-m", "pytest",
@@ -110,7 +171,9 @@ INTEGRATION_STEP: Step = {
 }
 
 MONGO_LIVE_STEP: Step = {
+    "id": "mongo-live",
     "name": "Backend live Mongo proof",
+    "receipt_name": "live-mongo",
     "isolated_storage": True,
     "cmd": [
         sys.executable, "-m", "pytest",
@@ -126,7 +189,9 @@ MONGO_LIVE_STEP: Step = {
 }
 
 SIDECAR_STEP: Step = {
+    "id": "sidecar",
     "name": "Backend live sidecar proof",
+    "receipt_name": "live-sidecar",
     "isolated_storage": True,
     "cmd": [
         sys.executable, "-m", "pytest",
@@ -166,27 +231,50 @@ OPTIONAL_PROOF_ENV_KEYS = (
     "DB_NAME",
 )
 
-BASELINE_TEST_HINT = (
-    "python -m pip install -r backend/requirements-test.txt"
-)
+BASELINE_TEST_HINT = "make venv"
 MONGO_TEST_HINT = (
-    "python -m pip install -r backend/requirements-integration.txt"
+    "make venv && ./.venv/bin/python -m pip install -r backend/requirements-integration.txt"
 )
 
 
 def _repair_command(include_integration: bool) -> str:
-    bootstrap_target = (
-        "make test-bootstrap-integration"
-        if include_integration
-        else "make test-bootstrap"
+    if include_integration:
+        return (
+            "make venv && ./.venv/bin/python -m pip install "
+            "-r backend/requirements-integration.txt"
+        )
+    return "make venv"
+
+
+def _strict_venv_requested(args: argparse.Namespace) -> bool:
+    return any(
+        (
+            bool(args.strict_venv),
+            os.environ.get("HYSIGHT_STRICT_VENV") == "1",
+            os.environ.get("CI", "").lower() == "true",
+            os.environ.get("GITHUB_ACTIONS", "").lower() == "true",
+        )
     )
-    return "\n    ".join(
-        [
-            "make venv",
-            "source .venv/bin/activate",
-            bootstrap_target,
-        ]
+
+
+def _validate_repo_local_venv(*, strict: bool) -> bool:
+    current_prefix = pathlib.Path(sys.prefix).resolve()
+    if current_prefix == REPO_VENV_DIR:
+        return True
+
+    message = (
+        "Hysight proofs are expected to run from the repo-local .venv.\n"
+        f"Resolved sys.prefix: {current_prefix}\n"
+        f"Expected .venv: {REPO_VENV_DIR}\n"
+        f"Repair:\n    { _repair_command(include_integration=False) }\n"
+        f"{BOOTSTRAP_HINT}"
     )
+    if strict:
+        print(message, file=sys.stderr)
+        return False
+
+    print(f"WARNING: {message}", file=sys.stderr)
+    return True
 
 
 def _validate_hca_package_authority(*, include_integration: bool) -> bool:
@@ -205,6 +293,7 @@ def _validate_hca_package_authority(*, include_integration: bool) -> bool:
     )
     print(f"Expected editable source under: {EXPECTED_HCA_PACKAGE_DIR}")
     print("Repair:\n    " + _repair_command(include_integration))
+    print(BOOTSTRAP_HINT)
     return False
 
 
@@ -228,7 +317,7 @@ def _print_missing_dependencies(missing: List[str], install_hint: str) -> None:
     joined = ", ".join(sorted(missing))
     print(
         "Missing required Python dependencies: "
-        f"{joined}.\nRun:\n    {install_hint}"
+        f"{joined}.\nRun:\n    {install_hint}\n{BOOTSTRAP_HINT}"
     )
 
 
@@ -282,12 +371,238 @@ def _check_sidecar_health() -> bool:
         return False
 
 
+def _step_junit_path(step_id: str) -> pathlib.Path:
+    JUNIT_DIR.mkdir(parents=True, exist_ok=True)
+    return JUNIT_DIR / STEP_JUNIT_FILENAMES[step_id]
+
+
+def _build_pytest_command(step: Step, junit_xml: pathlib.Path) -> List[str]:
+    return [
+        *step["cmd"],
+        "-ra",
+        "--strict-markers",
+        f"--junitxml={junit_xml}",
+    ]
+
+
+def _collection_issues(output: str) -> List[str]:
+    issues = []
+    for label, pattern in COLLECTION_ISSUE_PATTERNS.items():
+        if pattern.search(output):
+            issues.append(label)
+    return issues
+
+
+def _read_receipt_timestamp(receipt_path: pathlib.Path) -> datetime | None:
+    if not receipt_path.exists():
+        return None
+    try:
+        payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    raw_timestamp = payload.get("timestamp") or payload.get("generated_at")
+    if not raw_timestamp:
+        return None
+    try:
+        return datetime.fromisoformat(raw_timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _warn_if_stale_optional_receipt(
+    *,
+    proof_name: str,
+    receipt_path: pathlib.Path,
+    threshold_days: int,
+) -> None:
+    previous_timestamp = _read_receipt_timestamp(receipt_path)
+    if previous_timestamp is None:
+        return
+    age = datetime.now(timezone.utc) - previous_timestamp.astimezone(timezone.utc)
+    if age.days < threshold_days:
+        return
+    print(
+        "WARNING: last "
+        f"{proof_name} receipt is {age.days} day(s) old "
+        f"({previous_timestamp.isoformat()}). Optional proof may be stale.",
+        file=sys.stderr,
+    )
+
+
+def _invocation_receipt_name(
+    args: argparse.Namespace,
+    steps: Sequence[Step],
+) -> str:
+    if args.baseline_step:
+        return args.baseline_step
+    if not any((args.integration, args.mongo_live, args.sidecar)):
+        return "baseline"
+    if len(steps) == 1:
+        return str(steps[0]["receipt_name"])
+    joined = "-".join(step["receipt_name"] for step in steps)
+    return f"composite-{joined}"
+
+
+def _receipt_path_for_name(name: str) -> pathlib.Path:
+    PROOF_ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+    return PROOF_ARTIFACT_DIR / f"{name}.json"
+
+
+def _history_receipt_path(name: str) -> pathlib.Path:
+    PROOF_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return PROOF_HISTORY_DIR / f"{name}-{timestamp}.json"
+
+
+def _environment_mode() -> str:
+    if os.environ.get(PROOF_ENVIRONMENT_MODE_ENV):
+        return os.environ[PROOF_ENVIRONMENT_MODE_ENV]
+    if pathlib.Path(sys.prefix).resolve() == REPO_VENV_DIR:
+        return "repo_local_venv"
+    return "external_python"
+
+
+def _service_connection_mode(name: str) -> str:
+    if os.environ.get(PROOF_SERVICE_CONNECTION_MODE_ENV):
+        return os.environ[PROOF_SERVICE_CONNECTION_MODE_ENV]
+    if name == "live-mongo":
+        return "manual:existing-mongo"
+    if name == "live-sidecar":
+        return "manual:existing-sidecar"
+    if name == "integration":
+        return "mocked-boundary"
+    return "none"
+
+
+def _service_endpoint(name: str) -> str:
+    if name == "live-mongo":
+        return LIVE_MONGO_URL
+    if name == "live-sidecar":
+        return MEMORY_SERVICE_URL
+    return "n/a"
+
+
+def _counts_delta_message(
+    *,
+    step_name: str,
+    key: str,
+    expected: int,
+    actual: int,
+) -> str:
+    delta = actual - expected
+    return (
+        f"{step_name}: expected {key}={expected}, got {actual} "
+        f"(delta {delta:+d})."
+    )
+
+
+def _validate_baseline_result(result: StepResult) -> List[str]:
+    errors = []
+    expected = EXPECTED_BASELINE_STEP_COUNTS[result["id"]]
+    for key, expected_value in expected.items():
+        actual = int(result["counts"].get(key, 0))
+        if actual != expected_value:
+            errors.append(
+                _counts_delta_message(
+                    step_name=result["name"],
+                    key=key,
+                    expected=expected_value,
+                    actual=actual,
+                )
+            )
+    if result["counts"]["skipped_test_count"] > 0:
+        skipped_cases = result["skipped_cases"] or []
+        skipped_summary = "; ".join(
+            f"{case['classname']}::{case['name']} ({case['message']})"
+            for case in skipped_cases
+        )
+        errors.append(
+            "Baseline proof does not allow unexpected skips. "
+            f"Skipped cases: {skipped_summary or 'unknown skip reason'}"
+        )
+    return errors
+
+
+def _validate_result(step: Step, result: StepResult) -> List[str]:
+    errors = []
+    if result["junit_error"]:
+        errors.append(
+            f"{step['name']}: unable to parse JUnit XML: {result['junit_error']}"
+        )
+    if result["collection_issues"]:
+        errors.append(
+            f"{step['name']}: pytest reported collection issues: "
+            f"{', '.join(result['collection_issues'])}"
+        )
+    if step["id"] in EXPECTED_BASELINE_STEP_COUNTS:
+        errors.extend(_validate_baseline_result(result))
+    return errors
+
+
+def _write_invocation_receipt(
+    *,
+    receipt_name: str,
+    steps: Sequence[Step],
+    results: Sequence[StepResult],
+    outcome: str,
+    failure_reason: str | None,
+) -> None:
+    aggregate_counts = merge_test_counts(result["counts"] for result in results)
+    metadata = {
+        "steps": [
+            {
+                "id": result["id"],
+                "name": result["name"],
+                "counts": result["counts"],
+                "junit_xml": (
+                    str(result["junit_xml"].relative_to(REPO_ROOT))
+                    if result["junit_xml"].exists()
+                    else None
+                ),
+                "collection_issues": result["collection_issues"],
+                "skipped_cases": result["skipped_cases"],
+            }
+            for result in results
+        ],
+    }
+    latest_receipt_path = _receipt_path_for_name(receipt_name)
+    aggregate_counts = merge_test_counts(*(result["counts"] for result in results))
+    write_proof_receipt(
+        output_path=latest_receipt_path,
+        proof_tier=receipt_name,
+        environment_mode=_environment_mode(),
+        service_connection_mode=_service_connection_mode(receipt_name),
+        service_endpoint=_service_endpoint(receipt_name),
+        command=shlex.join([sys.executable, *sys.argv]),
+        counts=aggregate_counts,
+        outcome=outcome,
+        failure_reason=failure_reason,
+        metadata=metadata,
+    )
+    if receipt_name in {"live-mongo", "live-sidecar"}:
+        history_receipt_path = _history_receipt_path(receipt_name)
+        write_proof_receipt(
+            output_path=history_receipt_path,
+            proof_tier=receipt_name,
+            environment_mode=_environment_mode(),
+            service_connection_mode=_service_connection_mode(receipt_name),
+            service_endpoint=_service_endpoint(receipt_name),
+            command=shlex.join([sys.executable, *sys.argv]),
+            counts=aggregate_counts,
+            outcome=outcome,
+            failure_reason=failure_reason,
+            metadata=metadata,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
-def _run_step(step: Step) -> int:
-    cmd = step["cmd"]
+def _run_step(step: Step) -> StepResult:
+    junit_xml = _step_junit_path(step["id"])
+    junit_xml.unlink(missing_ok=True)
+    cmd = _build_pytest_command(step, junit_xml)
     extra_env = step.get("env", {})
     isolated_dir = None
     isolated_env: Dict[str, str] = {}
@@ -316,8 +631,34 @@ def _run_step(step: Step) -> int:
         print(f"    {display_cmd}")
 
     try:
-        result = subprocess.run(cmd, env=env, cwd=REPO_ROOT, check=False)
-        return result.returncode
+        completed = subprocess.run(
+            cmd,
+            env=env,
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.stdout:
+            print(completed.stdout, end="")
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
+
+        counts, skipped_cases, junit_error = summarize_junit_xml(
+            junit_xml if junit_xml.exists() else None
+        )
+        output = f"{completed.stdout}\n{completed.stderr}".strip()
+        return {
+            "id": step["id"],
+            "name": step["name"],
+            "receipt_name": step["receipt_name"],
+            "returncode": completed.returncode,
+            "junit_xml": junit_xml,
+            "counts": counts,
+            "skipped_cases": skipped_cases,
+            "junit_error": junit_error,
+            "collection_issues": _collection_issues(output),
+        }
     finally:
         if isolated_dir is not None:
             for path in sorted(isolated_dir.rglob("*"), reverse=True):
@@ -332,6 +673,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--baseline-step",
+        choices=("pipeline", "backend-baseline", "contract"),
+        help=(
+            "Run a single baseline proof step through the canonical runner. "
+            "Used by Make targets and CI jobs that want per-surface receipts."
+        ),
     )
     parser.add_argument(
         "--integration",
@@ -360,7 +709,25 @@ def main() -> int:
             "explicitly."
         ),
     )
+    parser.add_argument(
+        "--strict-venv",
+        action="store_true",
+        help=(
+            "Fail instead of warn when sys.prefix does not resolve to the "
+            "repo-local .venv. CI also enables this behavior automatically."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.baseline_step and any((args.integration, args.mongo_live, args.sidecar)):
+        print(
+            "--baseline-step cannot be combined with optional proof flags.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not _validate_repo_local_venv(strict=_strict_venv_requested(args)):
+        return 1
 
     if not _validate_hca_package_authority(
         include_integration=bool(args.integration or args.mongo_live)
@@ -391,11 +758,16 @@ def main() -> int:
             f"Sidecar mode requested, but health check failed at "
             f"{MEMORY_SERVICE_URL}/health\n"
             "Start the memvid sidecar first:\n"
-            "    cargo run --manifest-path memvid_service/Cargo.toml --release"
+            "    cargo run --manifest-path memvid_service/Cargo.toml --release\n"
+            f"{BOOTSTRAP_HINT}"
         )
         return 1
 
-    if not any((args.integration, args.mongo_live, args.sidecar)):
+    if args.baseline_step:
+        steps = [
+            next(step for step in BASELINE_STEPS if step["id"] == args.baseline_step)
+        ]
+    elif not any((args.integration, args.mongo_live, args.sidecar)):
         steps = list(BASELINE_STEPS)
     else:
         steps = []
@@ -406,15 +778,61 @@ def main() -> int:
         if args.sidecar:
             steps.append(SIDECAR_STEP)
 
-    print(f"Running {len(steps)} proof step(s).")
-    for step in steps:
-        rc = _run_step(step)
-        if rc != 0:
-            print(f"\nFAILED: [{step['name']}] exited with code {rc}")
-            return rc
+    receipt_name = _invocation_receipt_name(args, steps)
+    latest_receipt_path = _receipt_path_for_name(receipt_name)
+    if receipt_name in {"live-mongo", "live-sidecar"}:
+        _warn_if_stale_optional_receipt(
+            proof_name=receipt_name,
+            receipt_path=latest_receipt_path,
+            threshold_days=OPTIONAL_PROOF_STALENESS_DAYS,
+        )
 
-    print(f"\nAll {len(steps)} proof step(s) passed.")
-    return 0
+    print(f"Running {len(steps)} proof step(s).")
+    results: List[StepResult] = []
+    outcome = "failed"
+    failure_reason = None
+    exit_code = 1
+    try:
+        for step in steps:
+            result = _run_step(step)
+            results.append(result)
+            if result["returncode"] != 0:
+                failure_reason = (
+                    f"[{step['name']}] exited with code {result['returncode']}"
+                )
+                print(f"\nFAILED: {failure_reason}")
+                return result["returncode"]
+
+        validation_errors: List[str] = []
+        for step, result in zip(steps, results):
+            validation_errors.extend(_validate_result(step, result))
+
+        if validation_errors:
+            failure_reason = "\n".join(validation_errors)
+            print("\nFAILED: proof invariants did not hold.", file=sys.stderr)
+            for error in validation_errors:
+                print(f" - {error}", file=sys.stderr)
+            return 1
+
+        outcome = "passed"
+        exit_code = 0
+        aggregate_counts = merge_test_counts(*(result["counts"] for result in results))
+        print(
+            "\nAll "
+            f"{len(steps)} proof step(s) passed "
+            f"({aggregate_counts['passed_test_count']} passed, "
+            f"{aggregate_counts['skipped_test_count']} skipped)."
+        )
+        return 0
+    finally:
+        if steps:
+            _write_invocation_receipt(
+                receipt_name=receipt_name,
+                steps=steps,
+                results=results,
+                outcome=outcome,
+                failure_reason=failure_reason,
+            )
 
 
 if __name__ == "__main__":

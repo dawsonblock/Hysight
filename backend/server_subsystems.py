@@ -64,6 +64,7 @@ async def get_subsystems() -> SubsystemsResponse:
     settings = load_backend_settings()
     client = get_client()
     db = get_db()
+    mongo_connected = False
 
     if not settings.database_enabled:
         database_status = DatabaseSubsystemStatus(
@@ -100,6 +101,7 @@ async def get_subsystems() -> SubsystemsResponse:
                 detail=f"Mongo ping failed: {exc}",
             )
         else:
+            mongo_connected = True
             database_status = DatabaseSubsystemStatus(
                 enabled=True,
                 status="healthy",
@@ -112,6 +114,7 @@ async def get_subsystems() -> SubsystemsResponse:
             )
 
     memory_settings = None
+    sidecar_reachable = False
     try:
         memory_settings = load_memory_settings()
     except MemoryConfigurationError as exc:
@@ -143,6 +146,7 @@ async def get_subsystems() -> SubsystemsResponse:
                     service_url=memory_settings.service_url,
                 )
             else:
+                sidecar_reachable = True
                 memory_status = MemorySubsystemStatus(
                     backend=memory_settings.backend,
                     uses_sidecar=True,
@@ -222,6 +226,37 @@ async def get_subsystems() -> SubsystemsResponse:
         ),
     )
 
+    if not settings.database_enabled:
+        database_consistent = (
+            database_status.status == "disabled"
+            and database_status.mongo_status_mode == "disabled"
+        )
+    else:
+        database_consistent = (
+            mongo_connected
+            and database_status.status == "healthy"
+            and database_status.mongo_status_mode == "connected"
+        ) or (
+            not mongo_connected
+            and database_status.status == "unhealthy"
+            and database_status.mongo_status_mode == "configured_unreachable"
+        )
+
+    if memory_settings is None:
+        memory_consistent = False
+    elif memory_settings.uses_sidecar:
+        memory_consistent = (
+            memory_status.memory_backend_mode == "sidecar"
+            and memory_status.service_available is sidecar_reachable
+            and memory_status.service_url == memory_settings.service_url
+        )
+    else:
+        memory_consistent = (
+            memory_status.memory_backend_mode == "local"
+            and memory_status.service_available is None
+            and memory_status.service_url is None
+        )
+
     return SubsystemsResponse(
         status=_overall_subsystem_status(
             database_status,
@@ -229,6 +264,7 @@ async def get_subsystems() -> SubsystemsResponse:
             storage_status,
             llm_status,
         ),
+        consistency_check_passed=database_consistent and memory_consistent,
         replay_authority=REPLAY_AUTHORITY,
         hca_runtime_authority=HCA_RUNTIME_AUTHORITY,
         database=database_status,

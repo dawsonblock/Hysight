@@ -157,6 +157,7 @@ describe("frontend API client boundary", () => {
 
     await expect(getSubsystems()).resolves.toMatchObject({
       status: "degraded",
+      consistency_check_passed: true,
       replay_authority: "local_store",
       hca_runtime_authority: "python_hca_runtime",
       database: {

@@ -13,20 +13,9 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from proof_receipt import write_proof_receipt
-
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_JUNIT_XML = (
-    REPO_ROOT / "test_reports" / "pytest" / "backend-live-sidecar-proof.xml"
-)
-DEFAULT_RECEIPT_PATH = (
-    REPO_ROOT
-    / "test_reports"
-    / "proof_receipts"
-    / "backend-live-sidecar-proof.json"
-)
 DEFAULT_LOG_PATH = REPO_ROOT / "test_reports" / "proof-sidecar.log"
+BOOTSTRAP_HINT = "See BOOTSTRAP.md for the supported bootstrap path."
 
 
 def _check_health(url: str) -> bool:
@@ -82,8 +71,6 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=float(os.environ.get("MEMORY_SERVICE_READY_TIMEOUT", "90")),
     )
-    parser.add_argument("--receipt-path", type=Path, default=DEFAULT_RECEIPT_PATH)
-    parser.add_argument("--junit-xml", type=Path, default=DEFAULT_JUNIT_XML)
     parser.add_argument("--log-path", type=Path, default=DEFAULT_LOG_PATH)
     return parser.parse_args()
 
@@ -91,15 +78,8 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     service_url = args.service_url.strip() or f"http://localhost:{args.port}"
-    junit_xml = args.junit_xml
-    junit_xml.parent.mkdir(parents=True, exist_ok=True)
-    junit_xml.unlink(missing_ok=True)
     args.log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    command_label = "make proof-sidecar"
-    outcome = "failed"
-    failure_reason = None
-    exit_code = 1
     sidecar_process: subprocess.Popen[str] | None = None
     log_handle = None
 
@@ -143,53 +123,32 @@ def main() -> int:
         proof_env = dict(os.environ)
         proof_env["MEMORY_SERVICE_URL"] = service_url
         proof_env["MEMORY_SERVICE_PORT"] = str(args.port)
-        pytest_addopts = proof_env.get("PYTEST_ADDOPTS", "").strip()
-        proof_env["PYTEST_ADDOPTS"] = " ".join(
-            part
-            for part in (pytest_addopts, f"--junitxml={junit_xml}")
-            if part
+        proof_env["RUN_MEMVID_TESTS"] = "1"
+        proof_env["MEMORY_BACKEND"] = "rust"
+        proof_env["HYSIGHT_PROOF_ENVIRONMENT_MODE"] = "cargo_local_sidecar"
+        proof_env["HYSIGHT_PROOF_SERVICE_CONNECTION_MODE"] = (
+            "cargo-run:memvid_service"
         )
 
         result = subprocess.run(
-            ["make", "test-sidecar"],
+            [sys.executable, "scripts/run_tests.py", "--sidecar"],
             cwd=REPO_ROOT,
             env=proof_env,
             text=True,
             check=False,
         )
-        exit_code = result.returncode
-        if exit_code == 0:
-            outcome = "passed"
-        else:
-            failure_reason = (
-                "Live sidecar proof failed. Inspect the pytest output above or "
-                f"the sidecar log at {args.log_path}."
-            )
-        return exit_code
+        return result.returncode
     except FileNotFoundError as exc:
         failure_reason = (
             f"{exc.filename or 'cargo'} is unavailable. Install the Rust toolchain and re-run, "
-            "or use make test-sidecar against an already running sidecar."
+            "or use make test-sidecar against an already running sidecar. "
+            f"{BOOTSTRAP_HINT}"
         )
         print(failure_reason, file=sys.stderr)
         return 1
     finally:
         if log_handle is not None:
             log_handle.flush()
-        write_proof_receipt(
-            output_path=args.receipt_path,
-            proof_tier="live-sidecar",
-            environment_mode="cargo_local_sidecar",
-            service_connection_mode="cargo-run:memvid_service",
-            service_endpoint=service_url,
-            command=command_label,
-            junit_xml=junit_xml if junit_xml.exists() else None,
-            outcome=outcome,
-            failure_reason=failure_reason,
-            metadata={
-                "log_path": str(args.log_path.relative_to(REPO_ROOT)),
-            },
-        )
         if log_handle is not None:
             log_handle.close()
         _stop_process(sidecar_process)

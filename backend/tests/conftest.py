@@ -28,6 +28,7 @@ _TEST_BOOTSTRAP_HINT = (
 )
 _INTEGRATION_HINT = "Re-run with: pytest --run-integration"
 _LIVE_HINT = "Re-run with: pytest --run-live"
+_FIXTURE_DRIFT_HINT = "Re-run with: pytest --check-fixture-drift"
 
 
 def pytest_addoption(parser):
@@ -47,6 +48,12 @@ def pytest_addoption(parser):
             "Live proofs may still skip when services or optional extras are missing."
         ),
     )
+    group.addoption(
+        "--check-fixture-drift",
+        action="store_true",
+        default=False,
+        help="Include the backend-owned frontend fixture drift check.",
+    )
 
 
 def pytest_configure(config):
@@ -62,10 +69,18 @@ def pytest_configure(config):
         "markers",
         "live: opt-in backend live-service proof tier",
     )
+    config.addinivalue_line(
+        "markers",
+        "fixture_drift: opt-in backend/frontend generated fixture drift check",
+    )
 
 
 def _has_marker(item, name: str) -> bool:
     return item.get_closest_marker(name) is not None
+
+
+def _relative_test_path(item) -> str:
+    return Path(str(item.fspath)).resolve().relative_to(ROOT).as_posix()
 
 
 def pytest_sessionstart(session):
@@ -87,10 +102,49 @@ def pytest_sessionstart(session):
 def pytest_collection_modifyitems(config, items):
     run_live = bool(config.getoption("--run-live"))
     run_integration = bool(config.getoption("--run-integration") or run_live)
+    run_fixture_drift = bool(config.getoption("--check-fixture-drift"))
+    deselected = []
+    selected = []
+    structural_errors = []
 
     for item in items:
+        relative_path = _relative_test_path(item)
+
+        if _has_marker(item, "fixture_drift") and not run_fixture_drift:
+            deselected.append(item)
+            continue
+
         if _has_marker(item, "live") and not _has_marker(item, "integration"):
             item.add_marker(pytest.mark.integration)
+
+        if relative_path.startswith("backend/tests/live/") and not _has_marker(
+            item, "live"
+        ):
+            structural_errors.append(
+                f"{relative_path} must carry pytest.mark.live or move out of backend/tests/live/."
+            )
+
+        if relative_path.startswith(
+            "backend/tests/integration/"
+        ) and not _has_marker(item, "integration"):
+            structural_errors.append(
+                f"{relative_path} must carry pytest.mark.integration or move out of backend/tests/integration/."
+            )
+
+        if relative_path == "backend/tests/test_status_live_mongo.py":
+            if not _has_marker(item, "live") or not _has_marker(
+                item, "integration"
+            ):
+                structural_errors.append(
+                    "backend/tests/test_status_live_mongo.py is a live Mongo proof surface and must carry both pytest.mark.live and pytest.mark.integration."
+                )
+
+        if relative_path == "backend/tests/test_memvid_sidecar.py" and not _has_marker(
+            item, "integration"
+        ):
+            structural_errors.append(
+                "backend/tests/test_memvid_sidecar.py is an integration proof surface and must carry pytest.mark.integration unless it moves under backend/tests/integration/."
+            )
 
         has_tier_marker = any(
             _has_marker(item, marker)
@@ -119,6 +173,15 @@ def pytest_collection_modifyitems(config, items):
                     )
                 )
             )
+
+        selected.append(item)
+
+    if structural_errors:
+        raise pytest.UsageError("\n".join(sorted(set(structural_errors))))
+
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+    items[:] = selected
 
 
 @pytest.fixture()

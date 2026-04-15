@@ -11,19 +11,8 @@ import sys
 import time
 from pathlib import Path
 
-from proof_receipt import write_proof_receipt
-
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_JUNIT_XML = (
-    REPO_ROOT / "test_reports" / "pytest" / "backend-live-mongo-proof.xml"
-)
-DEFAULT_RECEIPT_PATH = (
-    REPO_ROOT
-    / "test_reports"
-    / "proof_receipts"
-    / "backend-live-mongo-proof.json"
-)
+BOOTSTRAP_HINT = "See BOOTSTRAP.md for the supported bootstrap path."
 
 
 def _run_command(
@@ -98,22 +87,12 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=float(os.environ.get("LIVE_MONGO_READY_TIMEOUT", "30")),
     )
-    parser.add_argument("--receipt-path", type=Path, default=DEFAULT_RECEIPT_PATH)
-    parser.add_argument("--junit-xml", type=Path, default=DEFAULT_JUNIT_XML)
     return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
-    junit_xml = args.junit_xml
-    junit_xml.parent.mkdir(parents=True, exist_ok=True)
-    junit_xml.unlink(missing_ok=True)
-
     mongo_url = f"mongodb://127.0.0.1:{args.port}"
-    command_label = "make proof-mongo-live"
-    outcome = "failed"
-    failure_reason = None
-    exit_code = 1
 
     try:
         _run_command(["docker", "info"], capture_output=True)
@@ -142,29 +121,23 @@ def main() -> int:
             return 1
 
         env = dict(os.environ)
-        pytest_addopts = env.get("PYTEST_ADDOPTS", "").strip()
-        env["PYTEST_ADDOPTS"] = " ".join(
-            part
-            for part in (pytest_addopts, f"--junitxml={junit_xml}")
-            if part
-        )
-        env["LIVE_MONGO_URL"] = mongo_url
-        env["LIVE_MONGO_DB_NAME"] = args.db_name
+        env["RUN_MONGO_TESTS"] = "1"
+        env["MONGO_URL"] = mongo_url
+        env["DB_NAME"] = args.db_name
+        env["HYSIGHT_PROOF_ENVIRONMENT_MODE"] = "docker_disposable_local"
+        env["HYSIGHT_PROOF_SERVICE_CONNECTION_MODE"] = f"docker:{args.image}"
 
-        result = _run_command(["make", "test-mongo-live"], env=env, check=False)
-        exit_code = result.returncode
-        if exit_code == 0:
-            outcome = "passed"
-        else:
-            failure_reason = (
-                "Live Mongo proof failed. Inspect the pytest output above or "
-                f"the JUnit report at {junit_xml}."
-            )
-        return exit_code
+        result = _run_command(
+            [sys.executable, "scripts/run_tests.py", "--mongo-live"],
+            env=env,
+            check=False,
+        )
+        return result.returncode
     except FileNotFoundError as exc:
         failure_reason = (
             f"{exc.filename or 'docker'} is unavailable. Install Docker and re-run, "
-            "or use make test-mongo-live against an already running Mongo instance."
+            "or use make test-mongo-live against an already running Mongo instance. "
+            f"{BOOTSTRAP_HINT}"
         )
         print(failure_reason, file=sys.stderr)
         return 1
@@ -175,21 +148,6 @@ def main() -> int:
         print(failure_reason, file=sys.stderr)
         return exc.returncode or 1
     finally:
-        write_proof_receipt(
-            output_path=args.receipt_path,
-            proof_tier="live-mongo",
-            environment_mode="docker_disposable_local",
-            service_connection_mode=f"docker:{args.image}",
-            service_endpoint=mongo_url,
-            command=command_label,
-            junit_xml=junit_xml if junit_xml.exists() else None,
-            outcome=outcome,
-            failure_reason=failure_reason,
-            metadata={
-                "db_name": args.db_name,
-                "container_name": args.container_name,
-            },
-        )
         _cleanup_container(args.container_name)
 
 

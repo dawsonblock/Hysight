@@ -91,6 +91,7 @@ def test_subsystems_route_reports_supported_python_mode_without_db(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "degraded"
+    assert data["consistency_check_passed"] is True
     assert data["replay_authority"] == "local_store"
     assert data["hca_runtime_authority"] == "python_hca_runtime"
     assert data["database"] == {
@@ -171,6 +172,7 @@ def test_subsystems_route_reports_healthy_when_configured_services_are_ready(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
+    assert data["consistency_check_passed"] is True
     assert data["replay_authority"] == "local_store"
     assert data["hca_runtime_authority"] == "python_hca_runtime"
     assert data["database"] == {
@@ -737,6 +739,7 @@ def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract()
     assert '"service_endpoint"' in receipt_helper
 
 
+@pytest.mark.fixture_drift
 def test_generated_frontend_api_fixtures_match_backend_export(tmp_path):
     generated_path = tmp_path / "api.fixtures.generated.json"
     committed_path = (

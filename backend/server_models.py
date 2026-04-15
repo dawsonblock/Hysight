@@ -57,6 +57,7 @@ class LLMSubsystemStatus(BackendModel):
 
 class SubsystemsResponse(BackendModel):
     status: str
+    consistency_check_passed: bool
     replay_authority: str
     hca_runtime_authority: str
     database: DatabaseSubsystemStatus

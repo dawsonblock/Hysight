@@ -29,7 +29,7 @@ if str(ROOT) not in sys.path:
 
 create_app = import_module("backend.server").create_app
 TestClient = import_module("fastapi.testclient").TestClient
-pytestmark = [pytest.mark.integration, pytest.mark.live]
+RUN_MONGO_TESTS = os.environ.get("RUN_MONGO_TESTS") == "1"
 
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://127.0.0.1:27017")
 DB_NAME = os.environ.get("DB_NAME", "hysight_live")
@@ -42,11 +42,10 @@ _MONGO_REQUIREMENTS_HINT = (
 )
 
 
-def _mongo_client_class():
-    try:
-        return import_module("pymongo").MongoClient
-    except ModuleNotFoundError:
-        pytest.skip(_MONGO_REQUIREMENTS_HINT)
+try:
+    MongoClient = import_module("pymongo").MongoClient
+except ModuleNotFoundError:
+    MongoClient = None
 
 
 def _probe_mongo(mongo_client_class) -> bool:
@@ -67,14 +66,23 @@ def _probe_mongo(mongo_client_class) -> bool:
     return True
 
 
+MONGO_REACHABLE = bool(
+    RUN_MONGO_TESTS and MongoClient is not None and _probe_mongo(MongoClient)
+)
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.live,
+    pytest.mark.skipif(not RUN_MONGO_TESTS, reason=_LIVE_MONGO_REASON),
+    pytest.mark.skipif(MongoClient is None, reason=_MONGO_REQUIREMENTS_HINT),
+    pytest.mark.skipif(
+        RUN_MONGO_TESTS and MongoClient is not None and not MONGO_REACHABLE,
+        reason=_LIVE_MONGO_REASON,
+    ),
+]
+
+
 def test_live_status_round_trip_persists_to_mongo(monkeypatch, tmp_path):
-    if os.environ.get("RUN_MONGO_TESTS") != "1":
-        pytest.skip(_LIVE_MONGO_REASON)
-
-    mongo_client_class = _mongo_client_class()
-    if not _probe_mongo(mongo_client_class):
-        pytest.skip(_LIVE_MONGO_REASON)
-
     live_db_name = f"{DB_NAME}_{uuid.uuid4().hex[:8]}"
     storage_dir = tmp_path / "storage"
     client_name = f"live-mongo-{uuid.uuid4().hex[:8]}"
@@ -86,7 +94,7 @@ def test_live_status_round_trip_persists_to_mongo(monkeypatch, tmp_path):
     monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_dir))
     monkeypatch.setenv("MEMORY_STORAGE_DIR", str(storage_dir / "memory"))
 
-    mongo_client = mongo_client_class(
+    mongo_client = MongoClient(
         MONGO_URL,
         serverSelectionTimeoutMS=2000,
     )
@@ -100,6 +108,7 @@ def test_live_status_round_trip_persists_to_mongo(monkeypatch, tmp_path):
                 "GET /api/subsystems",
                 subsystems_response.json(),
             )
+            assert subsystems_response.json()["consistency_check_passed"] is True
             assert subsystems_response.json()["database"] == {
                 "enabled": True,
                 "status": "healthy",

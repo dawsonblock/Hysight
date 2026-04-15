@@ -102,6 +102,7 @@ const llmSubsystemSchema = z.object({
 
 const subsystemsResponseSchema = z.object({
   status: z.string(),
+  consistency_check_passed: z.boolean(),
   replay_authority: z.string(),
   hca_runtime_authority: z.string(),
   database: databaseSubsystemSchema,
