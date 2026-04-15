@@ -365,7 +365,8 @@ python -m pip install -r backend/requirements-dev.txt
 For frontend work, switch to the repo's Node target before running Yarn
 commands. The frontend package now ships `frontend/.nvmrc` and
 `frontend/.node-version` pinned to Node 20 so local runs can match the CI
-workflow.
+workflow, and `frontend/package.json` now declares the same Node 20 / Yarn
+1.22.22 engine requirements for fast failure on mismatched runtimes.
 
 If you only need the backend runtime and not the proof surface:
 

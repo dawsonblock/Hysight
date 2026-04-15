@@ -63,6 +63,10 @@
     "test": "craco test",
     "lint": "eslint ."
   },
+  "engines": {
+    "node": "20.x",
+    "yarn": "1.22.22"
+  },
   "proxy": "http://localhost:8000",
   "browserslist": {
     "production": [
