@@ -1,0 +1,20 @@
+{
+  "command": "make proof-sidecar",
+  "commit_sha": "27e9207dc865c93786e8d91b5e4865558cf39790",
+  "environment_mode": "cargo_local_sidecar",
+  "error_test_count": 0,
+  "failed_test_count": 0,
+  "generated_at": "2026-04-15T06:50:18.647690+00:00",
+  "junit_xml": "test_reports/pytest/backend-live-sidecar-proof.xml",
+  "metadata": {
+    "log_path": "test_reports/proof-sidecar.log"
+  },
+  "outcome": "passed",
+  "passed_test_count": 0,
+  "proof_tier": "live-sidecar",
+  "schema_version": 1,
+  "service_connection_mode": "cargo-run:memvid_service",
+  "service_endpoint": "http://localhost:3032",
+  "skipped_test_count": 0,
+  "total_test_count": 0
+}

@@ -1,0 +1,21 @@
+{
+  "command": "make proof-mongo-live",
+  "commit_sha": "27e9207dc865c93786e8d91b5e4865558cf39790",
+  "environment_mode": "docker_disposable_local",
+  "error_test_count": 0,
+  "failed_test_count": 0,
+  "generated_at": "2026-04-15T06:49:52.969672+00:00",
+  "junit_xml": "test_reports/pytest/backend-live-mongo-proof.xml",
+  "metadata": {
+    "container_name": "hysight-live-mongo-proof",
+    "db_name": "hysight_live"
+  },
+  "outcome": "passed",
+  "passed_test_count": 0,
+  "proof_tier": "live-mongo",
+  "schema_version": 1,
+  "service_connection_mode": "docker:mongo:7",
+  "service_endpoint": "mongodb://127.0.0.1:27017",
+  "skipped_test_count": 0,
+  "total_test_count": 0
+}

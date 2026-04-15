@@ -155,7 +155,7 @@ backend:
     file: "backend/tests/test_status_live_mongo.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -169,13 +169,16 @@ backend:
       - working: "NA"
         agent: "main"
         comment: "User requested a fresh rerun of the full optional live Mongo harness on the current branch via make proof-mongo-live. Needs current retest evidence."
+      - working: true
+        agent: "testing"
+        comment: "Retested the full optional live Mongo wrapper with make proof-mongo-live. Docker was available, the disposable mongo:7 container bound on mongodb://127.0.0.1:27017, and backend/tests/test_status_live_mongo.py passed (1 passed in 0.40s). Receipt: test_reports/proof_receipts/backend-live-mongo-proof.json. JUnit: test_reports/pytest/backend-live-mongo-proof.xml. The receipt outcome is passed, but its per-test count fields remained zero, so the authoritative counts are the pytest output and JUnit report."
   - task: "Live sidecar proof automation"
     implemented: true
     working: true
     file: "scripts/run_tests.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -189,6 +192,9 @@ backend:
       - working: "NA"
         agent: "main"
         comment: "User requested a fresh rerun of the full optional live sidecar harness on the current branch via make proof-sidecar. Needs current retest evidence."
+      - working: true
+        agent: "testing"
+        comment: "Retested the full optional live sidecar wrapper with make proof-sidecar MEMORY_SERVICE_PORT=3032 after a preflight probe to http://127.0.0.1:3031/health returned connection reset by peer locally. The alternate-port live proof passed (13 passed, 2 skipped in 8.76s). Receipt: test_reports/proof_receipts/backend-live-sidecar-proof.json. JUnit: test_reports/pytest/backend-live-sidecar-proof.xml. Log: test_reports/proof-sidecar.log. The receipt outcome is passed, but its per-test count fields remained zero, so the authoritative counts are the pytest output and JUnit report."
   - task: "Release notes extraction"
     implemented: true
     working: true
@@ -323,12 +329,10 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 9
+  test_sequence: 10
   run_ui: false
 test_plan:
-  current_focus:
-    - "Live Mongo /api/status integration"
-    - "Live sidecar proof automation"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -363,3 +367,5 @@ agent_communication:
     message: "Second-pass contract hardening is now implemented and verified. Added explicit subsystem authority fields, backend-owned fixture export plus tracked generated JSON, and reran the canonical baseline proof runner alongside focused backend/frontend contract tests."
   - agent: "main"
     message: "User requested both optional live harnesses again on the current branch. Please rerun make proof-mongo-live and make proof-sidecar, record pass/fail evidence, and note any environment issues or receipt artifacts produced."
+  - agent: "testing"
+    message: "Requested live-harness reruns completed. make proof-mongo-live passed on the default 27017 disposable Docker Mongo path (1 passed). make proof-sidecar passed on port 3032 because the default 3031 health probe returned connection reset by peer during preflight (13 passed, 2 skipped). Receipts were written under test_reports/proof_receipts and JUnit artifacts under test_reports/pytest; the receipt outcome fields are correct, but the per-test counts remained zero, so pytest/JUnit are the authoritative counts for this rerun."
