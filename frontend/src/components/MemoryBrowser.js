@@ -20,7 +20,13 @@ const ALL_TYPES = ["episode", "fact", "trace", "preference", "goalstate", "proce
 const PAGE_SIZE = 20;
 const SEARCH_LIMIT = 200;
 
-export default function MemoryBrowser({ open, onClose }) {
+export default function MemoryBrowser({
+  open,
+  onClose,
+  variant = "modal",
+  title = "Memory Store",
+  subtitle,
+}) {
   const [records, setRecords]     = useState([]);
   const [total, setTotal]         = useState(0);
   const [loading, setLoading]     = useState(false);
@@ -32,6 +38,7 @@ export default function MemoryBrowser({ open, onClose }) {
   const [selectedMemoryId, setSelectedMemoryId] = useState(null);
   const [searchLimited, setSearchLimited] = useState(false);
   const searchRef = useRef(null);
+  const isEmbedded = variant === "embedded";
 
   const fetchRecords = useCallback(async (queryText, type, currentPage) => {
     setLoading(true);
@@ -100,7 +107,7 @@ export default function MemoryBrowser({ open, onClose }) {
   }, [open]);
 
   useEffect(() => {
-    if (!open) {
+    if (!open || isEmbedded) {
       return undefined;
     }
 
@@ -114,7 +121,7 @@ export default function MemoryBrowser({ open, onClose }) {
     return () => {
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [onClose, open]);
+  }, [isEmbedded, onClose, open]);
 
   useEffect(() => {
     if (records.length === 0) {
@@ -176,33 +183,37 @@ export default function MemoryBrowser({ open, onClose }) {
   const hasFilters = isSearchMode || Boolean(typeFilter);
   const selectedRecord =
     records.find((record) => record.memory_id === selectedMemoryId) || null;
+  const computedSubtitle =
+    subtitle ||
+    `${total} ${isSearchMode ? "matching " : ""}record${
+      total !== 1 ? "s" : ""
+    }${isSearchMode ? "" : " total"}`;
 
   if (!open) return null;
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        data-testid="memory-backdrop"
-        style={S.backdrop}
-        onClick={onClose}
-      />
+      {!isEmbedded && (
+        <div
+          data-testid="memory-backdrop"
+          style={S.backdrop}
+          onClick={onClose}
+        />
+      )}
 
       {/* Panel */}
       <aside
         aria-label="Memory store"
-        aria-modal="true"
+        aria-modal={isEmbedded ? undefined : "true"}
         data-testid="memory-browser"
-        role="dialog"
-        style={S.panel}
+        role={isEmbedded ? "region" : "dialog"}
+        style={isEmbedded ? S.embeddedPanel : S.panel}
       >
         {/* Header */}
         <div style={S.panelHeader}>
           <div>
-            <div style={S.panelTitle}>Memory Store</div>
-            <div style={S.panelSub}>
-              {total} {isSearchMode ? "matching " : ""}record{total !== 1 ? "s" : ""}{isSearchMode ? "" : " total"}
-            </div>
+            <div style={S.panelTitle}>{title}</div>
+            <div style={S.panelSub}>{computedSubtitle}</div>
           </div>
           <div style={S.headerActions}>
             {hasFilters && (
@@ -218,13 +229,15 @@ export default function MemoryBrowser({ open, onClose }) {
                 Clear filters
               </button>
             )}
-            <button
-              data-testid="close-memory-btn"
-              style={S.closeBtn}
-              onClick={onClose}
-            >
-              ✕
-            </button>
+            {!isEmbedded && (
+              <button
+                data-testid="close-memory-btn"
+                style={S.closeBtn}
+                onClick={onClose}
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
@@ -486,6 +499,19 @@ const S = {
     flexDirection: "column",
     overflow:      "hidden",
     animation:     "slideInRight 0.2s ease",
+  },
+  embeddedPanel: {
+    position:      "relative",
+    inset:         "auto",
+    width:         "100%",
+    height:        "100%",
+    background:    "rgba(255,255,255,0.92)",
+    border:        "1px solid #dbe4ee",
+    borderRadius:  24,
+    boxShadow:     "0 18px 36px rgba(15,23,42,0.08)",
+    display:       "flex",
+    flexDirection: "column",
+    overflow:      "hidden",
   },
 
   panelHeader: {

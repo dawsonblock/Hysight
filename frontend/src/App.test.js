@@ -41,8 +41,18 @@ jest.mock("@/components/OperatorConsole", () => ({
 
 jest.mock("@/components/MemoryBrowser", () => ({
   __esModule: true,
-  default: function MockMemoryBrowser({ open, onClose }) {
-    return open ? <button onClick={onClose}>Close memory</button> : null;
+  default: function MockMemoryBrowser({ open, onClose, variant = "modal" }) {
+    if (!open) {
+      return null;
+    }
+
+    return (
+      <div data-testid={`memory-browser-${variant}`}>
+        {variant === "modal" && onClose ? (
+          <button onClick={onClose}>Close memory</button>
+        ) : null}
+      </div>
+    );
   },
 }));
 
@@ -57,26 +67,29 @@ const App = require("@/App").default;
 
 beforeEach(() => {
   window.localStorage.clear();
-  window.history.pushState({}, "", "/?run=run-from-url");
+  window.history.pushState({}, "", "/?run=run-from-url&view=runs");
 });
 
 afterEach(() => {
   window.history.pushState({}, "", "/");
 });
 
-test("initializes from the run query parameter and keeps URL plus storage in sync", async () => {
+test("keeps run selection synced while switching between the new workspaces", async () => {
   const user = userEvent.setup();
 
   render(<App />);
 
   expect(screen.getByTestId("selected-run-id")).toHaveTextContent("run-from-url");
+  expect(screen.getByRole("button", { name: /^Runs/ })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
 
-  await user.click(screen.getByRole("button", { name: "Select next run" }));
+  await user.click(screen.getByRole("button", { name: /^Assist/ }));
 
   await waitFor(() => {
-    expect(screen.getByTestId("selected-run-id")).toHaveTextContent("run-next");
-    expect(window.location.search).toContain("run=run-next");
-    expect(window.localStorage.getItem("hysight:selected-run-id")).toBe("run-next");
+    expect(window.location.search).not.toContain("view=");
+    expect(window.localStorage.getItem("hysight:active-view")).toBe("assist");
   });
 
   await user.click(screen.getByRole("button", { name: "Observe run" }));
@@ -85,5 +98,25 @@ test("initializes from the run query parameter and keeps URL plus storage in syn
     expect(screen.getByTestId("selected-run-id")).toHaveTextContent("run-observed");
     expect(screen.getByTestId("refresh-token")).toHaveTextContent("1");
     expect(window.location.search).toContain("run=run-observed");
+  });
+
+  await user.click(screen.getByRole("button", { name: "Toggle memory" }));
+
+  expect(screen.getByTestId("memory-browser-modal")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Close memory" }));
+
+  expect(screen.queryByTestId("memory-browser-modal")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /^Memory/ }));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("memory-browser-embedded")).toBeInTheDocument();
+    expect(window.location.search).toContain("run=run-observed");
+    expect(window.location.search).toContain("view=memory");
+    expect(window.localStorage.getItem("hysight:active-view")).toBe("memory");
+    expect(window.localStorage.getItem("hysight:selected-run-id")).toBe(
+      "run-observed"
+    );
   });
 });

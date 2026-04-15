@@ -50,3 +50,16 @@ test("shows a selected memory inspector and closes on Escape", async () => {
   fireEvent.keyDown(window, { key: "Escape" });
   expect(onClose).toHaveBeenCalled();
 });
+
+test("supports an embedded workspace mode without modal dismissal", async () => {
+  const onClose = jest.fn();
+
+  render(<MemoryBrowser open onClose={onClose} variant="embedded" />);
+
+  expect(await screen.findByRole("region", { name: /memory store/i })).toBeInTheDocument();
+  expect(screen.queryByTestId("memory-backdrop")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("close-memory-btn")).not.toBeInTheDocument();
+
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(onClose).not.toHaveBeenCalled();
+});
