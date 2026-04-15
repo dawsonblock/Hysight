@@ -1,11 +1,12 @@
 .PHONY: \
 	test-bootstrap \
+	test-bootstrap-integration \
 	dev-bootstrap \
 	test \
 	test-pipeline \
 	test-contract \
-	test-backend-local \
-	test-backend \
+	test-backend-baseline \
+	test-backend-integration \
 	test-mongo-live \
 	test-sidecar \
 	proof-sidecar \
@@ -26,10 +27,14 @@ MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)
 test-bootstrap:
 	$(PIP) install -r backend/requirements-test.txt
 
+test-bootstrap-integration:
+	$(PIP) install -r backend/requirements-test.txt -r backend/requirements-integration.txt
+
 dev-bootstrap:
 	$(PIP) install -r backend/requirements-dev.txt
 
-test: test-pipeline test-backend
+test:
+	$(PYTHON) scripts/run_tests.py
 
 test-pipeline:
 	$(PYTEST) tests/test_hca_pipeline.py -q
@@ -37,31 +42,30 @@ test-pipeline:
 test-contract:
 	$(PYTEST) backend/tests/test_contract_conformance.py -q
 
-test-backend-local:
+test-backend-baseline:
 	$(PYTEST) \
 		backend/tests/test_hca.py \
 		backend/tests/test_memory.py \
 		backend/tests/test_server_bootstrap.py \
 		-q
 
-test-backend:
-	$(PYTEST) backend/tests -q
+test-backend-integration:
+	$(PYTEST) backend/tests/test_memvid_sidecar.py -q --run-integration
 
 test-mongo-live:
 	RUN_MONGO_TESTS=1 MONGO_URL="$(LIVE_MONGO_URL)" DB_NAME="$(LIVE_MONGO_DB_NAME)" \
-		$(PYTEST) backend/tests/test_status_live_mongo.py -q
+		$(PYTEST) backend/tests/test_status_live_mongo.py -q --run-live
 
 test-sidecar:
 	@curl --fail --silent "$(MEMORY_SERVICE_URL)/health" >/dev/null || { \
-		echo "test-sidecar requires a healthy memvid sidecar at $(MEMORY_SERVICE_URL)/health. Start the sidecar first with make run-memvid-sidecar, or run make test for the mock-backed proof surface."; \
+		echo "test-sidecar requires a healthy memvid sidecar at $(MEMORY_SERVICE_URL)/health. Start the sidecar first with make run-memvid-sidecar."; \
 		exit 1; \
 	}
 	RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" \
-		$(PYTEST) backend/tests/test_memvid_sidecar.py -q
+		$(PYTEST) backend/tests/test_memvid_sidecar.py -q --run-live
 
 proof-sidecar:
-	RUN_MEMVID_TESTS=1 MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" \
-		$(PYTHON) scripts/run_tests.py --sidecar
+	MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" $(PYTHON) scripts/run_tests.py --sidecar
 
 run-memvid-sidecar:
 	MEMORY_SERVICE_PORT="$(MEMORY_SERVICE_PORT)" \

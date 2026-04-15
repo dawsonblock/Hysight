@@ -79,13 +79,22 @@ The frontend and operator APIs still talk to the same backend routes (`/api/...`
 # frontend operator proof
 cd frontend && yarn lint && CI=true yarn test --watch=false --runInBand && yarn build
 
-# smoke proof (no sidecar needed)
+# install the default local proof surface
 make test-bootstrap
-make test-pipeline
-make test-backend-local
 
-# full backend suite (no sidecar needed)
-make test-backend
+# optional integration/live Mongo proof dependencies
+make test-bootstrap-integration
+
+# default service-free local proof surface
+make test
+
+# individual baseline proof components
+make test-pipeline
+make test-contract
+make test-backend-baseline
+
+# optional mock-backed backend integration proof (no live sidecar needed)
+make test-backend-integration
 
 # sidecar proof (sidecar must be running; default port is 3031)
 make test-sidecar
@@ -108,6 +117,10 @@ make test-mongo-live
 `python scripts/run_tests.py` now runs each proof step with an isolated
 temporary `HCA_STORAGE_ROOT` and matching `MEMORY_STORAGE_DIR`, so proof does
 not rely on repo-default storage state.
+
+The default local proof surface is `make test` / `python scripts/run_tests.py`.
+The backend integration, live Mongo, and live sidecar proofs are separate
+opt-in tiers.
 
 If you use the repo-scoped VS Code verification workflow, prepare
 `test_result.md` first with

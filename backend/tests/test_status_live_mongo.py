@@ -6,7 +6,7 @@ live MongoDB instance. Default local proof remains service-free.
     RUN_MONGO_TESTS=1 \
     MONGO_URL=mongodb://127.0.0.1:27017 \
     DB_NAME=hysight_live \
-    pytest backend/tests/test_status_live_mongo.py -q
+    pytest backend/tests/test_status_live_mongo.py -q --run-live
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from importlib import import_module
 from pathlib import Path
 
 import pytest
-from pymongo import MongoClient
 
 from backend.tests.contract_helpers import assert_contract_payload
 
@@ -30,14 +29,33 @@ if str(ROOT) not in sys.path:
 
 create_app = import_module("backend.server").create_app
 TestClient = import_module("fastapi.testclient").TestClient
+pytestmark = [pytest.mark.integration, pytest.mark.live]
 
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://127.0.0.1:27017")
 DB_NAME = os.environ.get("DB_NAME", "hysight_live")
+_LIVE_MONGO_REASON = (
+    f"requires RUN_MONGO_TESTS=1 with a live MongoDB instance at {MONGO_URL}"
+)
+_MONGO_REQUIREMENTS_HINT = (
+    "requires optional Mongo integration dependencies. Run: "
+    "python -m pip install -r backend/requirements-integration.txt"
+)
 
 
-def _probe_mongo() -> bool:
+def _mongo_client_class():
     try:
-        client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=1000)
+        return import_module("pymongo").MongoClient
+    except ModuleNotFoundError:
+        pytest.skip(_MONGO_REQUIREMENTS_HINT)
+
+
+def _probe_mongo(mongo_client_class) -> bool:
+    client = None
+    try:
+        client = mongo_client_class(
+            MONGO_URL,
+            serverSelectionTimeoutMS=1000,
+        )
         client.admin.command("ping")
     except Exception:
         return False
@@ -49,16 +67,14 @@ def _probe_mongo() -> bool:
     return True
 
 
-_USE_REAL_MONGO = (
-    os.environ.get("RUN_MONGO_TESTS") == "1" and _probe_mongo()
-)
-_LIVE_MONGO_REASON = (
-    f"requires RUN_MONGO_TESTS=1 with a live MongoDB instance at {MONGO_URL}"
-)
-
-
-@pytest.mark.skipif(not _USE_REAL_MONGO, reason=_LIVE_MONGO_REASON)
 def test_live_status_round_trip_persists_to_mongo(monkeypatch, tmp_path):
+    if os.environ.get("RUN_MONGO_TESTS") != "1":
+        pytest.skip(_LIVE_MONGO_REASON)
+
+    mongo_client_class = _mongo_client_class()
+    if not _probe_mongo(mongo_client_class):
+        pytest.skip(_LIVE_MONGO_REASON)
+
     live_db_name = f"{DB_NAME}_{uuid.uuid4().hex[:8]}"
     storage_dir = tmp_path / "storage"
     client_name = f"live-mongo-{uuid.uuid4().hex[:8]}"
@@ -70,7 +86,10 @@ def test_live_status_round_trip_persists_to_mongo(monkeypatch, tmp_path):
     monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_dir))
     monkeypatch.setenv("MEMORY_STORAGE_DIR", str(storage_dir / "memory"))
 
-    mongo_client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=2000)
+    mongo_client = mongo_client_class(
+        MONGO_URL,
+        serverSelectionTimeoutMS=2000,
+    )
     mongo_client.drop_database(live_db_name)
 
     try:
@@ -84,7 +103,10 @@ def test_live_status_round_trip_persists_to_mongo(monkeypatch, tmp_path):
             assert subsystems_response.json()["database"] == {
                 "enabled": True,
                 "status": "healthy",
-                "detail": "Mongo-backed /api/status persistence is reachable",
+                "detail": (
+                    "Mongo-backed /api/status persistence is reachable. "
+                    "Mongo does not own replay-backed HCA or memory routes."
+                ),
             }
 
             post_response = app_client.post(

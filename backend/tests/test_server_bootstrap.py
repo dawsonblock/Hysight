@@ -89,14 +89,18 @@ def test_subsystems_route_reports_supported_python_mode_without_db(
         "status": "disabled",
         "detail": (
             "Mongo-backed /api/status persistence is disabled because "
-            "MONGO_URL and DB_NAME are unset"
+            "MONGO_URL and DB_NAME are unset. Replay-backed HCA and "
+            "memory routes remain available without Mongo."
         ),
     }
     assert data["memory"] == {
         "backend": "python",
         "uses_sidecar": False,
         "status": "healthy",
-        "detail": "Python in-process memory backend is active",
+        "detail": (
+            "Python in-process memory controller is the active local "
+            "memory authority"
+        ),
         "service_url": None,
     }
     assert data["storage"]["status"] == "writable"
@@ -157,7 +161,10 @@ def test_subsystems_route_reports_healthy_when_configured_services_are_ready(
     assert data["database"] == {
         "enabled": True,
         "status": "healthy",
-        "detail": "Mongo-backed /api/status persistence is reachable",
+        "detail": (
+            "Mongo-backed /api/status persistence is reachable. Mongo "
+            "does not own replay-backed HCA or memory routes."
+        ),
     }
     assert data["memory"]["status"] == "healthy"
     assert data["storage"]["status"] == "writable"
@@ -370,7 +377,10 @@ def test_backend_proof_workflow_runs_documented_proof_script():
     workflow = (
         ROOT / ".github" / "workflows" / "backend-proof.yml"
     ).read_text(encoding="utf-8")
-    assert "Documented Proof Surface" in workflow
+    assert "Baseline Local Proof Surface" in workflow
+    assert "Backend Integration Proof" in workflow
+    assert "Backend Live Mongo Proof" in workflow
+    assert "Backend Live Sidecar Proof" in workflow
     assert "python scripts/run_tests.py" in workflow
 
 
@@ -532,9 +542,32 @@ def test_makefile_exposes_local_sidecar_port_override():
         "MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)"
         in makefile
     )
+    assert "test-bootstrap-integration" in makefile
+    assert "test-backend-baseline" in makefile
+    assert "test-backend-integration" in makefile
     assert "test-mongo-live" in makefile
+    assert "test-sidecar" in makefile
     assert "proof-sidecar" in makefile
     assert "run-memvid-sidecar" in makefile
+
+
+def test_requirements_split_keeps_mongo_support_optional():
+    baseline_requirements = (
+        ROOT / "backend" / "requirements-test.txt"
+    ).read_text(encoding="utf-8")
+    core_requirements = (
+        ROOT / "backend" / "requirements-core.txt"
+    ).read_text(encoding="utf-8")
+    integration_requirements = (
+        ROOT / "backend" / "requirements-integration.txt"
+    ).read_text(encoding="utf-8")
+
+    assert "motor" not in baseline_requirements
+    assert "pymongo" not in baseline_requirements
+    assert "motor" not in core_requirements
+    assert "pymongo" not in core_requirements
+    assert "motor==3.3.1" in integration_requirements
+    assert "pymongo==4.6.3" in integration_requirements
 
 
 def test_proof_runner_uses_explicit_isolated_storage_env():
@@ -542,12 +575,20 @@ def test_proof_runner_uses_explicit_isolated_storage_env():
         encoding="utf-8"
     )
     assert "isolated_storage" in proof_runner
+    assert "BASELINE_STEPS" in proof_runner
+    assert "INTEGRATION_STEP" in proof_runner
+    assert "MONGO_LIVE_STEP" in proof_runner
     assert '"MEMORY_BACKEND": "python"' in proof_runner
     assert "DEFAULT_MEMORY_SERVICE_PORT" in proof_runner
-    assert "LIVE_SIDECAR_ENV_KEYS" in proof_runner
+    assert "OPTIONAL_PROOF_ENV_KEYS" in proof_runner
     assert '"MEMORY_SERVICE_PORT"' in proof_runner
     assert '"RUN_MEMVID_TESTS"' in proof_runner
     assert '"MEMORY_SERVICE_URL"' in proof_runner
+    assert '"RUN_MONGO_TESTS"' in proof_runner
+    assert '"MONGO_URL"' in proof_runner
+    assert '"DB_NAME"' in proof_runner
+    assert '--run-integration' in proof_runner
+    assert '--run-live' in proof_runner
     assert 'env.pop(key, None)' in proof_runner
     assert 'tempfile.mkdtemp(prefix="hysight-proof-")' in proof_runner
 

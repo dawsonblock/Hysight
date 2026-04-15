@@ -65,7 +65,7 @@ async def initialize_database(settings: BackendSettings) -> None:
         raise BackendConfigurationError(
             "motor must be installed when MONGO_URL and DB_NAME are "
             "configured. Run: python -m pip install -r "
-            "backend/requirements.txt"
+            "backend/requirements-integration.txt"
         ) from exc
 
     try:

@@ -1,5 +1,8 @@
 [tool.pytest.ini_options]
 markers = [
+    "baseline: default service-free proof tier",
+    "integration: opt-in proof tier for backend boundary tests",
+    "live: opt-in proof tier for live-service backend tests",
     "slow: marks tests as slow-running — requires real HCA Runtime (deselect with '-m \"not slow\"')",
 ]
 filterwarnings = ["ignore:.*python_multipart.*:PendingDeprecationWarning"]

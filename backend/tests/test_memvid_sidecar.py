@@ -2,17 +2,20 @@
 
 Default mode runs mock-backed contract checks against an in-memory sidecar via
 requests-mock, so the backend suite can prove request/response shapes without a
-running Rust service. Live-sidecar behavior is opt-in:
+running Rust service. The mock-backed boundary proof is the opt-in integration
+tier, and live-sidecar behavior is the opt-in live tier:
+
+    pytest backend/tests/test_memvid_sidecar.py -v --run-integration
 
     RUN_MEMVID_TESTS=1 \
     MEMORY_SERVICE_PORT=3032 \
-    pytest backend/tests/test_memvid_sidecar.py -v
+    pytest backend/tests/test_memvid_sidecar.py -v --run-live
 
 Or set the full URL explicitly:
 
     RUN_MEMVID_TESTS=1 \
     MEMORY_SERVICE_URL=http://localhost:3032 \
-    pytest backend/tests/test_memvid_sidecar.py -v
+    pytest backend/tests/test_memvid_sidecar.py -v --run-live
 
 Tests that require real restart semantics skip unless the live sidecar is
 reachable and supervisorctl is available.
@@ -39,6 +42,8 @@ from backend.tests.contract_helpers import assert_contract_payload
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+pytestmark = pytest.mark.integration
 
 
 # Sidecar availability probe.
@@ -420,6 +425,7 @@ class TestDelete:
 # Persistence.
 
 
+@pytest.mark.live
 @pytest.mark.skipif(
     not _USE_REAL_SIDECAR or not shutil.which("supervisorctl"),
     reason=_RESTART_REASON,
@@ -497,6 +503,7 @@ class TestHealth:
         assert data["status"] == "ok"
 
 
+@pytest.mark.live
 @pytest.mark.skipif(not _USE_REAL_SIDECAR, reason=_LIVE_SIDECAR_REASON)
 def test_live_sidecar_round_trip_contract_proof():
     unique_token = f"contract-proof-{uuid.uuid4().hex}"

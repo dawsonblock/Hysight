@@ -26,6 +26,46 @@ _REQUIRED_TEST_DEPENDENCIES = {
 _TEST_BOOTSTRAP_HINT = (
     "Run: python -m pip install -r backend/requirements-test.txt"
 )
+_INTEGRATION_HINT = "Re-run with: pytest --run-integration"
+_LIVE_HINT = "Re-run with: pytest --run-live"
+
+
+def pytest_addoption(parser):
+    group = parser.getgroup("hysight-proof")
+    group.addoption(
+        "--run-integration",
+        action="store_true",
+        default=False,
+        help="Include opt-in integration-tier backend tests.",
+    )
+    group.addoption(
+        "--run-live",
+        action="store_true",
+        default=False,
+        help=(
+            "Include opt-in live backend tests. Implies --run-integration. "
+            "Live proofs may still skip when services or optional extras are missing."
+        ),
+    )
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "baseline: default service-free backend proof tier",
+    )
+    config.addinivalue_line(
+        "markers",
+        "integration: opt-in backend integration proof tier",
+    )
+    config.addinivalue_line(
+        "markers",
+        "live: opt-in backend live-service proof tier",
+    )
+
+
+def _has_marker(item, name: str) -> bool:
+    return item.get_closest_marker(name) is not None
 
 
 def pytest_sessionstart(session):
@@ -42,6 +82,43 @@ def pytest_sessionstart(session):
             "Backend tests require missing dependencies: "
             f"{joined}. {_TEST_BOOTSTRAP_HINT}"
         )
+
+
+def pytest_collection_modifyitems(config, items):
+    run_live = bool(config.getoption("--run-live"))
+    run_integration = bool(config.getoption("--run-integration") or run_live)
+
+    for item in items:
+        if _has_marker(item, "live") and not _has_marker(item, "integration"):
+            item.add_marker(pytest.mark.integration)
+
+        has_tier_marker = any(
+            _has_marker(item, marker)
+            for marker in ("baseline", "integration", "live")
+        )
+        if not has_tier_marker:
+            item.add_marker(pytest.mark.baseline)
+
+        if _has_marker(item, "live") and not run_live:
+            item.add_marker(
+                pytest.mark.skip(
+                    reason=(
+                        "live backend proof is opt-in. "
+                        f"{_LIVE_HINT}"
+                    )
+                )
+            )
+            continue
+
+        if _has_marker(item, "integration") and not run_integration:
+            item.add_marker(
+                pytest.mark.skip(
+                    reason=(
+                        "integration backend proof is opt-in. "
+                        f"{_INTEGRATION_HINT}"
+                    )
+                )
+            )
 
 
 @pytest.fixture()

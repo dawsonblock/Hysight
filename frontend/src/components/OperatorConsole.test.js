@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import OperatorConsole from "@/components/OperatorConsole";
+import { SUBSYSTEMS_FIXTURE } from "@/lib/api.fixtures";
 import {
   decideRunApproval,
   getRunArtifactDetail,
@@ -82,33 +83,7 @@ const PENDING_APPROVAL = {
   corruption_count: 0,
 };
 
-const SUBSYSTEMS = {
-  status: "degraded",
-  database: {
-    enabled: false,
-    status: "disabled",
-    detail:
-      "Mongo-backed /api/status persistence is disabled because MONGO_URL and DB_NAME are unset",
-  },
-  memory: {
-    backend: "python",
-    uses_sidecar: false,
-    status: "healthy",
-    detail: "Python in-process memory backend is active",
-    service_url: null,
-  },
-  storage: {
-    status: "writable",
-    detail: "HCA storage root and memory storage are writable",
-    root: "/tmp/hca",
-    memory_dir: "/tmp/hca/memory",
-  },
-  llm: {
-    status: "missing",
-    detail:
-      "EMERGENT_LLM_KEY is missing; LLM-backed modules will fall back when possible",
-  },
-};
+const SUBSYSTEMS = SUBSYSTEMS_FIXTURE;
 
 const RUN_DETAIL = {
   run_id: "run-completed",

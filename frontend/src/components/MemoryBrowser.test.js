@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MemoryBrowser from "@/components/MemoryBrowser";
+import { MEMORY_LIST_FIXTURE } from "@/lib/api.fixtures";
 import {
   deleteMemoryRecord,
   listMemories,
@@ -13,25 +14,7 @@ jest.mock("@/lib/api", () => ({
   toErrorMessage: jest.fn((error, fallback) => error?.message || fallback),
 }));
 
-const MEMORY_RESPONSE = {
-  total: 2,
-  records: [
-    {
-      memory_id: "memory-1",
-      memory_type: "procedure",
-      run_id: "run-1",
-      stored_at: "2026-04-13T14:00:00Z",
-      text: "Release summaries should always mention the approval state and the artifact path.",
-    },
-    {
-      memory_id: "memory-2",
-      memory_type: "preference",
-      run_id: "run-2",
-      stored_at: "2026-04-13T14:05:00Z",
-      text: "Database credentials rotate every 30 days and need a reminder record.",
-    },
-  ],
-};
+const MEMORY_RESPONSE = MEMORY_LIST_FIXTURE;
 
 beforeEach(() => {
   listMemories.mockResolvedValue(MEMORY_RESPONSE);

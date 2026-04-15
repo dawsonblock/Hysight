@@ -1,26 +1,33 @@
 #!/usr/bin/env python3
 """Universal test runner for Hysight.
 
-Default mode runs the full supported proof surface without any external
-services:
+Default mode runs only the supported service-free local baseline proof surface:
 
     python scripts/run_tests.py
 
-Optional live sidecar proof (requires a running memvid sidecar):
+Optional proof tiers are explicit and do not broaden the baseline contract:
 
-    RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
-        RUN_MEMVID_TESTS=1 MEMORY_SERVICE_PORT=3032 \
-            python scripts/run_tests.py --sidecar
+    python scripts/run_tests.py --integration
+
+    MONGO_URL=mongodb://127.0.0.1:27017 \
+    DB_NAME=hysight_live \
+    python scripts/run_tests.py --mongo-live
+
+    MEMORY_SERVICE_PORT=3032 \
+    python scripts/run_tests.py --sidecar
 
 Proof modes and their corresponding CI job names:
+- Baseline local proof    → CI: Baseline Local Proof Surface
 - HCA pipeline proof      → CI: HCA Smoke Proof
 - Contract conformance    → CI: Contract Conformance Proof
-- Backend local proof     → CI: Backend Local Proof
-- Backend full proof      → CI: Backend Full Proof
-- Live sidecar proof      → CI: Backend Live Sidecar Proof  (--sidecar only)
+- Backend baseline proof  → CI: Backend Baseline Proof
+- Backend integration     → CI: Backend Integration Proof   (--integration)
+- Live Mongo proof        → CI: Backend Live Mongo Proof    (--mongo-live)
+- Live sidecar proof      → CI: Backend Live Sidecar Proof  (--sidecar)
 """
 
 import argparse
+import importlib
 import importlib.util
 import os
 import pathlib
@@ -38,6 +45,14 @@ MEMORY_SERVICE_URL = os.environ.get(
     "MEMORY_SERVICE_URL",
     f"http://localhost:{DEFAULT_MEMORY_SERVICE_PORT}",
 )
+LIVE_MONGO_URL = os.environ.get(
+    "MONGO_URL",
+    "mongodb://127.0.0.1:27017",
+)
+LIVE_MONGO_DB_NAME = os.environ.get(
+    "DB_NAME",
+    "hysight_live",
+)
 
 # Repo root is two levels up from this file (scripts/run_tests.py → repo root).
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -49,7 +64,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 Step = Dict[str, Any]
 
 
-DEFAULT_STEPS: List[Step] = [
+BASELINE_STEPS: List[Step] = [
     {
         "name": "HCA pipeline proof",
         "isolated_storage": True,
@@ -59,7 +74,7 @@ DEFAULT_STEPS: List[Step] = [
         ],
     },
     {
-        "name": "Backend local proof",
+        "name": "Backend baseline proof",
         "isolated_storage": True,
         "cmd": [
             sys.executable, "-m", "pytest",
@@ -77,22 +92,43 @@ DEFAULT_STEPS: List[Step] = [
             "backend/tests/test_contract_conformance.py", "-q",
         ],
     },
-    {
-        "name": "Backend full proof",
-        "isolated_storage": True,
-        "cmd": [
-            sys.executable, "-m", "pytest",
-            "backend/tests", "-q",
-        ],
-    },
 ]
 
-SIDECAR_STEP: Step = {
-    "name": "Live sidecar proof",
+INTEGRATION_STEP: Step = {
+    "name": "Backend integration proof",
     "isolated_storage": True,
     "cmd": [
         sys.executable, "-m", "pytest",
-        "backend/tests/test_memvid_sidecar.py", "-q",
+        "backend/tests/test_memvid_sidecar.py",
+        "-q",
+        "--run-integration",
+    ],
+}
+
+MONGO_LIVE_STEP: Step = {
+    "name": "Backend live Mongo proof",
+    "isolated_storage": True,
+    "cmd": [
+        sys.executable, "-m", "pytest",
+        "backend/tests/test_status_live_mongo.py",
+        "-q",
+        "--run-live",
+    ],
+    "env": {
+        "RUN_MONGO_TESTS": "1",
+        "MONGO_URL": LIVE_MONGO_URL,
+        "DB_NAME": LIVE_MONGO_DB_NAME,
+    },
+}
+
+SIDECAR_STEP: Step = {
+    "name": "Backend live sidecar proof",
+    "isolated_storage": True,
+    "cmd": [
+        sys.executable, "-m", "pytest",
+        "backend/tests/test_memvid_sidecar.py",
+        "-q",
+        "--run-live",
     ],
     "env": {
         "RUN_MEMVID_TESTS": "1",
@@ -105,16 +141,32 @@ SIDECAR_STEP: Step = {
 # Dependency / environment checks
 # ---------------------------------------------------------------------------
 
-REQUIRED_TEST_DEPS = (
-    "pytest",
-    "requests_mock",
-    "httpx",
-    "jsonschema",
-)
+BASELINE_REQUIRED_TEST_DEPS = {
+    "pytest": "pytest",
+    "requests": "requests",
+    "requests_mock": "requests-mock",
+    "httpx": "httpx",
+    "jsonschema": "jsonschema",
+}
 
-LIVE_SIDECAR_ENV_KEYS = (
+MONGO_REQUIRED_DEPS = {
+    "motor": "motor",
+    "pymongo": "pymongo",
+}
+
+OPTIONAL_PROOF_ENV_KEYS = (
     "RUN_MEMVID_TESTS",
     "MEMORY_SERVICE_URL",
+    "RUN_MONGO_TESTS",
+    "MONGO_URL",
+    "DB_NAME",
+)
+
+BASELINE_TEST_HINT = (
+    "python -m pip install -r backend/requirements-test.txt"
+)
+MONGO_TEST_HINT = (
+    "python -m pip install -r backend/requirements-integration.txt"
 )
 
 
@@ -126,12 +178,39 @@ def _isolated_proof_env(storage_root: pathlib.Path) -> Dict[str, str]:
     }
 
 
-def _check_test_deps() -> bool:
-    """Return True if all required test dependencies are importable."""
-    for pkg in REQUIRED_TEST_DEPS:
-        if importlib.util.find_spec(pkg) is None:
-            return False
-    return True
+def _missing_dependencies(requirements: Dict[str, str]) -> List[str]:
+    missing = []
+    for module_name, package_name in requirements.items():
+        if importlib.util.find_spec(module_name) is None:
+            missing.append(package_name)
+    return missing
+
+
+def _print_missing_dependencies(missing: List[str], install_hint: str) -> None:
+    joined = ", ".join(sorted(missing))
+    print(
+        "Missing required Python dependencies: "
+        f"{joined}.\nRun:\n    {install_hint}"
+    )
+
+
+def _check_mongo_health() -> bool:
+    client = None
+    try:
+        pymongo = importlib.import_module("pymongo")
+        client = pymongo.MongoClient(
+            LIVE_MONGO_URL,
+            serverSelectionTimeoutMS=1000,
+        )
+        client.admin.command("ping")
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
 
 
 def _check_sidecar_health() -> bool:
@@ -181,7 +260,7 @@ def _run_step(step: Step) -> int:
         isolated_env = _isolated_proof_env(isolated_dir)
 
     env = dict(os.environ)
-    for key in LIVE_SIDECAR_ENV_KEYS:
+    for key in OPTIONAL_PROOF_ENV_KEYS:
         if key not in extra_env:
             env.pop(key, None)
     env.update(isolated_env)
@@ -217,48 +296,72 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
+        "--integration",
+        action="store_true",
+        help=(
+            "Run the opt-in backend integration proof tier. This exercises "
+            "the mock-backed memvid boundary tests without requiring a live sidecar."
+        ),
+    )
+    parser.add_argument(
+        "--mongo-live",
+        action="store_true",
+        help=(
+            "Run the opt-in live Mongo proof. Requires reachable Mongo at "
+            f"{LIVE_MONGO_URL} and optional extras from "
+            "backend/requirements-integration.txt."
+        ),
+    )
+    parser.add_argument(
         "--sidecar",
         action="store_true",
         help=(
-            "Also run the live sidecar proof. "
-            f"Requires a running memvid sidecar at {MEMORY_SERVICE_URL} "
-            "and RUN_MEMVID_TESTS=1 in the environment. "
-            "Override the default loopback port with MEMORY_SERVICE_PORT or "
-            "set a full MEMORY_SERVICE_URL explicitly."
+            "Run the opt-in live sidecar proof. Requires a running memvid "
+            f"sidecar at {MEMORY_SERVICE_URL}. Override the default loopback "
+            "port with MEMORY_SERVICE_PORT or set a full MEMORY_SERVICE_URL "
+            "explicitly."
         ),
     )
     args = parser.parse_args()
 
-    # -- dependency check before we touch any test commands --
-    if not _check_test_deps():
+    baseline_missing = _missing_dependencies(BASELINE_REQUIRED_TEST_DEPS)
+    if baseline_missing:
+        _print_missing_dependencies(baseline_missing, BASELINE_TEST_HINT)
+        return 1
+
+    if args.mongo_live:
+        mongo_missing = _missing_dependencies(MONGO_REQUIRED_DEPS)
+        if mongo_missing:
+            _print_missing_dependencies(mongo_missing, MONGO_TEST_HINT)
+            return 1
+        if not _check_mongo_health():
+            print(
+                "Mongo live proof requested, but the configured MongoDB "
+                f"instance is not reachable at {LIVE_MONGO_URL}.\n"
+                "Set MONGO_URL and DB_NAME for the target instance or start "
+                "a local MongoDB server before re-running."
+            )
+            return 1
+
+    if args.sidecar and not _check_sidecar_health():
         print(
-            "Missing test dependencies. Run:\n"
-            "    python -m pip install -r backend/requirements-test.txt"
+            f"Sidecar mode requested, but health check failed at "
+            f"{MEMORY_SERVICE_URL}/health\n"
+            "Start the memvid sidecar first:\n"
+            "    cargo run --manifest-path memvid_service/Cargo.toml --release"
         )
         return 1
 
-    # -- sidecar pre-flight when requested --
-    if args.sidecar:
-        if not os.environ.get("RUN_MEMVID_TESTS"):
-            print(
-                "Sidecar mode requested but RUN_MEMVID_TESTS is not set.\n"
-                "Re-run with:\n"
-                "    RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar"
-            )
-            return 1
-        if not _check_sidecar_health():
-            print(
-                f"Sidecar mode requested, but health check failed at "
-                f"{MEMORY_SERVICE_URL}/health\n"
-                "Start the memvid sidecar first:\n"
-                "    cargo run --manifest-path "
-                "memvid_service/Cargo.toml --release"
-            )
-            return 1
-
-    steps = list(DEFAULT_STEPS)
-    if args.sidecar:
-        steps.append(SIDECAR_STEP)
+    if not any((args.integration, args.mongo_live, args.sidecar)):
+        steps = list(BASELINE_STEPS)
+    else:
+        steps = []
+        if args.integration:
+            steps.append(INTEGRATION_STEP)
+        if args.mongo_live:
+            steps.append(MONGO_LIVE_STEP)
+        if args.sidecar:
+            steps.append(SIDECAR_STEP)
 
     print(f"Running {len(steps)} proof step(s).")
     for step in steps:

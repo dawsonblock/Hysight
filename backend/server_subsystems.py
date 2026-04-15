@@ -66,14 +66,18 @@ async def get_subsystems() -> SubsystemsResponse:
             status="disabled",
             detail=(
                 "Mongo-backed /api/status persistence is disabled because "
-                "MONGO_URL and DB_NAME are unset"
+                "MONGO_URL and DB_NAME are unset. Replay-backed HCA and "
+                "memory routes remain available without Mongo."
             ),
         )
     elif client is None or db is None:
         database_status = DatabaseSubsystemStatus(
             enabled=True,
             status="unhealthy",
-            detail="Mongo is configured but the backend database client is unavailable",
+            detail=(
+                "Mongo is configured for optional /api/status persistence, "
+                "but the backend database client is unavailable."
+            ),
         )
     else:
         try:
@@ -88,7 +92,10 @@ async def get_subsystems() -> SubsystemsResponse:
             database_status = DatabaseSubsystemStatus(
                 enabled=True,
                 status="healthy",
-                detail="Mongo-backed /api/status persistence is reachable",
+                detail=(
+                    "Mongo-backed /api/status persistence is reachable. "
+                    "Mongo does not own replay-backed HCA or memory routes."
+                ),
             )
 
     memory_settings = None
@@ -99,7 +106,7 @@ async def get_subsystems() -> SubsystemsResponse:
             backend="unknown",
             uses_sidecar=False,
             status="unhealthy",
-            detail=str(exc),
+            detail=f"Memory authority configuration is invalid: {exc}",
             service_url=None,
         )
     else:
@@ -111,7 +118,10 @@ async def get_subsystems() -> SubsystemsResponse:
                     backend=memory_settings.backend,
                     uses_sidecar=True,
                     status="unhealthy",
-                    detail=str(exc),
+                    detail=(
+                        "Rust memory sidecar is configured as the active "
+                        f"memory authority but is unavailable: {exc}"
+                    ),
                     service_url=memory_settings.service_url,
                 )
             else:
@@ -119,7 +129,10 @@ async def get_subsystems() -> SubsystemsResponse:
                     backend=memory_settings.backend,
                     uses_sidecar=True,
                     status="healthy",
-                    detail="Rust memory sidecar is reachable",
+                    detail=(
+                        "Rust memory sidecar is the active memory authority "
+                        "and is reachable"
+                    ),
                     service_url=memory_settings.service_url,
                 )
         else:
@@ -127,7 +140,10 @@ async def get_subsystems() -> SubsystemsResponse:
                 backend=memory_settings.backend,
                 uses_sidecar=False,
                 status="healthy",
-                detail="Python in-process memory backend is active",
+                detail=(
+                    "Python in-process memory controller is the active "
+                    "local memory authority"
+                ),
                 service_url=None,
             )
 

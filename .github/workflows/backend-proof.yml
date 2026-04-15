@@ -1,190 +1,233 @@
 name: backend-proof
 
 on:
-    push:
-        paths:
-            - ".github/workflows/backend-proof.yml"
-            - "backend/**"
-            - "contract/**"
-            - "hca/**"
-            - "memvid/**"
-            - "memvid_service/**"
-            - "memory_service/**"
-            - "pyproject.toml"
-            - "README.md"
-            - "tests/**"
-    pull_request:
-        paths:
-            - ".github/workflows/backend-proof.yml"
-            - "backend/**"
-            - "contract/**"
-            - "hca/**"
-            - "memvid/**"
-            - "memvid_service/**"
-            - "memory_service/**"
-            - "pyproject.toml"
-            - "README.md"
-            - "tests/**"
-    workflow_dispatch:
-        inputs:
-            run_live_sidecar:
-                description: "Run the live Rust memvid sidecar proof"
-                required: false
-                default: false
-                type: boolean
+  push:
+    paths:
+      - ".github/workflows/backend-proof.yml"
+      - "backend/**"
+      - "contract/**"
+      - "hca/**"
+      - "memvid/**"
+      - "memvid_service/**"
+      - "memory_service/**"
+      - "pyproject.toml"
+      - "README.md"
+      - "tests/**"
+  pull_request:
+    paths:
+      - ".github/workflows/backend-proof.yml"
+      - "backend/**"
+      - "contract/**"
+      - "hca/**"
+      - "memvid/**"
+      - "memvid_service/**"
+      - "memory_service/**"
+      - "pyproject.toml"
+      - "README.md"
+      - "tests/**"
+  workflow_dispatch:
+    inputs:
+      run_live_mongo:
+        description: "Run the live Mongo-backed status proof"
+        required: false
+        default: false
+        type: boolean
+      run_live_sidecar:
+        description: "Run the live Rust memvid sidecar proof"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
-    documented-proof-surface:
-        name: Documented Proof Surface
-        runs-on: ubuntu-latest
-        timeout-minutes: 20
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Run documented proof surface
-              run: python scripts/run_tests.py
+  baseline-proof-surface:
+    name: Baseline Local Proof Surface
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements-core.txt
+            backend/requirements-integration.txt
+            backend/requirements.txt
+            backend/requirements-test.txt
+            hca/pyproject.toml
+      - name: Bootstrap test environment
+        run: |
+          python -m pip install --upgrade pip
+          make test-bootstrap
+      - name: Run baseline local proof surface
+        run: python scripts/run_tests.py
 
-    hca-smoke:
-        name: HCA Smoke Proof
-        runs-on: ubuntu-latest
-        timeout-minutes: 15
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Run make test-pipeline
-              run: make test-pipeline
+  hca-smoke:
+    name: HCA Smoke Proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements-core.txt
+            backend/requirements-integration.txt
+            backend/requirements.txt
+            backend/requirements-test.txt
+            hca/pyproject.toml
+      - name: Bootstrap test environment
+        run: |
+          python -m pip install --upgrade pip
+          make test-bootstrap
+      - name: Run make test-pipeline
+        run: make test-pipeline
 
-    contract-conformance:
-        name: Contract Conformance Proof
-        runs-on: ubuntu-latest
-        timeout-minutes: 15
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Run make test-contract
-              run: make test-contract
+  contract-conformance:
+    name: Contract Conformance Proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements-core.txt
+            backend/requirements-integration.txt
+            backend/requirements.txt
+            backend/requirements-test.txt
+            hca/pyproject.toml
+      - name: Bootstrap test environment
+        run: |
+          python -m pip install --upgrade pip
+          make test-bootstrap
+      - name: Run make test-contract
+        run: make test-contract
 
-    backend-local:
-        name: Backend Local Proof
-        runs-on: ubuntu-latest
-        timeout-minutes: 15
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Run make test-backend-local
-              run: make test-backend-local
+  backend-baseline:
+    name: Backend Baseline Proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements-core.txt
+            backend/requirements-integration.txt
+            backend/requirements.txt
+            backend/requirements-test.txt
+            hca/pyproject.toml
+      - name: Bootstrap test environment
+        run: |
+          python -m pip install --upgrade pip
+          make test-bootstrap
+      - name: Run make test-backend-baseline
+        run: make test-backend-baseline
 
-    backend-full:
-        name: Backend Full Proof
-        runs-on: ubuntu-latest
-        timeout-minutes: 20
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Run make test-backend
-              run: make test-backend
+  backend-integration:
+    name: Backend Integration Proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements-core.txt
+            backend/requirements-integration.txt
+            backend/requirements.txt
+            backend/requirements-test.txt
+            hca/pyproject.toml
+      - name: Bootstrap test environment
+        run: |
+          python -m pip install --upgrade pip
+          make test-bootstrap
+      - name: Run make test-backend-integration
+        run: make test-backend-integration
 
-    backend-live-sidecar:
-        name: Backend Live Sidecar Proof
-        if: "${{ github.event_name != 'workflow_dispatch' || inputs.run_live_sidecar }}"
-        runs-on: ubuntu-latest
-        timeout-minutes: 30
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
-                  cache-dependency-path: |
-                      backend/requirements-core.txt
-                      backend/requirements.txt
-                      backend/requirements-test.txt
-                      hca/pyproject.toml
-            - name: Bootstrap test environment
-              run: |
-                  python -m pip install --upgrade pip
-                  make test-bootstrap
-            - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
-            - name: Start memvid sidecar
-              run: |
-                  cargo run --manifest-path memvid_service/Cargo.toml --release > /tmp/memvid-sidecar.log 2>&1 &
-                  echo $! > /tmp/memvid-sidecar.pid
-                  for _ in $(seq 1 30); do
-                    if curl --fail --silent http://localhost:3031/health >/dev/null; then
-                      exit 0
-                    fi
-                    sleep 1
-                  done
-                  cat /tmp/memvid-sidecar.log
-                  exit 1
-            - name: Run make test-sidecar
-              env:
-                  MEMORY_SERVICE_URL: http://localhost:3031
-              run: make test-sidecar
-            - name: Stop memvid sidecar
-              if: always()
-              run: |
-                  if [ -f /tmp/memvid-sidecar.pid ]; then
-                    kill "$(cat /tmp/memvid-sidecar.pid)" || true
-                  fi
+  backend-live-mongo:
+    name: Backend Live Mongo Proof
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_mongo }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements-core.txt
+            backend/requirements-integration.txt
+            backend/requirements.txt
+            backend/requirements-test.txt
+            hca/pyproject.toml
+      - name: Bootstrap integration test environment
+        run: |
+          python -m pip install --upgrade pip
+          make test-bootstrap-integration
+      - name: Run make test-mongo-live
+        env:
+          LIVE_MONGO_URL: mongodb://127.0.0.1:27017
+          LIVE_MONGO_DB_NAME: hysight_live_ci
+        run: make test-mongo-live
+
+  backend-live-sidecar:
+    name: Backend Live Sidecar Proof
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_sidecar }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements-core.txt
+            backend/requirements-integration.txt
+            backend/requirements.txt
+            backend/requirements-test.txt
+            hca/pyproject.toml
+      - name: Bootstrap test environment
+        run: |
+          python -m pip install --upgrade pip
+          make test-bootstrap
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Start memvid sidecar
+        run: |
+          cargo run --manifest-path memvid_service/Cargo.toml --release > /tmp/memvid-sidecar.log 2>&1 &
+          echo $! > /tmp/memvid-sidecar.pid
+          for _ in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3031/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/memvid-sidecar.log
+          exit 1
+      - name: Run make test-sidecar
+        env:
+          MEMORY_SERVICE_URL: http://localhost:3031
+        run: make test-sidecar
+      - name: Stop memvid sidecar
+        if: always()
+        run: |
+          if [ -f /tmp/memvid-sidecar.pid ]; then
+            kill "$(cat /tmp/memvid-sidecar.pid)" || true
+          fi

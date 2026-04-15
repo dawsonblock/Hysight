@@ -29,15 +29,21 @@ If you only do one thing, run the proof surface first. Hysight treats local veri
 # 1. Install backend test dependencies
 python -m pip install -r backend/requirements-test.txt
 
-# 2. Run the full default proof surface
+# 2. Run the default local proof surface
 python scripts/run_tests.py
 
-# 3. Optional — live sidecar proof (requires running memvid sidecar)
-RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
+# 3. Optional — install the extra integration/live proof dependencies
+python -m pip install -r backend/requirements-integration.txt
+
+# 4. Optional — mock-backed integration proof (no live services required)
+python scripts/run_tests.py --integration
+
+# 5. Optional — live sidecar proof (requires a running memvid sidecar)
+python scripts/run_tests.py --sidecar
 
 # If localhost:3031 is already occupied, move the sidecar and proof together
 MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
-RUN_MEMVID_TESTS=1 MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
+MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
 
 # Or use the automated make wrapper around the full live sidecar proof
 make run-memvid-sidecar
@@ -46,6 +52,9 @@ make proof-sidecar
 # Optional — live Mongo-backed /api/status proof
 make test-mongo-live
 ```
+
+The default local proof surface is service-free. The optional integration,
+live Mongo, and live sidecar proofs are separate opt-in tiers.
 
 That is the shortest path to prove the system locally. Everything else below covers setup, configuration, operator workflows, and advanced usage.
 
@@ -346,9 +355,28 @@ python -m pip install -r backend/requirements-test.txt
 
 That single install command covers:
 
-- the editable `hca` package
+- the editable `./hca` runtime package
 - backend runtime dependencies
 - backend test dependencies such as `requests-mock`
+
+The install authority for the Python runtime is `./hca`; the backend proof
+surface does not install a second runtime package from anywhere else.
+
+If you want the optional integration and live Mongo proof tiers too, install:
+
+```bash
+make test-bootstrap-integration
+```
+
+Or, without `make`:
+
+```bash
+python -m pip install -r backend/requirements-integration.txt
+```
+
+That adds the optional Mongo drivers used by `python scripts/run_tests.py
+--integration` and `make test-mongo-live` without changing the default local
+proof contract.
 
 If you also want formatter, lint, and type-check tooling, use:
 
@@ -372,6 +400,13 @@ requirements plus a `preinstall` runtime guard for fast failure on mismatched
 runtimes.
 
 If you only need the backend runtime and not the proof surface:
+
+```bash
+python -m pip install -e ./hca -r backend/requirements-core.txt
+```
+
+If you want the broader backend runtime bundle, including optional Mongo
+support and emergent integration dependencies, install:
 
 ```bash
 python -m pip install -e ./hca -r backend/requirements.txt
@@ -687,16 +722,20 @@ python scripts/run_tests.py
 ```
 
 This backend proof path is the authoritative local runtime proof. It does not
-claim frontend verification or live Rust sidecar coverage by itself.
+claim frontend verification, optional integration coverage, live Mongo
+coverage, or live Rust sidecar coverage by itself.
 
 ### Individual proof modes
 
 | Proof mode | Command | CI job |
 | --- | --- | --- |
+| Baseline local proof surface | `python scripts/run_tests.py` | Baseline Local Proof Surface |
 | HCA pipeline proof | `pytest tests/test_hca_pipeline.py -q` | HCA Smoke Proof |
 | Contract conformance proof | `pytest backend/tests/test_contract_conformance.py -q` | Contract Conformance Proof |
-| Backend local proof | `pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q` | Backend Local Proof |
-| Backend full proof | `pytest backend/tests -q` | Backend Full Proof |
+| Backend baseline proof | `pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q` | Backend Baseline Proof |
+| Backend integration proof | `pytest backend/tests/test_memvid_sidecar.py -q --run-integration` | Backend Integration Proof |
+| Backend live Mongo proof | `pytest backend/tests/test_status_live_mongo.py -q --run-live` | Backend Live Mongo Proof |
+| Backend live sidecar proof | `pytest backend/tests/test_memvid_sidecar.py -q --run-live` | Backend Live Sidecar Proof |
 
 ### Frontend proof
 
@@ -761,14 +800,14 @@ it does not run tests by itself.
 ### Live sidecar proof (opt-in locally)
 
 Proves real sidecar availability, retrieval, and restart semantics. Requires a
-running memvid sidecar (see [Build the memvid sidecar](#6-optional-build-the-memvid-sidecar)):
+running memvid sidecar (see [Build the memvid sidecar](#6-optional-build-the-memvid-sidecar)). This is not part of the default local proof surface:
 
 ```bash
-RUN_MEMVID_TESTS=1 python scripts/run_tests.py --sidecar
+python scripts/run_tests.py --sidecar
 
 # If localhost:3031 is busy on macOS or another local service is using it
 MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
-RUN_MEMVID_TESTS=1 MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
+MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
 
 # Or use the explicit make wrapper around the same proof command
 make run-memvid-sidecar
@@ -779,7 +818,7 @@ Or directly:
 
 ```bash
 RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3032 \
-  pytest backend/tests/test_memvid_sidecar.py -q
+  pytest backend/tests/test_memvid_sidecar.py -q --run-live
 ```
 
 The proof runner defaults to `http://localhost:3031`, but it will derive the
@@ -788,7 +827,8 @@ loopback URL from `MEMORY_SERVICE_PORT` when `MEMORY_SERVICE_URL` is unset.
 ### Live Mongo-backed `/api/status` proof (opt-in locally)
 
 Proves the real Mongo-backed status persistence path against a live MongoDB
-instance without changing the default service-free proof surface:
+instance without changing the default service-free proof surface. This proof
+also sits outside the default local contract:
 
 ```bash
 make test-mongo-live
@@ -799,17 +839,19 @@ LIVE_MONGO_DB_NAME=hysight_live \
 make test-mongo-live
 ```
 
-CI job name: **Backend Live Sidecar Proof**. Push and pull request runs execute
-this supported sidecar mode in CI; `workflow_dispatch` exposes an input so
-manual runs can skip or include it explicitly.
+CI job name: **Backend Live Mongo Proof**. The separate live sidecar CI job is
+named **Backend Live Sidecar Proof**.
 
 ### Notes
 
-- The backend local proof validates the FastAPI app, in-process memory routes,
+- The baseline local proof validates the FastAPI app, in-process memory routes,
   and HCA runtime behavior without external services.
-- The backend full proof adds mock-backed memvid boundary coverage.
+- The optional integration proof adds mock-backed memvid boundary coverage
+  without requiring a running sidecar.
 - The live sidecar proof remains a separate local opt-in path for the real Rust
   sidecar, even though CI also exercises that supported mode.
+- The live Mongo proof remains a separate local opt-in path for real
+  `/api/status` persistence.
 - `./scripts/proof_local.sh` is the no-logic wrapper around the canonical
   proof authority `python scripts/run_tests.py`.
 - GitHub Actions mirrors the backend proof modes in `.github/workflows/backend-proof.yml`

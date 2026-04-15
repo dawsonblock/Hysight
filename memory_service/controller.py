@@ -41,6 +41,13 @@ class MemoryBackendError(RuntimeError):
     """Raised when the configured memory backend cannot serve a request."""
 
 
+def _active_sidecar_error(message: str) -> MemoryBackendError:
+    return MemoryBackendError(
+        "Rust memory sidecar is configured as the active memory authority, "
+        f"but {message}. Check /api/subsystems for operator-facing status."
+    )
+
+
 def _coerce_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
@@ -321,8 +328,8 @@ class MemoryController:
         try:
             import httpx
         except ImportError as exc:  # pragma: no cover - dependency validation
-            raise MemoryBackendError(
-                "httpx must be installed when MEMORY_BACKEND=rust"
+            raise _active_sidecar_error(
+                "the required httpx dependency is missing"
             ) from exc
 
         try:
@@ -335,8 +342,8 @@ class MemoryController:
             response.raise_for_status()
             return response
         except httpx.HTTPError as exc:
-            raise MemoryBackendError(
-                f"Rust memory backend request failed: {exc}"
+            raise _active_sidecar_error(
+                f"requests to the sidecar failed ({exc})"
             ) from exc
 
     @staticmethod
@@ -344,8 +351,8 @@ class MemoryController:
         try:
             return response.json()
         except ValueError as exc:
-            raise MemoryBackendError(
-                "Rust memory backend returned invalid JSON"
+            raise _active_sidecar_error(
+                "the sidecar returned invalid JSON"
             ) from exc
 
     def _rust_ingest(self, candidate: CandidateMemory) -> Optional[str]:
@@ -358,8 +365,8 @@ class MemoryController:
         try:
             return IngestResponse.model_validate(payload).memory_id
         except ValidationError as exc:
-            raise MemoryBackendError(
-                "Rust memory backend returned an invalid ingest payload"
+            raise _active_sidecar_error(
+                "the sidecar returned an invalid ingest payload"
             ) from exc
 
     def _rust_retrieve(self, query: RetrievalQuery) -> List[RetrievalHit]:
@@ -372,8 +379,8 @@ class MemoryController:
         try:
             return RetrievalResponse.model_validate(payload).hits
         except ValidationError as exc:
-            raise MemoryBackendError(
-                "Rust memory backend returned an invalid retrieve payload"
+            raise _active_sidecar_error(
+                "the sidecar returned an invalid retrieve payload"
             ) from exc
 
     def _rust_maintain(self) -> MaintenanceReport:
@@ -383,8 +390,8 @@ class MemoryController:
                 self._parse_json_response(response)
             )
         except ValidationError as exc:
-            raise MemoryBackendError(
-                "Rust memory backend returned an invalid maintenance payload"
+            raise _active_sidecar_error(
+                "the sidecar returned an invalid maintenance payload"
             ) from exc
 
     def _rust_list(self, memory_type, scope, include_expired, limit, offset):
@@ -410,8 +417,8 @@ class MemoryController:
                 }
             )
         except ValidationError as exc:
-            raise MemoryBackendError(
-                "Rust memory backend returned an invalid list payload"
+            raise _active_sidecar_error(
+                "the sidecar returned an invalid list payload"
             ) from exc
         return list_response.records, list_response.total
 
@@ -421,6 +428,6 @@ class MemoryController:
         try:
             return DeleteMemoryResponse.model_validate(payload).deleted
         except ValidationError as exc:
-            raise MemoryBackendError(
-                "Rust memory backend returned an invalid delete payload"
+            raise _active_sidecar_error(
+                "the sidecar returned an invalid delete payload"
             ) from exc

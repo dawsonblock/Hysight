@@ -15,6 +15,14 @@ from memory_service.controller import MemoryBackendError  # noqa: E402
 from memory_service.types import MemoryType, ScopeType  # noqa: E402
 
 
+def _memory_route_unavailable_detail(exc: Exception) -> str:
+    return (
+        f"Active memory authority is unavailable: {exc}. "
+        "Check /api/subsystems for the authoritative memory, sidecar, and "
+        "optional Mongo status."
+    )
+
+
 def register_memory_routes(router: APIRouter) -> None:
     @router.post("/hca/memory/retrieve", response_model=RetrievalResponse)
     async def retrieve_memory(body: RetrievalQuery):
@@ -23,7 +31,10 @@ def register_memory_routes(router: APIRouter) -> None:
         try:
             return RetrievalResponse(hits=get_controller().retrieve(body))
         except (MemoryBackendError, MemoryConfigurationError) as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=503,
+                detail=_memory_route_unavailable_detail(exc),
+            ) from exc
 
     @router.post("/hca/memory/maintain", response_model=MaintenanceReport)
     async def maintain_memory():
@@ -32,7 +43,10 @@ def register_memory_routes(router: APIRouter) -> None:
         try:
             return get_controller().maintain()
         except (MemoryBackendError, MemoryConfigurationError) as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=503,
+                detail=_memory_route_unavailable_detail(exc),
+            ) from exc
 
     @router.get("/hca/memory/list", response_model=MemoryListResponse)
     async def list_memory(
@@ -53,7 +67,10 @@ def register_memory_routes(router: APIRouter) -> None:
                 offset=offset,
             )
         except (MemoryBackendError, MemoryConfigurationError) as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=503,
+                detail=_memory_route_unavailable_detail(exc),
+            ) from exc
         return MemoryListResponse(records=records, total=total)
 
     @router.delete(
@@ -66,7 +83,10 @@ def register_memory_routes(router: APIRouter) -> None:
         try:
             deleted = get_controller().delete_record(memory_id)
         except (MemoryBackendError, MemoryConfigurationError) as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=503,
+                detail=_memory_route_unavailable_detail(exc),
+            ) from exc
         if not deleted:
             raise HTTPException(status_code=404, detail="Memory not found")
         return DeleteMemoryResponse(deleted=True, memory_id=memory_id)

@@ -1,2 +1,3 @@
 -r requirements-core.txt
+-r requirements-integration.txt
 emergentintegrations==0.1.0

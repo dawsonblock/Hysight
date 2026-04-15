@@ -1,3 +1,15 @@
+import {
+  DELETE_MEMORY_FIXTURE,
+  MEMORY_LIST_FIXTURE,
+  RUN_APPROVED_SUMMARY_FIXTURE,
+  RUN_ARTIFACT_DETAIL_FIXTURE,
+  RUN_ARTIFACTS_FIXTURE,
+  RUN_EVENTS_FIXTURE,
+  RUN_LIST_FIXTURE,
+  RUN_SUMMARY_FIXTURE,
+  SUBSYSTEMS_FIXTURE,
+} from "@/lib/api.fixtures";
+
 function loadApiModule(backendUrl) {
   jest.resetModules();
 
@@ -48,19 +60,11 @@ describe("frontend API client boundary", () => {
   test("listRuns sends the canonical query parameters and validates the response", async () => {
     const { listRuns } = loadApiModule();
 
-    global.fetch.mockResolvedValue(
-      createJsonResponse({
-        records: [{ run_id: "run-1", goal: "Inspect release", state: "completed" }],
-        total: 1,
-      })
-    );
+    global.fetch.mockResolvedValue(createJsonResponse(RUN_LIST_FIXTURE));
 
     await expect(
       listRuns({ query: " release ", limit: 5, offset: 10 })
-    ).resolves.toEqual({
-      records: [{ run_id: "run-1", goal: "Inspect release", state: "completed" }],
-      total: 1,
-    });
+    ).resolves.toEqual(RUN_LIST_FIXTURE);
 
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/hca/runs?q=release&limit=5&offset=10",
@@ -68,30 +72,35 @@ describe("frontend API client boundary", () => {
     );
   });
 
+  test("getRunSummary validates a realistic replay-backed run payload", async () => {
+    const { getRunSummary } = loadApiModule();
+
+    global.fetch.mockResolvedValue(createJsonResponse(RUN_SUMMARY_FIXTURE));
+
+    await expect(getRunSummary("run-completed")).resolves.toEqual(RUN_SUMMARY_FIXTURE);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/hca/run/run-completed",
+      undefined
+    );
+  });
+
   test("decideRunApproval posts to the canonical approval route and validates the summary", async () => {
     const { decideRunApproval } = loadApiModule();
 
-    global.fetch.mockResolvedValue(
-      createJsonResponse({
-        run_id: "run-approve",
-        goal: "Please remember this note",
-        state: "completed",
-        approval_id: "approval-1",
-        last_approval_decision: "granted",
-      })
-    );
+    global.fetch.mockResolvedValue(createJsonResponse(RUN_APPROVED_SUMMARY_FIXTURE));
 
     await expect(
-      decideRunApproval("run-approve", "approve", "approval-1")
+      decideRunApproval("run-awaiting", "approve", "approval-1")
     ).resolves.toMatchObject({
-      run_id: "run-approve",
+      run_id: "run-awaiting",
       state: "completed",
       approval_id: "approval-1",
       last_approval_decision: "granted",
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/hca/run/run-approve/approve",
+      "/api/hca/run/run-awaiting/approve",
       expect.objectContaining({
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -100,36 +109,51 @@ describe("frontend API client boundary", () => {
     );
   });
 
+  test("listRunEvents validates the event boundary", async () => {
+    const { listRunEvents } = loadApiModule();
+
+    global.fetch.mockResolvedValue(createJsonResponse(RUN_EVENTS_FIXTURE));
+
+    await expect(listRunEvents("run-completed", { limit: 25, offset: 5 })).resolves.toEqual(
+      RUN_EVENTS_FIXTURE
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/hca/run/run-completed/events?limit=25&offset=5",
+      undefined
+    );
+  });
+
+  test("artifact list and detail helpers validate realistic payloads", async () => {
+    const { getRunArtifactDetail, listRunArtifacts } = loadApiModule();
+
+    global.fetch
+      .mockResolvedValueOnce(createJsonResponse(RUN_ARTIFACTS_FIXTURE))
+      .mockResolvedValueOnce(createJsonResponse(RUN_ARTIFACT_DETAIL_FIXTURE));
+
+    await expect(listRunArtifacts("run-completed", { limit: 10, offset: 0 })).resolves.toEqual(
+      RUN_ARTIFACTS_FIXTURE
+    );
+    await expect(
+      getRunArtifactDetail("run-completed", "artifact-1", { previewBytes: 4096 })
+    ).resolves.toEqual(RUN_ARTIFACT_DETAIL_FIXTURE);
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/hca/run/run-completed/artifacts?limit=10&offset=0",
+      undefined
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/hca/run/run-completed/artifacts/artifact-1?preview_bytes=4096",
+      undefined
+    );
+  });
+
   test("getSubsystems reads the canonical subsystem endpoint and validates the response", async () => {
     const { getSubsystems } = loadApiModule();
 
-    global.fetch.mockResolvedValue(
-      createJsonResponse({
-        status: "degraded",
-        database: {
-          enabled: false,
-          status: "disabled",
-          detail: "database disabled",
-        },
-        memory: {
-          backend: "python",
-          uses_sidecar: false,
-          status: "healthy",
-          detail: "memory ready",
-          service_url: null,
-        },
-        storage: {
-          status: "writable",
-          detail: "storage ready",
-          root: "/tmp/hca",
-          memory_dir: "/tmp/hca/memory",
-        },
-        llm: {
-          status: "missing",
-          detail: "llm key missing",
-        },
-      })
-    );
+    global.fetch.mockResolvedValue(createJsonResponse(SUBSYSTEMS_FIXTURE));
 
     await expect(getSubsystems()).resolves.toMatchObject({
       status: "degraded",
@@ -143,6 +167,30 @@ describe("frontend API client boundary", () => {
     });
 
     expect(global.fetch).toHaveBeenCalledWith("/api/subsystems", undefined);
+  });
+
+  test("memory list and delete helpers validate realistic payloads", async () => {
+    const { deleteMemoryRecord, listMemories } = loadApiModule();
+
+    global.fetch
+      .mockResolvedValueOnce(createJsonResponse(MEMORY_LIST_FIXTURE))
+      .mockResolvedValueOnce(createJsonResponse(DELETE_MEMORY_FIXTURE));
+
+    await expect(
+      listMemories({ memoryType: "procedure", scope: "shared", limit: 20, offset: 2 })
+    ).resolves.toEqual(MEMORY_LIST_FIXTURE);
+    await expect(deleteMemoryRecord("memory-1")).resolves.toEqual(DELETE_MEMORY_FIXTURE);
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/hca/memory/list?memory_type=procedure&scope=shared&limit=20&offset=2",
+      undefined
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/hca/memory/memory-1",
+      { method: "DELETE" }
+    );
   });
 
   test("fetchJson rejects an unexpected response shape from the backend boundary", async () => {

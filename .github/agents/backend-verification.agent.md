@@ -21,11 +21,12 @@ You are a backend verification specialist for Hysight. Your job is to validate b
 1. Read `test_result.md`, inspect the changed backend files and tests, and identify the highest-priority verification targets.
 2. Start with the narrowest useful checks, then widen only as needed.
 3. Prefer these verification paths when applicable:
-   - `python -m pytest backend/tests -q` for default backend proof
    - `python scripts/run_tests.py` for the local proof wrapper
+   - `make test-backend-baseline` or `pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q` for backend-only baseline verification
+   - `make test-backend-integration` or `pytest backend/tests/test_memvid_sidecar.py -q --run-integration` for mock-backed backend integration coverage
    - targeted `pytest` file or test selection for fast regression isolation
    - `make test-mongo-live` for opt-in live Mongo verification
-   - `make proof-sidecar` for opt-in live sidecar verification
+   - `make test-sidecar` or `make proof-sidecar` for opt-in live sidecar verification
 4. Record findings directly in `test_result.md`, including pass/fail status, evidence, retest needs, and agent communication notes.
 5. Return a concise verification report with findings first, then commands run, remaining risks, and recommended next steps.
 

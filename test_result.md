@@ -197,6 +197,34 @@ backend:
       - working: true
         agent: "main"
         comment: "Created RELEASE_NOTES.md with release-facing observability, subsystem health, deployment notes, proof commands, and current limitations derived from HARDENING_REPORT.md and REPAIR_REPORT.md."
+  - task: "Proof contract tier hardening"
+    implemented: true
+    working: "NA"
+    file: "scripts/run_tests.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Separated the backend proof surface into baseline, integration, and live tiers; added pytest marker policy in backend/tests/conftest.py; split optional Mongo dependencies into backend/requirements-integration.txt; and updated Makefile plus .github/workflows/backend-proof.yml to match the new proof contract."
+      - working: "NA"
+        agent: "main"
+        comment: "Truth-aligned README.md, docs/deployment.md, and .github/agents/backend-verification.agent.md to the implemented proof commands. Needs verification of the default baseline proof surface plus targeted integration/live entrypoints where relevant."
+  - task: "Subsystem authority wording hardening"
+    implemented: true
+    working: "NA"
+    file: "backend/server_subsystems.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Clarified /api/subsystems database and memory detail strings so operators can distinguish replay-backed HCA routes, optional Mongo-backed /api/status persistence, and the active memory authority without changing the contract schema."
+      - working: "NA"
+        agent: "main"
+        comment: "Updated backend/server_memory_routes.py and memory_service/controller.py so memory authority failures direct operators to /api/subsystems, then aligned backend assertions in backend/tests/test_server_bootstrap.py and backend/tests/test_status_live_mongo.py."
 frontend:
   - task: "Frontend proof surface verification"
     implemented: true
@@ -226,13 +254,27 @@ frontend:
       - working: "NA"
         agent: "main"
         comment: "Evaluated frontend/src/lib/api.js against the current jsconfig and lint surface. Recommendation is to keep the current JavaScript build and add strict JSDoc typing to exported API helpers before attempting a full TypeScript migration."
+  - task: "Frontend API fixture contract hardening"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/lib/api.test.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added shared realistic operator payload fixtures in frontend/src/lib/api.fixtures.js, expanded frontend/src/lib/api.test.js to cover run summary, events, artifacts, subsystems, and memory routes, and switched selected component tests to reuse the shared fixtures."
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 4
   run_ui: false
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Proof contract tier hardening"
+    - "Subsystem authority wording hardening"
+    - "Frontend API fixture contract hardening"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -251,3 +293,5 @@ agent_communication:
     message: "Starting frontend verification for the current branch. No active frontend source diff was detected, so the verification scope is the documented frontend proof surface: API-client boundary, lint, full Jest, and build."
   - agent: "testing"
     message: "Frontend verification complete. The API-client boundary test passed, eslint passed, all 5 frontend Jest suites passed, and the production build succeeded. No frontend regressions were found in this verification pass."
+  - agent: "main"
+    message: "A second hardening pass is ready for verification. Backend focus: scripts/run_tests.py proof-tier split, backend/tests/conftest.py marker policy, backend/requirements-integration.txt dependency split, Makefile and backend-proof workflow alignment, plus subsystem authority wording in backend/server_subsystems.py, backend/server_memory_routes.py, and memory_service/controller.py. Frontend focus: shared fixtures in frontend/src/lib/api.fixtures.js, expanded API boundary coverage in frontend/src/lib/api.test.js, and fixture reuse in OperatorConsole.test.js and MemoryBrowser.test.js. Prefer default baseline proof first, then targeted integration/live entrypoints only as needed."
