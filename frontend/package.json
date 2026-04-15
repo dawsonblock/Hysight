@@ -68,6 +68,10 @@
     "node": "20.x",
     "yarn": "1.22.22"
   },
+  "volta": {
+    "node": "20.20.2",
+    "yarn": "1.22.22"
+  },
   "proxy": "http://localhost:8000",
   "browserslist": {
     "production": [

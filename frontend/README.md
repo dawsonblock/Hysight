@@ -21,8 +21,9 @@ match `.github/workflows/frontend-proof.yml`.
 message when Node 20.x or Yarn 1.22.22 are not active.
 
 If you use a version manager, switch to the pinned runtime first. The frontend
-directory includes both `.nvmrc` and `.node-version`, so tools that understand
-either file can align with CI's Node 20 target.
+directory includes `.nvmrc`, `.node-version`, `.tool-versions`, `mise.toml`,
+and a `volta` block in `package.json`, so the common Node version managers can
+align with CI's Node 20 target without guesswork.
 
 ```bash
 cd frontend
@@ -31,7 +32,18 @@ cd frontend
 nvm install 20
 nvm use
 
-# or confirm the pinned version for fnm / asdf / mise / other managers
+# fnm reads .node-version
+fnm use
+
+# asdf reads .tool-versions
+asdf install
+asdf current
+
+# mise reads mise.toml
+mise install
+mise current
+
+# or confirm the pinned version directly
 cat .node-version
 ```
 
