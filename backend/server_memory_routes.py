@@ -16,8 +16,11 @@ from memory_service.types import MemoryType, ScopeType  # noqa: E402
 
 
 def _memory_route_unavailable_detail(exc: Exception) -> str:
+    detail = str(exc).strip()
+    if "/api/subsystems" in detail:
+        return detail.rstrip(".") + "."
     return (
-        f"Active memory authority is unavailable: {exc}. "
+        f"Active memory authority is unavailable: {detail.rstrip('.')}. "
         "Check /api/subsystems for the authoritative memory, sidecar, and "
         "optional Mongo status."
     )

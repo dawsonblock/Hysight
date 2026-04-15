@@ -199,11 +199,11 @@ backend:
         comment: "Created RELEASE_NOTES.md with release-facing observability, subsystem health, deployment notes, proof commands, and current limitations derived from HARDENING_REPORT.md and REPAIR_REPORT.md."
   - task: "Proof contract tier hardening"
     implemented: true
-    working: "NA"
+    working: true
     file: "scripts/run_tests.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -211,13 +211,19 @@ backend:
       - working: "NA"
         agent: "main"
         comment: "Truth-aligned README.md, docs/deployment.md, and .github/agents/backend-verification.agent.md to the implemented proof commands. Needs verification of the default baseline proof surface plus targeted integration/live entrypoints where relevant."
+      - working: true
+        agent: "testing"
+        comment: "Verified the service-free proof contract with python scripts/run_tests.py (HCA pipeline 7 passed, backend baseline 70 passed, contract conformance 18 passed). Narrowed the changed surfaces with python -m pytest backend/tests/test_server_bootstrap.py -q (31 passed), python -m pytest backend/tests/test_memvid_sidecar.py -q (15 skipped under the default opt-in policy), and python -m pytest backend/tests/test_memvid_sidecar.py -q --run-integration (12 passed, 3 skipped). The repo-supported live Mongo entrypoint make test-mongo-live LIVE_MONGO_URL=mongodb://127.0.0.1:27017 LIVE_MONGO_DB_NAME=hysight_verify_live is wired correctly but skipped because no live Mongo instance was reachable in this environment, so one live-environment rerun is still needed."
+      - working: true
+        agent: "main"
+        comment: "Closed the remaining live-environment gap with a disposable Docker Mongo 7 instance and LIVE_MONGO_URL=mongodb://127.0.0.1:27017 LIVE_MONGO_DB_NAME=hysight_verify_live make test-mongo-live. The repo-supported live Mongo proof passed (1 passed), so the proof-tier hardening task no longer needs retesting."
   - task: "Subsystem authority wording hardening"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server_subsystems.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -225,6 +231,15 @@ backend:
       - working: "NA"
         agent: "main"
         comment: "Updated backend/server_memory_routes.py and memory_service/controller.py so memory authority failures direct operators to /api/subsystems, then aligned backend assertions in backend/tests/test_server_bootstrap.py and backend/tests/test_status_live_mongo.py."
+      - working: false
+        agent: "testing"
+        comment: "Verified the clarified /api/subsystems wording with python -m pytest backend/tests/test_server_bootstrap.py -q (31 passed) and a direct get_subsystems() probe in rust mode with an unreachable sidecar, which returned the intended unhealthy memory detail. Also confirmed the controller-level MemoryBackendError now points operators to /api/subsystems. Found one remaining wording defect in the route wrapper: a direct POST /api/hca/memory/retrieve probe returned a 503 detail that duplicated the /api/subsystems guidance and emitted a double period because backend/server_memory_routes.py appends operator guidance to a memory_service/controller.py message that already ends with the same instruction."
+      - working: "NA"
+        agent: "main"
+        comment: "Patched backend/server_memory_routes.py to preserve controller-provided /api/subsystems guidance instead of wrapping it twice, and added a regression assertion in backend/tests/test_server_bootstrap.py to enforce a single guidance reference and no double punctuation. Ready for narrowed retest."
+      - working: true
+        agent: "testing"
+        comment: "Retested the narrowed fix with python -m pytest backend/tests/test_server_bootstrap.py -q (32 passed), including the new wrapper regression assertion. Confirmed the route-level 503 behavior with a direct TestClient probe that forced MemoryBackendError through POST /api/hca/memory/retrieve; the response detail preserved the controller wording with exactly one /api/subsystems reference and no doubled punctuation."
 frontend:
   - task: "Frontend proof surface verification"
     implemented: true
@@ -256,25 +271,28 @@ frontend:
         comment: "Evaluated frontend/src/lib/api.js against the current jsconfig and lint surface. Recommendation is to keep the current JavaScript build and add strict JSDoc typing to exported API helpers before attempting a full TypeScript migration."
   - task: "Frontend API fixture contract hardening"
     implemented: true
-    working: "NA"
+    working: true
     file: "frontend/src/lib/api.test.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Added shared realistic operator payload fixtures in frontend/src/lib/api.fixtures.js, expanded frontend/src/lib/api.test.js to cover run summary, events, artifacts, subsystems, and memory routes, and switched selected component tests to reuse the shared fixtures."
+      - working: true
+        agent: "testing"
+        comment: "Verified the narrowed fixture-contract surface with CI=true yarn --ignore-engines test --watch=false --runInBand --runTestsByPath src/lib/api.test.js (9 passed) and CI=true yarn --ignore-engines test --watch=false --runInBand --runTestsByPath src/components/OperatorConsole.test.js src/components/MemoryBrowser.test.js (7 passed). The local shell only exposed Node 25.9.0 while frontend/package.json requires Node 20.x, so the repo Jest entrypoint was run with Yarn's engine gate disabled; no fixture or API-boundary regressions were found in the changed surfaces."
+      - working: true
+        agent: "main"
+        comment: "Closed the runtime-parity caveat by rerunning the same targeted Jest surface inside a Node 20.20.2 Docker container with Yarn 1.22.22. The strict runtime pass succeeded: src/lib/api.test.js 9 passed, OperatorConsole/MemoryBrowser 7 passed."
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 4
+  test_sequence: 8
   run_ui: false
 test_plan:
-  current_focus:
-    - "Proof contract tier hardening"
-    - "Subsystem authority wording hardening"
-    - "Frontend API fixture contract hardening"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -295,3 +313,13 @@ agent_communication:
     message: "Frontend verification complete. The API-client boundary test passed, eslint passed, all 5 frontend Jest suites passed, and the production build succeeded. No frontend regressions were found in this verification pass."
   - agent: "main"
     message: "A second hardening pass is ready for verification. Backend focus: scripts/run_tests.py proof-tier split, backend/tests/conftest.py marker policy, backend/requirements-integration.txt dependency split, Makefile and backend-proof workflow alignment, plus subsystem authority wording in backend/server_subsystems.py, backend/server_memory_routes.py, and memory_service/controller.py. Frontend focus: shared fixtures in frontend/src/lib/api.fixtures.js, expanded API boundary coverage in frontend/src/lib/api.test.js, and fixture reuse in OperatorConsole.test.js and MemoryBrowser.test.js. Prefer default baseline proof first, then targeted integration/live entrypoints only as needed."
+  - agent: "testing"
+    message: "Backend hardening verification complete. The default service-free proof wrapper passed, targeted bootstrap assertions passed, integration-tier gating behaved correctly without flags, and the opt-in integration tier passed with --run-integration. The repo-supported live Mongo target was exercised but skipped because no live Mongo instance was reachable locally and Docker was not available for a disposable container. One low-severity backend issue remains: the 503 memory-route detail duplicates /api/subsystems guidance and includes a double period when the controller-side message is wrapped by backend/server_memory_routes.py."
+  - agent: "main"
+    message: "The duplicated memory-route guidance defect is fixed in backend/server_memory_routes.py and guarded by a new regression assertion in backend/tests/test_server_bootstrap.py. Backend verification should rerun the narrowed subsystem-authority scope plus the touched bootstrap test; frontend verification can proceed on the shared-fixture/API-boundary changes unchanged."
+  - agent: "testing"
+    message: "Narrowed backend retest complete. python -m pytest backend/tests/test_server_bootstrap.py -q passed with 32 tests, and a direct POST /api/hca/memory/retrieve probe confirmed the 503 detail now preserves controller-provided /api/subsystems guidance exactly once. The subsystem authority wording hardening task can be marked working; no further retest is needed for this defect."
+  - agent: "testing"
+    message: "Frontend API fixture contract hardening verification complete. Narrowed Jest proof passed for src/lib/api.test.js (9 tests) plus src/components/OperatorConsole.test.js and src/components/MemoryBrowser.test.js (7 tests). No fixture-boundary regressions were found. This environment only had Node 25.9.0 available, so the repo's Yarn/Jest entrypoint required --ignore-engines because frontend/package.json pins Node 20.x."
+  - agent: "main"
+    message: "Closed both remaining environment-dependent follow-ups. The repo-supported live Mongo proof passed against a disposable Mongo 7 Docker container, and the targeted frontend fixture/API-boundary Jest surface passed inside a Node 20.20.2 Docker container with Yarn 1.22.22."

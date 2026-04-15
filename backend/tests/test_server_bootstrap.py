@@ -11,6 +11,8 @@ if str(ROOT) not in sys.path:
 
 memory_config = import_module("memory_service.config")
 persistence_module = import_module("backend.server_persistence")
+memory_routes_module = import_module("backend.server_memory_routes")
+memory_controller_module = import_module("memory_service.controller")
 server_module = import_module("backend.server")
 paths_module = import_module("hca.paths")
 BackendConfigurationError = persistence_module.BackendConfigurationError
@@ -196,6 +198,19 @@ def test_memory_retrieve_route_works_without_db(monkeypatch, tmp_path):
         assert "hits" in r.json()
     finally:
         _ms_singleton._controller = None
+
+
+def test_memory_route_wrapper_does_not_duplicate_subsystems_guidance():
+    exc = memory_controller_module.MemoryBackendError(
+        "Rust memory sidecar is configured as the active memory authority, "
+        "but the sidecar health check failed. "
+        "Check /api/subsystems for operator-facing status."
+    )
+
+    detail = memory_routes_module._memory_route_unavailable_detail(exc)
+
+    assert detail.count("/api/subsystems") == 1
+    assert ".." not in detail
 
 
 def test_load_memory_settings_derives_storage_from_hca_storage_root(
