@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import time
+from importlib import import_module
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -40,6 +41,33 @@ def _wait_for_tcp(host: str, port: int, timeout_seconds: float) -> bool:
                 return True
         except OSError:
             time.sleep(0.5)
+    return False
+
+
+def _wait_for_mongo_ping(mongo_url: str, timeout_seconds: float) -> bool:
+    try:
+        pymongo = import_module("pymongo")
+    except Exception:
+        return True
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        client = None
+        try:
+            client = pymongo.MongoClient(
+                mongo_url,
+                serverSelectionTimeoutMS=1000,
+            )
+            client.admin.command("ping")
+            return True
+        except Exception:
+            time.sleep(0.5)
+        finally:
+            try:
+                if client is not None:
+                    client.close()
+            except Exception:
+                pass
     return False
 
 
@@ -116,6 +144,14 @@ def main() -> int:
             failure_reason = (
                 "Disposable MongoDB did not become reachable on "
                 f"127.0.0.1:{args.port}.\n{_docker_logs(args.container_name)}"
+            )
+            print(failure_reason, file=sys.stderr)
+            return 1
+
+        if not _wait_for_mongo_ping(mongo_url, args.ready_timeout):
+            failure_reason = (
+                "Disposable MongoDB accepted TCP connections but did not answer "
+                f"ping at {mongo_url}.\n{_docker_logs(args.container_name)}"
             )
             print(failure_reason, file=sys.stderr)
             return 1

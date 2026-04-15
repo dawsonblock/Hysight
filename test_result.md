@@ -266,6 +266,23 @@ backend:
       - working: true
         agent: "main"
         comment: "Verified the new subsystem contract end to end with python -m pytest backend/tests/test_server_bootstrap.py -q (35 passed) and the canonical baseline proof runner via python scripts/run_tests.py (HCA pipeline 7 passed, backend baseline 74 passed, contract conformance 18 passed)."
+  - task: "Continuous proof drift enforcement"
+    implemented: true
+    working: true
+    file: "scripts/run_tests.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented the continuous-proof enforcement pass across scripts/run_tests.py, scripts/proof_receipt.py, scripts/check_repo_integrity.py, backend/tests/conftest.py, backend/tests/test_server_bootstrap.py, Makefile, BOOTSTRAP.md, and .github/workflows/backend-proof.yml. This added repo-local .venv policy, standardized receipts under artifacts/proof, fixture-drift gating, repo integrity checks, baseline count pinning, and the consistency_check_passed subsystem field."
+      - working: true
+        agent: "main"
+        comment: "Verified the pass with ./.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q (35 passed, 1 deselected), ./.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q --check-fixture-drift -k generated_frontend_api_fixtures_match_backend_export (1 passed), ./.venv/bin/python scripts/check_repo_integrity.py (passed), ./.venv/bin/python scripts/run_tests.py (99 passed, 0 skipped), the per-step baseline entrypoints for pipeline/backend-baseline/contract (7 passed, 74 passed, 18 passed), make proof-mongo-live after the new ping-based readiness gate (1 passed, receipt + history counts correct), MEMORY_SERVICE_PORT=3032 make proof-sidecar after the new port-conflict preflight (13 passed, 2 skipped, receipt + history counts correct), and CI=true yarn test --watch=false --runInBand --runTestsByPath src/lib/api.test.js inside a disposable Node 20.20.2 Docker container (9 passed)."
+      - working: true
+        agent: "main"
+        comment: "Pinned the two wrapper reliability fixes back into backend/tests/test_server_bootstrap.py so drift resistance now covers the Mongo ping readiness gate and the sidecar occupied-port preflight message as part of the repo contract."
 frontend:
   - task: "Frontend proof surface verification"
     implemented: true
@@ -329,7 +346,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 10
+  test_sequence: 11
   run_ui: false
 test_plan:
   current_focus: []
@@ -369,3 +386,6 @@ agent_communication:
     message: "User requested both optional live harnesses again on the current branch. Please rerun make proof-mongo-live and make proof-sidecar, record pass/fail evidence, and note any environment issues or receipt artifacts produced."
   - agent: "testing"
     message: "Requested live-harness reruns completed. make proof-mongo-live passed on the default 27017 disposable Docker Mongo path (1 passed). make proof-sidecar passed on port 3032 because the default 3031 health probe returned connection reset by peer during preflight (13 passed, 2 skipped). Receipts were written under test_reports/proof_receipts and JUnit artifacts under test_reports/pytest; the receipt outcome fields are correct, but the per-test counts remained zero, so pytest/JUnit are the authoritative counts for this rerun."
+  - agent: "main"
+    message: "Continuous proof drift enforcement is now implemented and verified on the supported bootstrap path. The repo-local .venv bootstrap, canonical baseline receipts under artifacts/proof, repo integrity sentinel, fixture-drift gate, per-step baseline entrypoints, and Node 20 frontend API boundary test all pass end to end on the current branch."
+

@@ -547,7 +547,6 @@ def _write_invocation_receipt(
     outcome: str,
     failure_reason: str | None,
 ) -> None:
-    aggregate_counts = merge_test_counts(result["counts"] for result in results)
     metadata = {
         "steps": [
             {

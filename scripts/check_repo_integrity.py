@@ -65,7 +65,7 @@ def _missing_make_targets() -> list[str]:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     missing = []
     for target in REQUIRED_MAKE_TARGETS:
-        pattern = re.compile(rf"(?m)^{re.escape(target)}:\s*$")
+        pattern = re.compile(rf"(?m)^{re.escape(target)}:(?:\s|$)")
         if not pattern.search(makefile):
             missing.append(target)
     return missing

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import socket
 import signal
 import subprocess
 import sys
@@ -40,6 +41,16 @@ def _tail_log(log_path: Path, lines: int = 40) -> str:
         return "sidecar log file does not exist"
     content = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
     return "\n".join(content[-lines:])
+
+
+def _port_is_available(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as candidate:
+        candidate.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            candidate.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
 
 
 def _stop_process(process: subprocess.Popen[str] | None) -> None:
@@ -88,6 +99,15 @@ def main() -> int:
             failure_reason = (
                 f"Refusing to reuse an already-running memvid sidecar at {service_url}. "
                 "Use make test-sidecar for an existing service or override MEMORY_SERVICE_PORT."
+            )
+            print(failure_reason, file=sys.stderr)
+            return 1
+
+        if not _port_is_available(args.port):
+            failure_reason = (
+                f"Port {args.port} is already in use, but {service_url}/health is not healthy. "
+                "Stop the conflicting process or rerun with a free port, for example "
+                "MEMORY_SERVICE_PORT=3032 make proof-sidecar."
             )
             print(failure_reason, file=sys.stderr)
             return 1

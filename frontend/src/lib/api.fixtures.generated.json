@@ -1011,6 +1011,7 @@
     "workflow_id": "wf-1"
   },
   "SUBSYSTEMS_FIXTURE": {
+    "consistency_check_passed": true,
     "database": {
       "detail": "Mongo-backed /api/status persistence is disabled because MONGO_URL and DB_NAME are unset. Replay-backed HCA and memory routes remain available without Mongo.",
       "enabled": false,

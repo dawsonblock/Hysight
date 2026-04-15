@@ -38,6 +38,10 @@ _ASYNCIO_DEPRECATION_FILTER = (
 )
 
 
+def _is_workspace_python_path(relative_path: str) -> bool:
+    return not relative_path.startswith(".venv/")
+
+
 def test_load_settings_allows_db_disabled_when_env_unset(monkeypatch):
     monkeypatch.delenv("MONGO_URL", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)
@@ -420,19 +424,38 @@ def test_backend_proof_workflow_runs_documented_proof_script():
         ROOT / ".github" / "workflows" / "backend-proof.yml"
     ).read_text(encoding="utf-8")
     assert "Baseline Local Proof Surface" in workflow
+    assert "Fixture Drift Check" in workflow
     assert "Backend Integration Proof" in workflow
     assert "Backend Live Mongo Proof" in workflow
     assert "Backend Live Sidecar Proof" in workflow
-    assert "python scripts/run_tests.py" in workflow
+    assert "python scripts/check_repo_integrity.py" in workflow
+    assert "make venv" in workflow
+    assert "make test" in workflow
+    assert "make test-pipeline" in workflow
+    assert "make test-contract" in workflow
+    assert "make test-backend-baseline" in workflow
+    assert "make test-backend-integration" in workflow
+    assert "make test-fixture-drift" in workflow
+    assert "make proof-mongo-live" in workflow
+    assert "make proof-sidecar" in workflow
     assert "actions/upload-artifact@v4" in workflow
-    assert "backend-live-mongo-proof.json" in workflow
-    assert "backend-live-sidecar-proof.json" in workflow
+    assert "artifacts/proof/baseline.json" in workflow
+    assert "artifacts/proof/pipeline.json" in workflow
+    assert "artifacts/proof/contract.json" in workflow
+    assert "artifacts/proof/backend-baseline.json" in workflow
+    assert "artifacts/proof/integration.json" in workflow
+    assert "artifacts/proof/live-mongo.json" in workflow
+    assert "artifacts/proof/live-sidecar.json" in workflow
+    assert "artifacts/proof/history/live-mongo-*.json" in workflow
+    assert "artifacts/proof/history/live-sidecar-*.json" in workflow
 
 
 def test_fastapi_entrypoints_are_limited_to_authorized_surfaces():
     fastapi_apps = []
     for path in ROOT.rglob("*.py"):
         relative_path = path.relative_to(ROOT).as_posix()
+        if not _is_workspace_python_path(relative_path):
+            continue
         content = path.read_text(encoding="utf-8")
         if re.search(r"^\s*\w+\s*=\s*FastAPI\(", content, re.MULTILINE):
             fastapi_apps.append(relative_path)
@@ -515,6 +538,8 @@ def test_non_test_code_does_not_append_grants_directly():
 
     for path in ROOT.rglob("*.py"):
         relative_path = path.relative_to(ROOT).as_posix()
+        if not _is_workspace_python_path(relative_path):
+            continue
         if (
             "/tests/" in relative_path
             or relative_path.startswith("backend/tests/")
@@ -544,6 +569,8 @@ def test_python_code_uses_storage_helpers_instead_of_hardcoded_runs_paths():
 
     for path in ROOT.rglob("*.py"):
         relative_path = path.relative_to(ROOT).as_posix()
+        if not _is_workspace_python_path(relative_path):
+            continue
         if relative_path in allowed_paths:
             continue
 
@@ -592,6 +619,7 @@ def test_makefile_exposes_local_sidecar_port_override():
         "MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)"
         in makefile
     )
+    assert "dev: venv" in makefile
     assert "venv:" in makefile
     assert "test-bootstrap-integration" in makefile
     assert "test-backend-baseline" in makefile
@@ -600,7 +628,27 @@ def test_makefile_exposes_local_sidecar_port_override():
     assert "test-mongo-live" in makefile
     assert "test-sidecar" in makefile
     assert "proof-sidecar" in makefile
+    assert "test-fixture-drift" in makefile
     assert "run-memvid-sidecar" in makefile
+
+
+def test_bootstrap_contract_and_repo_integrity_sentinel_pin_repo_truth():
+    bootstrap = (ROOT / "BOOTSTRAP.md").read_text(encoding="utf-8")
+    integrity = (ROOT / "scripts" / "check_repo_integrity.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Where the Python package lives: `./hca`" in bootstrap
+    assert "How it is installed: `make venv`" in bootstrap
+    assert "What command proves it: `python scripts/run_tests.py`" in bootstrap
+    assert "What failure looks like:" in bootstrap
+
+    assert '"BOOTSTRAP.md"' in integrity
+    assert '"frontend/src/lib/api.fixtures.generated.json"' in integrity
+    assert '"scripts/check_repo_integrity.py"' in integrity
+    assert '"dev"' in integrity
+    assert '"test-fixture-drift"' in integrity
+    assert '"fixture_drift"' in integrity
 
 
 def test_requirements_split_keeps_mongo_support_optional():
@@ -628,16 +676,24 @@ def test_proof_runner_uses_explicit_isolated_storage_env():
     )
     assert "EXPECTED_HCA_PACKAGE_DIR" in proof_runner
     assert "PACKAGE_AUTHORITY_SENTENCE" in proof_runner
+    assert "BOOTSTRAP_GUIDE" in proof_runner
+    assert "REPO_VENV_DIR" in proof_runner
+    assert "PROOF_ARTIFACT_DIR" in proof_runner
+    assert "PROOF_HISTORY_DIR" in proof_runner
     assert "_validate_hca_package_authority" in proof_runner
     assert "The Python runtime package lives under ./hca and is installed editable as part of repo bootstrap." in proof_runner
-    assert "make test-bootstrap-integration" in proof_runner
+    assert "EXPECTED_BASELINE_STEP_COUNTS" in proof_runner
     assert "isolated_storage" in proof_runner
     assert "BASELINE_STEPS" in proof_runner
     assert "INTEGRATION_STEP" in proof_runner
     assert "MONGO_LIVE_STEP" in proof_runner
+    assert "--baseline-step" in proof_runner
+    assert "--strict-venv" in proof_runner
     assert '"MEMORY_BACKEND": "python"' in proof_runner
     assert "DEFAULT_MEMORY_SERVICE_PORT" in proof_runner
     assert "OPTIONAL_PROOF_ENV_KEYS" in proof_runner
+    assert "HYSIGHT_PROOF_ENVIRONMENT_MODE" in proof_runner
+    assert "HYSIGHT_PROOF_SERVICE_CONNECTION_MODE" in proof_runner
     assert '"MEMORY_SERVICE_PORT"' in proof_runner
     assert '"RUN_MEMVID_TESTS"' in proof_runner
     assert '"MEMORY_SERVICE_URL"' in proof_runner
@@ -646,6 +702,7 @@ def test_proof_runner_uses_explicit_isolated_storage_env():
     assert '"DB_NAME"' in proof_runner
     assert '--run-integration' in proof_runner
     assert '--run-live' in proof_runner
+    assert 'WARNING: last ' in proof_runner
     assert 'env.pop(key, None)' in proof_runner
     assert 'tempfile.mkdtemp(prefix="hysight-proof-")' in proof_runner
 
@@ -696,6 +753,8 @@ def test_non_test_python_code_keeps_process_and_network_calls_bounded():
 
     for path in ROOT.rglob("*.py"):
         relative_path = path.relative_to(ROOT).as_posix()
+        if not _is_workspace_python_path(relative_path):
+            continue
         if (
             "/tests/" in relative_path
             or relative_path.startswith("backend/tests/")
@@ -726,12 +785,21 @@ def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract()
         encoding="utf-8"
     )
 
-    assert "backend-live-mongo-proof.xml" in mongo_harness
-    assert "backend-live-mongo-proof.json" in mongo_harness
     assert "docker_disposable_local" in mongo_harness
-    assert "backend-live-sidecar-proof.xml" in sidecar_harness
-    assert "backend-live-sidecar-proof.json" in sidecar_harness
+    assert "HYSIGHT_PROOF_ENVIRONMENT_MODE" in mongo_harness
+    assert "HYSIGHT_PROOF_SERVICE_CONNECTION_MODE" in mongo_harness
+    assert "_wait_for_mongo_ping" in mongo_harness
+    assert "accepted TCP connections but did not answer " in mongo_harness
+    assert "ping at {mongo_url}" in mongo_harness
+    assert '"scripts/run_tests.py", "--mongo-live"' in mongo_harness
     assert "cargo_local_sidecar" in sidecar_harness
+    assert "HYSIGHT_PROOF_ENVIRONMENT_MODE" in sidecar_harness
+    assert "HYSIGHT_PROOF_SERVICE_CONNECTION_MODE" in sidecar_harness
+    assert "_port_is_available" in sidecar_harness
+    assert "MEMORY_SERVICE_PORT=3032 make proof-sidecar" in sidecar_harness
+    assert '"scripts/run_tests.py", "--sidecar"' in sidecar_harness
+    assert "proof-sidecar.log" in sidecar_harness
+    assert "DEFAULT_RECEIPT_DIR" in receipt_helper
     assert '"proof_tier"' in receipt_helper
     assert '"environment_mode"' in receipt_helper
     assert '"passed_test_count"' in receipt_helper
