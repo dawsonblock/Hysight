@@ -1,4 +1,5 @@
 .PHONY: \
+	venv \
 	test-bootstrap \
 	test-bootstrap-integration \
 	dev-bootstrap \
@@ -7,6 +8,7 @@
 	test-contract \
 	test-backend-baseline \
 	test-backend-integration \
+	proof-mongo-live \
 	test-mongo-live \
 	test-sidecar \
 	proof-sidecar \
@@ -16,13 +18,21 @@
 	docker-build \
 	docker-build-sidecar
 
-PYTHON ?= python
+VENV_DIR ?= .venv
+VENV_PYTHON := $(if $(wildcard $(VENV_DIR)/bin/python),$(abspath $(VENV_DIR)/bin/python),python)
+PYTHON ?= $(VENV_PYTHON)
 PIP ?= $(PYTHON) -m pip
 PYTEST ?= $(PYTHON) -m pytest
-LIVE_MONGO_URL ?= mongodb://127.0.0.1:27017
+LIVE_MONGO_PORT ?= 27017
+LIVE_MONGO_URL ?= mongodb://127.0.0.1:$(LIVE_MONGO_PORT)
 LIVE_MONGO_DB_NAME ?= hysight_live
+LIVE_MONGO_IMAGE ?= mongo:7
 MEMORY_SERVICE_PORT ?= 3031
 MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)
+
+venv:
+	python -m venv $(VENV_DIR)
+	@echo "Created $(VENV_DIR). Activate it with: source $(VENV_DIR)/bin/activate"
 
 test-bootstrap:
 	$(PIP) install -r backend/requirements-test.txt
@@ -52,6 +62,9 @@ test-backend-baseline:
 test-backend-integration:
 	$(PYTEST) backend/tests/test_memvid_sidecar.py -q --run-integration
 
+proof-mongo-live:
+	$(PYTHON) scripts/proof_mongo_live.py --image "$(LIVE_MONGO_IMAGE)" --port "$(LIVE_MONGO_PORT)" --db-name "$(LIVE_MONGO_DB_NAME)"
+
 test-mongo-live:
 	RUN_MONGO_TESTS=1 MONGO_URL="$(LIVE_MONGO_URL)" DB_NAME="$(LIVE_MONGO_DB_NAME)" \
 		$(PYTEST) backend/tests/test_status_live_mongo.py -q --run-live
@@ -65,7 +78,8 @@ test-sidecar:
 		$(PYTEST) backend/tests/test_memvid_sidecar.py -q --run-live
 
 proof-sidecar:
-	MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" $(PYTHON) scripts/run_tests.py --sidecar
+	MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" MEMORY_SERVICE_PORT="$(MEMORY_SERVICE_PORT)" \
+		$(PYTHON) scripts/proof_sidecar.py
 
 run-memvid-sidecar:
 	MEMORY_SERVICE_PORT="$(MEMORY_SERVICE_PORT)" \

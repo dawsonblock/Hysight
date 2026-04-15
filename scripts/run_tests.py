@@ -56,6 +56,10 @@ LIVE_MONGO_DB_NAME = os.environ.get(
 
 # Repo root is two levels up from this file (scripts/run_tests.py → repo root).
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+EXPECTED_HCA_PACKAGE_DIR = (REPO_ROOT / "hca" / "src" / "hca").resolve()
+PACKAGE_AUTHORITY_SENTENCE = (
+    "The Python runtime package lives under ./hca and is installed editable as part of repo bootstrap."
+)
 
 # ---------------------------------------------------------------------------
 # Proof surface definition
@@ -168,6 +172,40 @@ BASELINE_TEST_HINT = (
 MONGO_TEST_HINT = (
     "python -m pip install -r backend/requirements-integration.txt"
 )
+
+
+def _repair_command(include_integration: bool) -> str:
+    bootstrap_target = (
+        "make test-bootstrap-integration"
+        if include_integration
+        else "make test-bootstrap"
+    )
+    return "\n    ".join(
+        [
+            "make venv",
+            "source .venv/bin/activate",
+            bootstrap_target,
+        ]
+    )
+
+
+def _validate_hca_package_authority(*, include_integration: bool) -> bool:
+    spec = importlib.util.find_spec("hca")
+    resolved_origin = None
+    if spec is not None and spec.origin is not None:
+        resolved_origin = pathlib.Path(spec.origin).resolve()
+
+    if resolved_origin is not None and resolved_origin.parent == EXPECTED_HCA_PACKAGE_DIR:
+        return True
+
+    print(PACKAGE_AUTHORITY_SENTENCE)
+    print(
+        "Resolved hca from: "
+        f"{resolved_origin or 'not installed or ambiguous namespace package'}"
+    )
+    print(f"Expected editable source under: {EXPECTED_HCA_PACKAGE_DIR}")
+    print("Repair:\n    " + _repair_command(include_integration))
+    return False
 
 
 def _isolated_proof_env(storage_root: pathlib.Path) -> Dict[str, str]:
@@ -323,6 +361,11 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+
+    if not _validate_hca_package_authority(
+        include_integration=bool(args.integration or args.mongo_live)
+    ):
+        return 1
 
     baseline_missing = _missing_dependencies(BASELINE_REQUIRED_TEST_DEPS)
     if baseline_missing:

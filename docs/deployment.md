@@ -15,7 +15,9 @@ When `MEMORY_BACKEND=python`, `MEMORY_SERVICE_URL` must be unset. When
 ## Prerequisites
 
 - Docker ≥ 24 with the Compose plugin (`docker compose version`)
-- Or Python 3.11+ for local non-container runs
+- Or Python 3.11+ in a repo-local virtual environment for local non-container runs
+
+The Python runtime package lives under `./hca` and is installed editable as part of repo bootstrap.
 
 ---
 
@@ -38,7 +40,9 @@ curl http://localhost:8000/api/
 ### Without containers
 
 ```bash
-pip install -r backend/requirements-test.txt   # installs all runtime deps + hca
+make venv
+source .venv/bin/activate
+make test-bootstrap
 cp .env.example .env
 ./scripts/run_backend.sh
 ```
@@ -79,6 +83,10 @@ The frontend and operator APIs still talk to the same backend routes (`/api/...`
 # frontend operator proof
 cd frontend && yarn lint && CI=true yarn test --watch=false --runInBand && yarn build
 
+# create and use the repo-local virtual environment
+make venv
+source .venv/bin/activate
+
 # install the default local proof surface
 make test-bootstrap
 
@@ -97,8 +105,8 @@ make test-backend-baseline
 make test-backend-integration
 
 # sidecar proof (sidecar must be running; default port is 3031)
-make test-sidecar
 make proof-sidecar
+make test-sidecar
 
 # if localhost:3031 is occupied, override the local sidecar port
 MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
@@ -106,6 +114,7 @@ MEMORY_SERVICE_PORT=3032 make test-sidecar
 MEMORY_SERVICE_PORT=3032 make proof-sidecar
 
 # live Mongo-backed /api/status proof
+make proof-mongo-live
 make test-mongo-live
 
 # override the live Mongo connection when needed

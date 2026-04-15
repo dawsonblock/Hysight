@@ -29,6 +29,8 @@ class DatabaseSubsystemStatus(BackendModel):
     enabled: bool
     status: str
     detail: str
+    mongo_status_mode: str
+    mongo_scope: str
 
 
 class MemorySubsystemStatus(BackendModel):
@@ -36,6 +38,8 @@ class MemorySubsystemStatus(BackendModel):
     uses_sidecar: bool
     status: str
     detail: str
+    memory_backend_mode: str
+    service_available: Optional[bool] = None
     service_url: Optional[str] = None
 
 
@@ -53,6 +57,8 @@ class LLMSubsystemStatus(BackendModel):
 
 class SubsystemsResponse(BackendModel):
     status: str
+    replay_authority: str
+    hca_runtime_authority: str
     database: DatabaseSubsystemStatus
     memory: MemorySubsystemStatus
     storage: StorageSubsystemStatus

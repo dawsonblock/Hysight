@@ -155,7 +155,7 @@ backend:
     file: "backend/tests/test_status_live_mongo.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: "NA"
         agent: "main"
@@ -166,13 +166,16 @@ backend:
       - working: true
         agent: "testing"
         comment: "Verified the current live Mongo path with make test-mongo-live LIVE_MONGO_URL=mongodb://127.0.0.1:27018 LIVE_MONGO_DB_NAME=hysight_verify_live against a disposable mongo:7 container. The opt-in proof passed (1 passed) and exercised the real /api/status persistence round trip."
+      - working: "NA"
+        agent: "main"
+        comment: "User requested a fresh rerun of the full optional live Mongo harness on the current branch via make proof-mongo-live. Needs current retest evidence."
   - task: "Live sidecar proof automation"
     implemented: true
     working: true
     file: "scripts/run_tests.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: "NA"
         agent: "main"
@@ -183,6 +186,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Re-verified the opt-in live sidecar path with a real sidecar on port 3032 and make proof-sidecar MEMORY_SERVICE_PORT=3032. The documented Make target completed successfully, including the live sidecar proof step (13 passed, 2 skipped)."
+      - working: "NA"
+        agent: "main"
+        comment: "User requested a fresh rerun of the full optional live sidecar harness on the current branch via make proof-sidecar. Needs current retest evidence."
   - task: "Release notes extraction"
     implemented: true
     working: true
@@ -240,6 +246,20 @@ backend:
       - working: true
         agent: "testing"
         comment: "Retested the narrowed fix with python -m pytest backend/tests/test_server_bootstrap.py -q (32 passed), including the new wrapper regression assertion. Confirmed the route-level 503 behavior with a direct TestClient probe that forced MemoryBackendError through POST /api/hca/memory/retrieve; the response detail preserved the controller wording with exactly one /api/subsystems reference and no doubled punctuation."
+  - task: "Subsystem authority contract hardening"
+    implemented: true
+    working: true
+    file: "backend/server_subsystems.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Expanded the subsystem contract with explicit authority fields in backend/server_models.py, backend/server_subsystems.py, and contract/schema.json so operators no longer have to infer runtime truth from prose. Added replay_authority, hca_runtime_authority, database.mongo_status_mode, database.mongo_scope, memory.memory_backend_mode, and memory.service_available."
+      - working: true
+        agent: "main"
+        comment: "Verified the new subsystem contract end to end with python -m pytest backend/tests/test_server_bootstrap.py -q (35 passed) and the canonical baseline proof runner via python scripts/run_tests.py (HCA pipeline 7 passed, backend baseline 74 passed, contract conformance 18 passed)."
 frontend:
   - task: "Frontend proof surface verification"
     implemented: true
@@ -286,13 +306,29 @@ frontend:
       - working: true
         agent: "main"
         comment: "Closed the runtime-parity caveat by rerunning the same targeted Jest surface inside a Node 20.20.2 Docker container with Yarn 1.22.22. The strict runtime pass succeeded: src/lib/api.test.js 9 passed, OperatorConsole/MemoryBrowser 7 passed."
+  - task: "Backend-derived frontend fixtures"
+    implemented: true
+    working: true
+    file: "frontend/src/lib/api.fixtures.generated.json"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Replaced hand-authored frontend API fixtures with a backend-owned exporter in scripts/export_api_fixtures.py and a tracked generated file at frontend/src/lib/api.fixtures.generated.json. frontend/src/lib/api.fixtures.js is now only a thin re-export wrapper over generated data."
+      - working: true
+        agent: "main"
+        comment: "Verified the generated fixture path with python -m pytest backend/tests/test_server_bootstrap.py -q (includes a regeneration/contract assertion) and frontend targeted Jest coverage via CI=1 npm test -- --runInBand --watch=false src/lib/api.test.js src/components/OperatorConsole.test.js src/components/MemoryBrowser.test.js (16 passed)."
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 8
+  test_sequence: 9
   run_ui: false
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Live Mongo /api/status integration"
+    - "Live sidecar proof automation"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -323,3 +359,7 @@ agent_communication:
     message: "Frontend API fixture contract hardening verification complete. Narrowed Jest proof passed for src/lib/api.test.js (9 tests) plus src/components/OperatorConsole.test.js and src/components/MemoryBrowser.test.js (7 tests). No fixture-boundary regressions were found. This environment only had Node 25.9.0 available, so the repo's Yarn/Jest entrypoint required --ignore-engines because frontend/package.json pins Node 20.x."
   - agent: "main"
     message: "Closed both remaining environment-dependent follow-ups. The repo-supported live Mongo proof passed against a disposable Mongo 7 Docker container, and the targeted frontend fixture/API-boundary Jest surface passed inside a Node 20.20.2 Docker container with Yarn 1.22.22."
+  - agent: "main"
+    message: "Second-pass contract hardening is now implemented and verified. Added explicit subsystem authority fields, backend-owned fixture export plus tracked generated JSON, and reran the canonical baseline proof runner alongside focused backend/frontend contract tests."
+  - agent: "main"
+    message: "User requested both optional live harnesses again on the current branch. Please rerun make proof-mongo-live and make proof-sidecar, record pass/fail evidence, and note any environment issues or receipt artifacts produced."

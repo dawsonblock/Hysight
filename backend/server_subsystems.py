@@ -22,6 +22,11 @@ from memory_service.config import (
 )
 
 
+REPLAY_AUTHORITY = "local_store"
+HCA_RUNTIME_AUTHORITY = "python_hca_runtime"
+MONGO_SCOPE = "status_only"
+
+
 def _probe_directory_writable(path: Path) -> tuple[str, str]:
     try:
         path.mkdir(parents=True, exist_ok=True)
@@ -64,6 +69,8 @@ async def get_subsystems() -> SubsystemsResponse:
         database_status = DatabaseSubsystemStatus(
             enabled=False,
             status="disabled",
+            mongo_status_mode="disabled",
+            mongo_scope=MONGO_SCOPE,
             detail=(
                 "Mongo-backed /api/status persistence is disabled because "
                 "MONGO_URL and DB_NAME are unset. Replay-backed HCA and "
@@ -74,6 +81,8 @@ async def get_subsystems() -> SubsystemsResponse:
         database_status = DatabaseSubsystemStatus(
             enabled=True,
             status="unhealthy",
+            mongo_status_mode="configured_unreachable",
+            mongo_scope=MONGO_SCOPE,
             detail=(
                 "Mongo is configured for optional /api/status persistence, "
                 "but the backend database client is unavailable."
@@ -86,12 +95,16 @@ async def get_subsystems() -> SubsystemsResponse:
             database_status = DatabaseSubsystemStatus(
                 enabled=True,
                 status="unhealthy",
+                mongo_status_mode="configured_unreachable",
+                mongo_scope=MONGO_SCOPE,
                 detail=f"Mongo ping failed: {exc}",
             )
         else:
             database_status = DatabaseSubsystemStatus(
                 enabled=True,
                 status="healthy",
+                mongo_status_mode="connected",
+                mongo_scope=MONGO_SCOPE,
                 detail=(
                     "Mongo-backed /api/status persistence is reachable. "
                     "Mongo does not own replay-backed HCA or memory routes."
@@ -106,6 +119,8 @@ async def get_subsystems() -> SubsystemsResponse:
             backend="unknown",
             uses_sidecar=False,
             status="unhealthy",
+            memory_backend_mode="unavailable",
+            service_available=None,
             detail=f"Memory authority configuration is invalid: {exc}",
             service_url=None,
         )
@@ -118,9 +133,12 @@ async def get_subsystems() -> SubsystemsResponse:
                     backend=memory_settings.backend,
                     uses_sidecar=True,
                     status="unhealthy",
+                    memory_backend_mode="sidecar",
+                    service_available=False,
                     detail=(
                         "Rust memory sidecar is configured as the active "
-                        f"memory authority but is unavailable: {exc}"
+                        f"memory authority at {memory_settings.service_url} "
+                        f"but is unavailable: {exc}"
                     ),
                     service_url=memory_settings.service_url,
                 )
@@ -129,9 +147,11 @@ async def get_subsystems() -> SubsystemsResponse:
                     backend=memory_settings.backend,
                     uses_sidecar=True,
                     status="healthy",
+                    memory_backend_mode="sidecar",
+                    service_available=True,
                     detail=(
                         "Rust memory sidecar is the active memory authority "
-                        "and is reachable"
+                        f"at {memory_settings.service_url} and is reachable"
                     ),
                     service_url=memory_settings.service_url,
                 )
@@ -140,9 +160,11 @@ async def get_subsystems() -> SubsystemsResponse:
                 backend=memory_settings.backend,
                 uses_sidecar=False,
                 status="healthy",
+                memory_backend_mode="local",
+                service_available=None,
                 detail=(
                     "Python in-process memory controller is the active "
-                    "local memory authority"
+                    f"local memory authority at {memory_settings.storage_dir}"
                 ),
                 service_url=None,
             )
@@ -207,6 +229,8 @@ async def get_subsystems() -> SubsystemsResponse:
             storage_status,
             llm_status,
         ),
+        replay_authority=REPLAY_AUTHORITY,
+        hca_runtime_authority=HCA_RUNTIME_AUTHORITY,
         database=database_status,
         memory=memory_status,
         storage=storage_status,

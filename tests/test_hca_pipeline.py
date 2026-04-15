@@ -11,11 +11,9 @@ from importlib import import_module
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-HCA_SRC = ROOT / "hca" / "src"
 
-for path in (str(ROOT), str(HCA_SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 memory_service = import_module("memory_service")
 memory_controller_module = import_module("memory_service.controller")

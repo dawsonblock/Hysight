@@ -25,8 +25,8 @@ You are a backend verification specialist for Hysight. Your job is to validate b
    - `make test-backend-baseline` or `pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q` for backend-only baseline verification
    - `make test-backend-integration` or `pytest backend/tests/test_memvid_sidecar.py -q --run-integration` for mock-backed backend integration coverage
    - targeted `pytest` file or test selection for fast regression isolation
-   - `make test-mongo-live` for opt-in live Mongo verification
-   - `make test-sidecar` or `make proof-sidecar` for opt-in live sidecar verification
+   - `make proof-mongo-live` for the full opt-in live Mongo harness with a receipt, or `make test-mongo-live` for an already-running Mongo instance
+   - `make proof-sidecar` for the full opt-in live sidecar harness with a receipt, or `make test-sidecar` for an already-running sidecar
 4. Record findings directly in `test_result.md`, including pass/fail status, evidence, retest needs, and agent communication notes.
 5. Return a concise verification report with findings first, then commands run, remaining risks, and recommended next steps.
 

@@ -1310,13 +1310,27 @@ function SubsystemStatusStrip({ subsystems, loading, error }) {
     return null;
   }
 
-  const memoryMode = subsystems.memory.uses_sidecar
-    ? `${formatSnakeLabel(subsystems.memory.backend)} sidecar`
-    : `${formatSnakeLabel(subsystems.memory.backend)} in-process`;
+  const memoryMode = formatSnakeLabel(
+    subsystems.memory.memory_backend_mode ||
+      (subsystems.memory.uses_sidecar ? "sidecar" : "local")
+  );
+  const memoryAvailability =
+    typeof subsystems.memory.service_available === "boolean"
+      ? subsystems.memory.service_available
+        ? "service reachable"
+        : "service unavailable"
+      : null;
   const memoryHint = [
     memoryMode,
+    memoryAvailability,
     subsystems.memory.service_url,
     subsystems.memory.detail,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+  const databaseHint = [
+    formatSnakeLabel(subsystems.database.mongo_scope),
+    subsystems.database.detail,
   ]
     .filter(Boolean)
     .join(" • ");
@@ -1338,14 +1352,22 @@ function SubsystemStatusStrip({ subsystems, loading, error }) {
             tone: toneForSubsystemStatus(subsystems.status),
           },
           {
-            label: "Database",
-            value: formatSnakeLabel(subsystems.database.status),
-            hint: subsystems.database.detail,
+            label: "Authority",
+            value: formatSnakeLabel(subsystems.hca_runtime_authority),
+            hint: `replay ${formatSnakeLabel(subsystems.replay_authority)}`,
+            tone: "default",
+          },
+          {
+            label: "Mongo",
+            value: formatSnakeLabel(
+              subsystems.database.mongo_status_mode || subsystems.database.status
+            ),
+            hint: databaseHint,
             tone: toneForSubsystemStatus(subsystems.database.status),
           },
           {
             label: "Memory",
-            value: formatSnakeLabel(subsystems.memory.status),
+            value: memoryMode,
             hint: memoryHint,
             tone: toneForSubsystemStatus(subsystems.memory.status),
           },

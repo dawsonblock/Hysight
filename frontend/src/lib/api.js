@@ -74,6 +74,8 @@ const databaseSubsystemSchema = z.object({
   enabled: z.boolean(),
   status: z.string(),
   detail: z.string(),
+  mongo_status_mode: z.string(),
+  mongo_scope: z.string(),
 }).passthrough();
 
 const memorySubsystemSchema = z.object({
@@ -81,6 +83,8 @@ const memorySubsystemSchema = z.object({
   uses_sidecar: z.boolean(),
   status: z.string(),
   detail: z.string(),
+  memory_backend_mode: z.string(),
+  service_available: z.boolean().nullable().optional(),
   service_url: z.string().nullable().optional(),
 }).passthrough();
 
@@ -98,6 +102,8 @@ const llmSubsystemSchema = z.object({
 
 const subsystemsResponseSchema = z.object({
   status: z.string(),
+  replay_authority: z.string(),
+  hca_runtime_authority: z.string(),
   database: databaseSubsystemSchema,
   memory: memorySubsystemSchema,
   storage: storageSubsystemSchema,

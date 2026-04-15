@@ -325,11 +325,13 @@
     "DatabaseSubsystemStatus": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "status", "detail"],
+      "required": ["enabled", "status", "detail", "mongo_status_mode", "mongo_scope"],
       "properties": {
         "enabled": { "type": "boolean" },
         "status": { "type": "string" },
-        "detail": { "type": "string" }
+        "detail": { "type": "string" },
+        "mongo_status_mode": { "type": "string" },
+        "mongo_scope": { "type": "string" }
       }
     },
     "MemorySubsystemStatus": {
@@ -340,6 +342,8 @@
         "uses_sidecar",
         "status",
         "detail",
+        "memory_backend_mode",
+        "service_available",
         "service_url"
       ],
       "properties": {
@@ -347,6 +351,8 @@
         "uses_sidecar": { "type": "boolean" },
         "status": { "type": "string" },
         "detail": { "type": "string" },
+        "memory_backend_mode": { "type": "string" },
+        "service_available": { "type": ["boolean", "null"] },
         "service_url": { "type": ["string", "null"] }
       }
     },
@@ -373,9 +379,11 @@
     "SubsystemsResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "database", "memory", "storage", "llm"],
+      "required": ["status", "replay_authority", "hca_runtime_authority", "database", "memory", "storage", "llm"],
       "properties": {
         "status": { "type": "string" },
+        "replay_authority": { "type": "string" },
+        "hca_runtime_authority": { "type": "string" },
         "database": { "$ref": "#/definitions/DatabaseSubsystemStatus" },
         "memory": { "$ref": "#/definitions/MemorySubsystemStatus" },
         "storage": { "$ref": "#/definitions/StorageSubsystemStatus" },

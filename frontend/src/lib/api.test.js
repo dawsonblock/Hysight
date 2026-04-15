@@ -157,8 +157,15 @@ describe("frontend API client boundary", () => {
 
     await expect(getSubsystems()).resolves.toMatchObject({
       status: "degraded",
+      replay_authority: "local_store",
+      hca_runtime_authority: "python_hca_runtime",
+      database: {
+        mongo_status_mode: "disabled",
+        mongo_scope: "status_only",
+      },
       memory: {
         backend: "python",
+        memory_backend_mode: "local",
         status: "healthy",
       },
       storage: {

@@ -103,6 +103,8 @@ def test_live_status_round_trip_persists_to_mongo(monkeypatch, tmp_path):
             assert subsystems_response.json()["database"] == {
                 "enabled": True,
                 "status": "healthy",
+                "mongo_status_mode": "connected",
+                "mongo_scope": "status_only",
                 "detail": (
                     "Mongo-backed /api/status persistence is reachable. "
                     "Mongo does not own replay-backed HCA or memory routes."

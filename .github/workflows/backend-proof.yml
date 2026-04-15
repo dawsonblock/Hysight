@@ -159,11 +159,6 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_mongo }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      mongo:
-        image: mongo:7
-        ports:
-          - 27017:27017
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -180,11 +175,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           make test-bootstrap-integration
-      - name: Run make test-mongo-live
+      - name: Run make proof-mongo-live
         env:
-          LIVE_MONGO_URL: mongodb://127.0.0.1:27017
+          LIVE_MONGO_PORT: 27017
           LIVE_MONGO_DB_NAME: hysight_live_ci
-        run: make test-mongo-live
+          LIVE_MONGO_IMAGE: mongo:7
+        run: make proof-mongo-live
+      - name: Upload live Mongo proof receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-live-mongo-proof-receipt
+          path: test_reports/proof_receipts/backend-live-mongo-proof.json
+          if-no-files-found: warn
 
   backend-live-sidecar:
     name: Backend Live Sidecar Proof
@@ -210,24 +213,18 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Start memvid sidecar
-        run: |
-          cargo run --manifest-path memvid_service/Cargo.toml --release > /tmp/memvid-sidecar.log 2>&1 &
-          echo $! > /tmp/memvid-sidecar.pid
-          for _ in $(seq 1 30); do
-            if curl --fail --silent http://localhost:3031/health >/dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-          cat /tmp/memvid-sidecar.log
-          exit 1
-      - name: Run make test-sidecar
+        run: echo "proof-sidecar now owns sidecar lifecycle and readiness checks"
+      - name: Run make proof-sidecar
         env:
           MEMORY_SERVICE_URL: http://localhost:3031
-        run: make test-sidecar
-      - name: Stop memvid sidecar
+          MEMORY_SERVICE_PORT: 3031
+        run: make proof-sidecar
+      - name: Upload live sidecar proof receipt
         if: always()
-        run: |
-          if [ -f /tmp/memvid-sidecar.pid ]; then
-            kill "$(cat /tmp/memvid-sidecar.pid)" || true
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-live-sidecar-proof-receipt
+          path: |
+            test_reports/proof_receipts/backend-live-sidecar-proof.json
+            test_reports/proof-sidecar.log
+          if-no-files-found: warn

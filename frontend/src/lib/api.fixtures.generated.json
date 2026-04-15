@@ -1,0 +1,1044 @@
+{
+  "APPROVAL_BINDING_FIXTURE": {
+    "action_class": "medium",
+    "action_fingerprint": "action-store-note",
+    "normalized_arguments": {
+      "note": "Needs approval follow-up"
+    },
+    "policy_fingerprint": "policy-store-note",
+    "policy_snapshot": {
+      "requires_approval": true,
+      "retention": "operator_review"
+    },
+    "requires_approval": true,
+    "target": "storage/memory/operator-note.md",
+    "tool_name": "store_note"
+  },
+  "DELETE_MEMORY_FIXTURE": {
+    "deleted": true,
+    "memory_id": "memory-1"
+  },
+  "MEMORY_LIST_FIXTURE": {
+    "records": [
+      {
+        "confidence": 0.5,
+        "expired": false,
+        "memory_id": "memory-1",
+        "memory_layer": "trace",
+        "memory_type": "procedure",
+        "run_id": "run-1",
+        "scope": "private",
+        "stored_at": "2026-04-13T14:00:00Z",
+        "text": "Release summaries should always mention the approval state and the artifact path."
+      },
+      {
+        "confidence": 0.5,
+        "expired": false,
+        "memory_id": "memory-2",
+        "memory_layer": "trace",
+        "memory_type": "preference",
+        "run_id": "run-2",
+        "scope": "private",
+        "stored_at": "2026-04-13T14:05:00Z",
+        "text": "Database credentials rotate every 30 days and need a reminder record."
+      }
+    ],
+    "total": 2
+  },
+  "PENDING_APPROVAL_FIXTURE": {
+    "approval_id": "approval-1",
+    "consumption": null,
+    "corruption_count": 0,
+    "decision": null,
+    "expired": false,
+    "grant": null,
+    "request": {
+      "action_class": "medium",
+      "action_id": "action-awaiting-1",
+      "action_kind": "store_note",
+      "approval_id": "approval-1",
+      "binding": {
+        "action_class": "medium",
+        "action_fingerprint": "action-store-note",
+        "normalized_arguments": {
+          "note": "Needs approval follow-up"
+        },
+        "policy_fingerprint": "policy-store-note",
+        "policy_snapshot": {
+          "requires_approval": true,
+          "retention": "operator_review"
+        },
+        "requires_approval": true,
+        "target": "storage/memory/operator-note.md",
+        "tool_name": "store_note"
+      },
+      "expires_at": null,
+      "reason": "Write access is gated for operator review.",
+      "requested_at": "2026-04-13T15:10:00Z",
+      "run_id": "run-awaiting"
+    },
+    "status": "pending"
+  },
+  "RUN_APPROVED_SUMMARY_FIXTURE": {
+    "action_result": {
+      "artifacts": [],
+      "error": null,
+      "outputs": {
+        "note_path": "storage/runs/run-awaiting/artifacts/note.txt"
+      },
+      "status": "success"
+    },
+    "action_taken": {
+      "action_id": "action-awaiting-1",
+      "arguments": {
+        "note": "Needs approval follow-up"
+      },
+      "kind": "store_note",
+      "requires_approval": true
+    },
+    "active_workflow": null,
+    "approval": {
+      "approval_id": "approval-1",
+      "consumption": null,
+      "corruption_count": 0,
+      "decision": {
+        "actor": "user",
+        "approval_id": "approval-1",
+        "binding": {
+          "action_class": "medium",
+          "action_fingerprint": "action-store-note",
+          "normalized_arguments": {
+            "note": "Needs approval follow-up"
+          },
+          "policy_fingerprint": "policy-store-note",
+          "policy_snapshot": {
+            "requires_approval": true,
+            "retention": "operator_review"
+          },
+          "requires_approval": true,
+          "target": "storage/memory/operator-note.md",
+          "tool_name": "store_note"
+        },
+        "decided_at": "2026-04-13T15:11:00Z",
+        "decision": "granted",
+        "expires_at": null,
+        "reason": "Approved by operator"
+      },
+      "expired": false,
+      "grant": {
+        "actor": "user",
+        "approval_id": "approval-1",
+        "binding": {
+          "action_class": "medium",
+          "action_fingerprint": "action-store-note",
+          "normalized_arguments": {
+            "note": "Needs approval follow-up"
+          },
+          "policy_fingerprint": "policy-store-note",
+          "policy_snapshot": {
+            "requires_approval": true,
+            "retention": "operator_review"
+          },
+          "requires_approval": true,
+          "target": "storage/memory/operator-note.md",
+          "tool_name": "store_note"
+        },
+        "expires_at": null,
+        "granted_at": "2026-04-13T15:11:30Z",
+        "token": "eval-token"
+      },
+      "request": {
+        "action_class": "medium",
+        "action_id": "action-awaiting-1",
+        "action_kind": "store_note",
+        "approval_id": "approval-1",
+        "binding": {
+          "action_class": "medium",
+          "action_fingerprint": "action-store-note",
+          "normalized_arguments": {
+            "note": "Needs approval follow-up"
+          },
+          "policy_fingerprint": "policy-store-note",
+          "policy_snapshot": {
+            "requires_approval": true,
+            "retention": "operator_review"
+          },
+          "requires_approval": true,
+          "target": "storage/memory/operator-note.md",
+          "tool_name": "store_note"
+        },
+        "expires_at": null,
+        "reason": "Write access is gated for operator review.",
+        "requested_at": "2026-04-13T15:10:00Z",
+        "run_id": "run-awaiting"
+      },
+      "status": "granted"
+    },
+    "approval_id": "approval-1",
+    "artifacts": [
+      {
+        "artifact_id": "artifact-awaiting-1"
+      }
+    ],
+    "artifacts_count": 1,
+    "created_at": "2026-04-13T15:09:00Z",
+    "critique": {
+      "alignment": 0.7,
+      "confidence_delta": -0.05,
+      "fallback_reason": null,
+      "feasibility": 0.8,
+      "issues": [
+        "Approval required before writing the note."
+      ],
+      "llm_powered": false,
+      "rationale": "Write access is gated for operator review.",
+      "safety": 0.9,
+      "verdict": "revise"
+    },
+    "discrepancies": [],
+    "event_count": 9,
+    "goal": "Needs approval follow-up",
+    "key_events": [
+      {
+        "actor": "runtime",
+        "summary": "Approval requested (id=approval-1)",
+        "timestamp": "2026-04-13T15:10:00Z",
+        "type": "approval_requested"
+      }
+    ],
+    "last_approval_decision": "granted",
+    "latest_receipt": {
+      "status": "success"
+    },
+    "memory_counts": {
+      "episodic": 0
+    },
+    "memory_hits": [],
+    "memory_outcomes": {
+      "episodic_memory_writes": 0
+    },
+    "metrics": {
+      "memory_commit_latency": {
+        "count": 0,
+        "last_ms": null,
+        "max_ms": 0.0,
+        "total_ms": 0.0
+      },
+      "memory_retrieval_latency": {
+        "count": 0,
+        "last_ms": null,
+        "max_ms": 0.0,
+        "total_ms": 0.0
+      },
+      "run_duration_ms": 1600.0,
+      "tool_latency": {
+        "count": 0,
+        "last_ms": null,
+        "max_ms": 0.0,
+        "total_ms": 0.0
+      }
+    },
+    "perception": {
+      "fallback_reason": null,
+      "intent": "store",
+      "intent_class": "store_note",
+      "llm_attempted": true,
+      "perception_mode": "rule_based_fallback"
+    },
+    "plan": {
+      "action": "store_note",
+      "confidence": 0.55,
+      "fallback_reason": null,
+      "memory_context_used": false,
+      "memory_retrieval_error": null,
+      "memory_retrieval_status": null,
+      "planning_mode": "rule_based_fallback",
+      "rationale": "The requested note should be stored after operator approval.",
+      "strategy": "artifact_authoring_strategy"
+    },
+    "run_id": "run-awaiting",
+    "state": "completed",
+    "updated_at": "2026-04-13T15:12:00Z",
+    "workflow_artifacts": [],
+    "workflow_budget": null,
+    "workflow_checkpoint": null,
+    "workflow_outcome": {
+      "next_step_id": null,
+      "reason": "note stored",
+      "terminal_event": "run_completed",
+      "workflow_step_id": null
+    },
+    "workflow_step_history": []
+  },
+  "RUN_ARTIFACTS_FIXTURE": {
+    "records": [
+      {
+        "action_id": "action-1",
+        "approval_id": null,
+        "artifact_id": "artifact-1",
+        "content_available": true,
+        "created_at": "2026-04-13T15:05:00Z",
+        "file_paths": [
+          "artifacts/release-summary.md"
+        ],
+        "hashes": {
+          "sha256": "abc"
+        },
+        "kind": "summary",
+        "metadata": {
+          "format": "markdown"
+        },
+        "path": "artifacts/release-summary.md",
+        "run_id": "run-completed",
+        "source_action_ids": [
+          "action-1"
+        ],
+        "workflow_id": "wf-1"
+      },
+      {
+        "action_id": "action-2",
+        "approval_id": null,
+        "artifact_id": "artifact-2",
+        "content_available": true,
+        "created_at": "2026-04-13T15:04:00Z",
+        "file_paths": [
+          "artifacts/retrieval-trace.json"
+        ],
+        "hashes": {
+          "sha256": "def"
+        },
+        "kind": "trace",
+        "metadata": {
+          "format": "json"
+        },
+        "path": "artifacts/retrieval-trace.json",
+        "run_id": "run-completed",
+        "source_action_ids": [
+          "action-2"
+        ],
+        "workflow_id": "wf-1"
+      }
+    ],
+    "run_id": "run-completed",
+    "total": 2
+  },
+  "RUN_ARTIFACT_DETAIL_FIXTURE": {
+    "action_id": "action-1",
+    "approval_id": null,
+    "artifact_id": "artifact-1",
+    "content": "# Release Summary\n\n- Item one",
+    "content_available": true,
+    "created_at": "2026-04-13T15:05:00Z",
+    "file_paths": [
+      "artifacts/release-summary.md"
+    ],
+    "hashes": {
+      "sha256": "abc"
+    },
+    "kind": "summary",
+    "metadata": {
+      "format": "markdown"
+    },
+    "path": "artifacts/release-summary.md",
+    "run_id": "run-completed",
+    "size_bytes": 128,
+    "source_action_ids": [
+      "action-1"
+    ],
+    "truncated": false,
+    "workflow_id": "wf-1"
+  },
+  "RUN_AWAITING_SUMMARY_FIXTURE": {
+    "action_result": {
+      "artifacts": [],
+      "error": null,
+      "outputs": null,
+      "status": null
+    },
+    "action_taken": {
+      "action_id": "action-awaiting-1",
+      "arguments": {
+        "note": "Needs approval follow-up"
+      },
+      "kind": "store_note",
+      "requires_approval": true
+    },
+    "active_workflow": null,
+    "approval": {
+      "approval_id": "approval-1",
+      "consumption": null,
+      "corruption_count": 0,
+      "decision": null,
+      "expired": false,
+      "grant": null,
+      "request": {
+        "action_class": "medium",
+        "action_id": "action-awaiting-1",
+        "action_kind": "store_note",
+        "approval_id": "approval-1",
+        "binding": {
+          "action_class": "medium",
+          "action_fingerprint": "action-store-note",
+          "normalized_arguments": {
+            "note": "Needs approval follow-up"
+          },
+          "policy_fingerprint": "policy-store-note",
+          "policy_snapshot": {
+            "requires_approval": true,
+            "retention": "operator_review"
+          },
+          "requires_approval": true,
+          "target": "storage/memory/operator-note.md",
+          "tool_name": "store_note"
+        },
+        "expires_at": null,
+        "reason": "Write access is gated for operator review.",
+        "requested_at": "2026-04-13T15:10:00Z",
+        "run_id": "run-awaiting"
+      },
+      "status": "pending"
+    },
+    "approval_id": "approval-1",
+    "artifacts": [],
+    "artifacts_count": 0,
+    "created_at": "2026-04-13T15:09:00Z",
+    "critique": {
+      "alignment": 0.7,
+      "confidence_delta": -0.05,
+      "fallback_reason": null,
+      "feasibility": 0.8,
+      "issues": [
+        "Approval required before writing the note."
+      ],
+      "llm_powered": false,
+      "rationale": "Write access is gated for operator review.",
+      "safety": 0.9,
+      "verdict": "revise"
+    },
+    "discrepancies": [],
+    "event_count": 6,
+    "goal": "Needs approval follow-up",
+    "key_events": [
+      {
+        "actor": "runtime",
+        "summary": "Approval requested (id=approval-1)",
+        "timestamp": "2026-04-13T15:10:00Z",
+        "type": "approval_requested"
+      }
+    ],
+    "last_approval_decision": null,
+    "latest_receipt": null,
+    "memory_counts": {
+      "episodic": 0
+    },
+    "memory_hits": [],
+    "memory_outcomes": {
+      "episodic_memory_writes": 0
+    },
+    "metrics": {
+      "memory_commit_latency": {
+        "count": 0,
+        "last_ms": null,
+        "max_ms": 0.0,
+        "total_ms": 0.0
+      },
+      "memory_retrieval_latency": {
+        "count": 0,
+        "last_ms": null,
+        "max_ms": 0.0,
+        "total_ms": 0.0
+      },
+      "run_duration_ms": 1600.0,
+      "tool_latency": {
+        "count": 0,
+        "last_ms": null,
+        "max_ms": 0.0,
+        "total_ms": 0.0
+      }
+    },
+    "perception": {
+      "fallback_reason": null,
+      "intent": "store",
+      "intent_class": "store_note",
+      "llm_attempted": true,
+      "perception_mode": "rule_based_fallback"
+    },
+    "plan": {
+      "action": "store_note",
+      "confidence": 0.55,
+      "fallback_reason": null,
+      "memory_context_used": false,
+      "memory_retrieval_error": null,
+      "memory_retrieval_status": null,
+      "planning_mode": "rule_based_fallback",
+      "rationale": "The requested note should be stored after operator approval.",
+      "strategy": "artifact_authoring_strategy"
+    },
+    "run_id": "run-awaiting",
+    "state": "awaiting_approval",
+    "updated_at": "2026-04-13T15:10:00Z",
+    "workflow_artifacts": [],
+    "workflow_budget": null,
+    "workflow_checkpoint": null,
+    "workflow_outcome": {
+      "next_step_id": null,
+      "reason": null,
+      "terminal_event": null,
+      "workflow_step_id": null
+    },
+    "workflow_step_history": []
+  },
+  "RUN_EVENTS_FIXTURE": {
+    "records": [
+      {
+        "actor": "planner",
+        "event_id": "event-1",
+        "event_type": "approval_requested",
+        "is_key_event": true,
+        "next_state": "awaiting_approval",
+        "payload": {
+          "approval_id": "approval-1",
+          "reason": "write access"
+        },
+        "prior_state": "running",
+        "run_id": "run-completed",
+        "summary": "Action needs approval",
+        "timestamp": "2026-04-13T15:02:00Z"
+      },
+      {
+        "actor": "planner",
+        "event_id": "event-2",
+        "event_type": "workflow_selected",
+        "is_key_event": false,
+        "next_state": "running",
+        "payload": {
+          "workflow_class": "RetrievalWorkflow"
+        },
+        "prior_state": "running",
+        "run_id": "run-completed",
+        "summary": "Workflow selected",
+        "timestamp": "2026-04-13T15:01:00Z"
+      },
+      {
+        "actor": "runtime",
+        "event_id": "event-3",
+        "event_type": "run_completed",
+        "is_key_event": true,
+        "next_state": "completed",
+        "payload": {
+          "status": "success"
+        },
+        "prior_state": "running",
+        "run_id": "run-completed",
+        "summary": "Run completed",
+        "timestamp": "2026-04-13T15:05:00Z"
+      }
+    ],
+    "run_id": "run-completed",
+    "total": 3
+  },
+  "RUN_LIST_FIXTURE": {
+    "records": [
+      {
+        "action_result": {
+          "artifacts": [],
+          "error": null,
+          "outputs": null,
+          "status": null
+        },
+        "action_taken": {
+          "action_id": "action-awaiting-1",
+          "arguments": {
+            "note": "Needs approval follow-up"
+          },
+          "kind": "store_note",
+          "requires_approval": true
+        },
+        "active_workflow": null,
+        "approval": {
+          "approval_id": "approval-1",
+          "consumption": null,
+          "corruption_count": 0,
+          "decision": null,
+          "expired": false,
+          "grant": null,
+          "request": {
+            "action_class": "medium",
+            "action_id": "action-awaiting-1",
+            "action_kind": "store_note",
+            "approval_id": "approval-1",
+            "binding": {
+              "action_class": "medium",
+              "action_fingerprint": "action-store-note",
+              "normalized_arguments": {
+                "note": "Needs approval follow-up"
+              },
+              "policy_fingerprint": "policy-store-note",
+              "policy_snapshot": {
+                "requires_approval": true,
+                "retention": "operator_review"
+              },
+              "requires_approval": true,
+              "target": "storage/memory/operator-note.md",
+              "tool_name": "store_note"
+            },
+            "expires_at": null,
+            "reason": "Write access is gated for operator review.",
+            "requested_at": "2026-04-13T15:10:00Z",
+            "run_id": "run-awaiting"
+          },
+          "status": "pending"
+        },
+        "approval_id": "approval-1",
+        "artifacts": [],
+        "artifacts_count": 0,
+        "created_at": "2026-04-13T15:09:00Z",
+        "critique": {
+          "alignment": 0.7,
+          "confidence_delta": -0.05,
+          "fallback_reason": null,
+          "feasibility": 0.8,
+          "issues": [
+            "Approval required before writing the note."
+          ],
+          "llm_powered": false,
+          "rationale": "Write access is gated for operator review.",
+          "safety": 0.9,
+          "verdict": "revise"
+        },
+        "discrepancies": [],
+        "event_count": 6,
+        "goal": "Needs approval follow-up",
+        "key_events": [
+          {
+            "actor": "runtime",
+            "summary": "Approval requested (id=approval-1)",
+            "timestamp": "2026-04-13T15:10:00Z",
+            "type": "approval_requested"
+          }
+        ],
+        "last_approval_decision": null,
+        "latest_receipt": null,
+        "memory_counts": {
+          "episodic": 0
+        },
+        "memory_hits": [],
+        "memory_outcomes": {
+          "episodic_memory_writes": 0
+        },
+        "metrics": {
+          "memory_commit_latency": {
+            "count": 0,
+            "last_ms": null,
+            "max_ms": 0.0,
+            "total_ms": 0.0
+          },
+          "memory_retrieval_latency": {
+            "count": 0,
+            "last_ms": null,
+            "max_ms": 0.0,
+            "total_ms": 0.0
+          },
+          "run_duration_ms": 1600.0,
+          "tool_latency": {
+            "count": 0,
+            "last_ms": null,
+            "max_ms": 0.0,
+            "total_ms": 0.0
+          }
+        },
+        "perception": {
+          "fallback_reason": null,
+          "intent": "store",
+          "intent_class": "store_note",
+          "llm_attempted": true,
+          "perception_mode": "rule_based_fallback"
+        },
+        "plan": {
+          "action": "store_note",
+          "confidence": 0.55,
+          "fallback_reason": null,
+          "memory_context_used": false,
+          "memory_retrieval_error": null,
+          "memory_retrieval_status": null,
+          "planning_mode": "rule_based_fallback",
+          "rationale": "The requested note should be stored after operator approval.",
+          "strategy": "artifact_authoring_strategy"
+        },
+        "run_id": "run-awaiting",
+        "state": "awaiting_approval",
+        "updated_at": "2026-04-13T15:10:00Z",
+        "workflow_artifacts": [],
+        "workflow_budget": null,
+        "workflow_checkpoint": null,
+        "workflow_outcome": {
+          "next_step_id": null,
+          "reason": null,
+          "terminal_event": null,
+          "workflow_step_id": null
+        },
+        "workflow_step_history": []
+      },
+      {
+        "action_result": {
+          "artifacts": [],
+          "error": null,
+          "outputs": {},
+          "status": "success"
+        },
+        "action_taken": {
+          "action_id": "action-1",
+          "arguments": {
+            "scope": "release-notes"
+          },
+          "kind": "retrieve_memory",
+          "requires_approval": false
+        },
+        "active_workflow": {
+          "strategy": "information_retrieval_strategy",
+          "workflow_class": "RetrievalWorkflow",
+          "workflow_id": "wf-1"
+        },
+        "approval": null,
+        "approval_id": null,
+        "artifacts": [
+          {
+            "artifact_id": "artifact-1"
+          },
+          {
+            "artifact_id": "artifact-2"
+          }
+        ],
+        "artifacts_count": 2,
+        "created_at": "2026-04-13T15:00:00Z",
+        "critique": {
+          "alignment": 0.93,
+          "confidence_delta": 0.08,
+          "fallback_reason": null,
+          "feasibility": 0.86,
+          "issues": [
+            "Response should mention the source artifact."
+          ],
+          "llm_powered": true,
+          "rationale": "Retrieval is safe and well scoped.",
+          "safety": 0.98,
+          "verdict": "approved"
+        },
+        "discrepancies": [],
+        "event_count": 8,
+        "goal": "Successful retrieval",
+        "key_events": [
+          {
+            "actor": "planner",
+            "summary": "Action needs approval",
+            "timestamp": "2026-04-13T15:02:00Z",
+            "type": "approval_requested"
+          }
+        ],
+        "last_approval_decision": null,
+        "latest_receipt": {
+          "status": "success"
+        },
+        "memory_counts": {
+          "retrieved": 2
+        },
+        "memory_hits": [
+          {
+            "memory_type": "procedure",
+            "score": 0.92,
+            "stored_at": "2026-04-13T14:58:00Z",
+            "text": "Release summaries should cite the most recent approved notes."
+          }
+        ],
+        "memory_outcomes": {
+          "retrieval": [
+            "release-notes",
+            "summary"
+          ]
+        },
+        "metrics": {
+          "memory_commit_latency": {
+            "count": 0,
+            "last_ms": null,
+            "max_ms": 0.0,
+            "total_ms": 0.0
+          },
+          "memory_retrieval_latency": {
+            "count": 1,
+            "last_ms": 80.0,
+            "max_ms": 80.0,
+            "total_ms": 80.0
+          },
+          "run_duration_ms": 4321.0,
+          "tool_latency": {
+            "count": 2,
+            "last_ms": 130.0,
+            "max_ms": 180.0,
+            "total_ms": 310.0
+          }
+        },
+        "perception": {
+          "fallback_reason": null,
+          "intent": "Find the latest release notes",
+          "intent_class": "lookup_request",
+          "llm_attempted": true,
+          "perception_mode": "classifier"
+        },
+        "plan": {
+          "action": "retrieve_memory",
+          "confidence": 0.88,
+          "fallback_reason": null,
+          "memory_context_used": true,
+          "memory_retrieval_error": null,
+          "memory_retrieval_status": "hit",
+          "planning_mode": "planner",
+          "rationale": "Prior release context is available.",
+          "strategy": "information_retrieval_strategy"
+        },
+        "run_id": "run-completed",
+        "state": "completed",
+        "updated_at": "2026-04-13T15:05:00Z",
+        "workflow_artifacts": [
+          {
+            "artifact_id": "artifact-1"
+          }
+        ],
+        "workflow_budget": {
+          "consumed_steps": 2,
+          "max_steps": 4
+        },
+        "workflow_checkpoint": {
+          "current_step_id": "return_result",
+          "current_step_index": 1
+        },
+        "workflow_outcome": {
+          "next_step_id": null,
+          "reason": "answer returned",
+          "terminal_event": "run_completed",
+          "workflow_step_id": null
+        },
+        "workflow_step_history": [
+          {
+            "action_id": "action-1",
+            "status": "completed",
+            "step_id": "fetch",
+            "step_key": "fetch_memory",
+            "tool_name": "memvid",
+            "touched_paths": [
+              "storage/memory/release.json"
+            ]
+          }
+        ]
+      }
+    ],
+    "total": 2
+  },
+  "RUN_SUMMARY_FIXTURE": {
+    "action_result": {
+      "artifacts": [],
+      "error": null,
+      "outputs": {},
+      "status": "success"
+    },
+    "action_taken": {
+      "action_id": "action-1",
+      "arguments": {
+        "scope": "release-notes"
+      },
+      "kind": "retrieve_memory",
+      "requires_approval": false
+    },
+    "active_workflow": {
+      "strategy": "information_retrieval_strategy",
+      "workflow_class": "RetrievalWorkflow",
+      "workflow_id": "wf-1"
+    },
+    "approval": null,
+    "approval_id": null,
+    "artifacts": [
+      {
+        "artifact_id": "artifact-1"
+      },
+      {
+        "artifact_id": "artifact-2"
+      }
+    ],
+    "artifacts_count": 2,
+    "created_at": "2026-04-13T15:00:00Z",
+    "critique": {
+      "alignment": 0.93,
+      "confidence_delta": 0.08,
+      "fallback_reason": null,
+      "feasibility": 0.86,
+      "issues": [
+        "Response should mention the source artifact."
+      ],
+      "llm_powered": true,
+      "rationale": "Retrieval is safe and well scoped.",
+      "safety": 0.98,
+      "verdict": "approved"
+    },
+    "discrepancies": [],
+    "event_count": 8,
+    "goal": "Successful retrieval",
+    "key_events": [
+      {
+        "actor": "planner",
+        "summary": "Action needs approval",
+        "timestamp": "2026-04-13T15:02:00Z",
+        "type": "approval_requested"
+      }
+    ],
+    "last_approval_decision": null,
+    "latest_receipt": {
+      "status": "success"
+    },
+    "memory_counts": {
+      "retrieved": 2
+    },
+    "memory_hits": [
+      {
+        "memory_type": "procedure",
+        "score": 0.92,
+        "stored_at": "2026-04-13T14:58:00Z",
+        "text": "Release summaries should cite the most recent approved notes."
+      }
+    ],
+    "memory_outcomes": {
+      "retrieval": [
+        "release-notes",
+        "summary"
+      ]
+    },
+    "metrics": {
+      "memory_commit_latency": {
+        "count": 0,
+        "last_ms": null,
+        "max_ms": 0.0,
+        "total_ms": 0.0
+      },
+      "memory_retrieval_latency": {
+        "count": 1,
+        "last_ms": 80.0,
+        "max_ms": 80.0,
+        "total_ms": 80.0
+      },
+      "run_duration_ms": 4321.0,
+      "tool_latency": {
+        "count": 2,
+        "last_ms": 130.0,
+        "max_ms": 180.0,
+        "total_ms": 310.0
+      }
+    },
+    "perception": {
+      "fallback_reason": null,
+      "intent": "Find the latest release notes",
+      "intent_class": "lookup_request",
+      "llm_attempted": true,
+      "perception_mode": "classifier"
+    },
+    "plan": {
+      "action": "retrieve_memory",
+      "confidence": 0.88,
+      "fallback_reason": null,
+      "memory_context_used": true,
+      "memory_retrieval_error": null,
+      "memory_retrieval_status": "hit",
+      "planning_mode": "planner",
+      "rationale": "Prior release context is available.",
+      "strategy": "information_retrieval_strategy"
+    },
+    "run_id": "run-completed",
+    "state": "completed",
+    "updated_at": "2026-04-13T15:05:00Z",
+    "workflow_artifacts": [
+      {
+        "artifact_id": "artifact-1"
+      }
+    ],
+    "workflow_budget": {
+      "consumed_steps": 2,
+      "max_steps": 4
+    },
+    "workflow_checkpoint": {
+      "current_step_id": "return_result",
+      "current_step_index": 1
+    },
+    "workflow_outcome": {
+      "next_step_id": null,
+      "reason": "answer returned",
+      "terminal_event": "run_completed",
+      "workflow_step_id": null
+    },
+    "workflow_step_history": [
+      {
+        "action_id": "action-1",
+        "status": "completed",
+        "step_id": "fetch",
+        "step_key": "fetch_memory",
+        "tool_name": "memvid",
+        "touched_paths": [
+          "storage/memory/release.json"
+        ]
+      }
+    ]
+  },
+  "RUN_TRACE_ARTIFACT_DETAIL_FIXTURE": {
+    "action_id": "action-2",
+    "approval_id": null,
+    "artifact_id": "artifact-2",
+    "content": "{\"status\":\"ok\"}",
+    "content_available": true,
+    "created_at": "2026-04-13T15:04:00Z",
+    "file_paths": [
+      "artifacts/retrieval-trace.json"
+    ],
+    "hashes": {
+      "sha256": "def"
+    },
+    "kind": "trace",
+    "metadata": {
+      "format": "json"
+    },
+    "path": "artifacts/retrieval-trace.json",
+    "run_id": "run-completed",
+    "size_bytes": 64,
+    "source_action_ids": [
+      "action-2"
+    ],
+    "truncated": false,
+    "workflow_id": "wf-1"
+  },
+  "SUBSYSTEMS_FIXTURE": {
+    "database": {
+      "detail": "Mongo-backed /api/status persistence is disabled because MONGO_URL and DB_NAME are unset. Replay-backed HCA and memory routes remain available without Mongo.",
+      "enabled": false,
+      "mongo_scope": "status_only",
+      "mongo_status_mode": "disabled",
+      "status": "disabled"
+    },
+    "hca_runtime_authority": "python_hca_runtime",
+    "llm": {
+      "detail": "EMERGENT_LLM_KEY is missing; LLM-backed modules will fall back when possible",
+      "status": "missing"
+    },
+    "memory": {
+      "backend": "python",
+      "detail": "Python in-process memory controller is the active local memory authority at /tmp/hca/memory",
+      "memory_backend_mode": "local",
+      "service_available": null,
+      "service_url": null,
+      "status": "healthy",
+      "uses_sidecar": false
+    },
+    "replay_authority": "local_store",
+    "status": "degraded",
+    "storage": {
+      "detail": "HCA storage root and memory storage are writable",
+      "memory_dir": "/tmp/hca/memory",
+      "root": "/tmp/hca",
+      "status": "writable"
+    }
+  }
+}

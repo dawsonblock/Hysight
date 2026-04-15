@@ -9,6 +9,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
+EXPECTED_HCA_AUTHORITY="The Python runtime package lives under ./hca and is installed editable as part of repo bootstrap."
 
 # Change to repo root early so relative imports (memory_service, hca) are
 # resolvable by Python regardless of the caller's working directory.
@@ -85,12 +86,40 @@ if ! command -v python &>/dev/null && ! command -v python3 &>/dev/null; then
   echo "ERROR: python not found. Install Python 3.11+ and try again." >&2
   exit 1
 fi
-PYTHON="${PYTHON:-$(command -v python3 || command -v python)}"
+if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
+  DEFAULT_PYTHON="$REPO_ROOT/.venv/bin/python"
+else
+  DEFAULT_PYTHON="$(command -v python3 || command -v python)"
+fi
+PYTHON="${PYTHON:-$DEFAULT_PYTHON}"
 
 # uvicorn
 if ! "$PYTHON" -c "import uvicorn" 2>/dev/null; then
   echo "ERROR: uvicorn not installed." >&2
   echo "       Run: pip install -r backend/requirements-core.txt" >&2
+  exit 1
+fi
+
+export HYSIGHT_EXPECTED_HCA_DIR="$REPO_ROOT/hca/src/hca"
+if ! "$PYTHON" - <<'PY' >/dev/null 2>&1
+import importlib.util
+import os
+import pathlib
+import sys
+
+expected = pathlib.Path(os.environ["HYSIGHT_EXPECTED_HCA_DIR"]).resolve()
+spec = importlib.util.find_spec("hca")
+origin = None
+if spec is not None and spec.origin is not None:
+    origin = pathlib.Path(spec.origin).resolve().parent
+sys.exit(0 if origin == expected else 1)
+PY
+then
+  echo "ERROR: $EXPECTED_HCA_AUTHORITY" >&2
+  echo "       Repair:" >&2
+  echo "         make venv" >&2
+  echo "         source .venv/bin/activate" >&2
+  echo "         make test-bootstrap" >&2
   exit 1
 fi
 

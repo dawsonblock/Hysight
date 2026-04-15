@@ -25,32 +25,38 @@ A proof-first Hybrid Cognitive Agent runtime with bounded authority, replay-back
 
 If you only do one thing, run the proof surface first. Hysight treats local verification as the default entry point, not an afterthought.
 
+The Python runtime package lives under `./hca` and is installed editable as part of repo bootstrap.
+
 ```bash
-# 1. Install backend test dependencies
-python -m pip install -r backend/requirements-test.txt
+# 1. Create the local virtual environment
+make venv
+source .venv/bin/activate
 
-# 2. Run the default local proof surface
-python scripts/run_tests.py
+# 2. Install the default backend proof surface
+make test-bootstrap
 
-# 3. Optional — install the extra integration/live proof dependencies
-python -m pip install -r backend/requirements-integration.txt
+# 3. Run the default local proof surface
+make test
 
-# 4. Optional — mock-backed integration proof (no live services required)
+# 4. Optional — install the extra integration/live proof dependencies
+make test-bootstrap-integration
+
+# 5. Optional — mock-backed integration proof (no live services required)
 python scripts/run_tests.py --integration
 
-# 5. Optional — live sidecar proof (requires a running memvid sidecar)
-python scripts/run_tests.py --sidecar
+# 6. Optional — isolated live Mongo proof with a disposable Docker MongoDB
+make proof-mongo-live
 
-# If localhost:3031 is already occupied, move the sidecar and proof together
+# 7. Optional — live sidecar proof harness (starts and stops the sidecar)
+make proof-sidecar
+
+# If localhost:3031 is already occupied, move the sidecar proof harness together
 MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
 MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
 
-# Or use the automated make wrapper around the full live sidecar proof
-make run-memvid-sidecar
-make proof-sidecar
-
-# Optional — live Mongo-backed /api/status proof
+# Narrow already-running-service paths remain available too
 make test-mongo-live
+make test-sidecar
 ```
 
 The default local proof surface is service-free. The optional integration,
@@ -335,7 +341,7 @@ cd Hysight
 ### 2. Set up the Python environment
 
 ```bash
-python -m venv .venv
+make venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 ```
 
@@ -344,6 +350,8 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 The shortest supported setup path is:
 
 ```bash
+make venv
+source .venv/bin/activate
 make test-bootstrap
 ```
 
@@ -365,6 +373,8 @@ surface does not install a second runtime package from anywhere else.
 If you want the optional integration and live Mongo proof tiers too, install:
 
 ```bash
+make venv
+source .venv/bin/activate
 make test-bootstrap-integration
 ```
 
@@ -803,15 +813,14 @@ Proves real sidecar availability, retrieval, and restart semantics. Requires a
 running memvid sidecar (see [Build the memvid sidecar](#6-optional-build-the-memvid-sidecar)). This is not part of the default local proof surface:
 
 ```bash
-python scripts/run_tests.py --sidecar
-
-# If localhost:3031 is busy on macOS or another local service is using it
-MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
-MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
-
-# Or use the explicit make wrapper around the same proof command
-make run-memvid-sidecar
 make proof-sidecar
+
+# If localhost:3031 is busy, override the harness port
+MEMORY_SERVICE_PORT=3032 make proof-sidecar
+
+# Or use the narrow already-running-sidecar path
+make run-memvid-sidecar
+make test-sidecar
 ```
 
 Or directly:
@@ -831,9 +840,9 @@ instance without changing the default service-free proof surface. This proof
 also sits outside the default local contract:
 
 ```bash
-make test-mongo-live
+make proof-mongo-live
 
-# Override the live Mongo connection when needed
+# Or use the narrow already-running-Mongo path
 LIVE_MONGO_URL=mongodb://127.0.0.1:27017 \
 LIVE_MONGO_DB_NAME=hysight_live \
 make test-mongo-live

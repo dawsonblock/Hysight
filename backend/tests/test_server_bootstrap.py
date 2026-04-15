@@ -1,8 +1,10 @@
 import sys
 from importlib import import_module
 from pathlib import Path
+import json
 import re
 
+import subprocess
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,6 +17,9 @@ memory_routes_module = import_module("backend.server_memory_routes")
 memory_controller_module = import_module("memory_service.controller")
 server_module = import_module("backend.server")
 paths_module = import_module("hca.paths")
+assert_contract_payload = import_module(
+    "backend.tests.contract_helpers"
+).assert_contract_payload
 BackendConfigurationError = persistence_module.BackendConfigurationError
 load_backend_settings = persistence_module.load_backend_settings
 create_app = server_module.create_app
@@ -86,9 +91,13 @@ def test_subsystems_route_reports_supported_python_mode_without_db(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "degraded"
+    assert data["replay_authority"] == "local_store"
+    assert data["hca_runtime_authority"] == "python_hca_runtime"
     assert data["database"] == {
         "enabled": False,
         "status": "disabled",
+        "mongo_status_mode": "disabled",
+        "mongo_scope": "status_only",
         "detail": (
             "Mongo-backed /api/status persistence is disabled because "
             "MONGO_URL and DB_NAME are unset. Replay-backed HCA and "
@@ -99,9 +108,11 @@ def test_subsystems_route_reports_supported_python_mode_without_db(
         "backend": "python",
         "uses_sidecar": False,
         "status": "healthy",
+        "memory_backend_mode": "local",
+        "service_available": None,
         "detail": (
             "Python in-process memory controller is the active local "
-            "memory authority"
+            f"memory authority at {(storage_dir / 'memory').resolve()}"
         ),
         "service_url": None,
     }
@@ -160,15 +171,29 @@ def test_subsystems_route_reports_healthy_when_configured_services_are_ready(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
+    assert data["replay_authority"] == "local_store"
+    assert data["hca_runtime_authority"] == "python_hca_runtime"
     assert data["database"] == {
         "enabled": True,
         "status": "healthy",
+        "mongo_status_mode": "connected",
+        "mongo_scope": "status_only",
         "detail": (
             "Mongo-backed /api/status persistence is reachable. Mongo "
             "does not own replay-backed HCA or memory routes."
         ),
     }
-    assert data["memory"]["status"] == "healthy"
+    assert data["memory"] == {
+        "backend": "python",
+        "uses_sidecar": False,
+        "status": "healthy",
+        "memory_backend_mode": "local",
+        "service_available": None,
+        "detail": (
+            f"Python in-process memory controller is the active local memory authority at {(storage_dir / 'memory').resolve()}"
+        ),
+        "service_url": None,
+    }
     assert data["storage"]["status"] == "writable"
     assert data["llm"] == {
         "status": "configured",
@@ -397,6 +422,9 @@ def test_backend_proof_workflow_runs_documented_proof_script():
     assert "Backend Live Mongo Proof" in workflow
     assert "Backend Live Sidecar Proof" in workflow
     assert "python scripts/run_tests.py" in workflow
+    assert "actions/upload-artifact@v4" in workflow
+    assert "backend-live-mongo-proof.json" in workflow
+    assert "backend-live-sidecar-proof.json" in workflow
 
 
 def test_fastapi_entrypoints_are_limited_to_authorized_surfaces():
@@ -528,6 +556,8 @@ def test_run_backend_script_sets_explicit_storage_defaults():
     script = (ROOT / "scripts" / "run_backend.sh").read_text(
         encoding="utf-8"
     )
+    assert 'DEFAULT_PYTHON="$REPO_ROOT/.venv/bin/python"' in script
+    assert "The Python runtime package lives under ./hca and is installed editable as part of repo bootstrap." in script
     assert (
         'HCA_STORAGE_ROOT="${HCA_STORAGE_ROOT:-$REPO_ROOT/storage}"'
         in script
@@ -550,16 +580,21 @@ def test_base_compose_does_not_export_sidecar_url():
 
 def test_makefile_exposes_local_sidecar_port_override():
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "LIVE_MONGO_URL ?= mongodb://127.0.0.1:27017" in makefile
+    assert "VENV_DIR ?= .venv" in makefile
+    assert "LIVE_MONGO_PORT ?= 27017" in makefile
+    assert "LIVE_MONGO_URL ?= mongodb://127.0.0.1:$(LIVE_MONGO_PORT)" in makefile
     assert "LIVE_MONGO_DB_NAME ?= hysight_live" in makefile
+    assert "LIVE_MONGO_IMAGE ?= mongo:7" in makefile
     assert "MEMORY_SERVICE_PORT ?= 3031" in makefile
     assert (
         "MEMORY_SERVICE_URL ?= http://localhost:$(MEMORY_SERVICE_PORT)"
         in makefile
     )
+    assert "venv:" in makefile
     assert "test-bootstrap-integration" in makefile
     assert "test-backend-baseline" in makefile
     assert "test-backend-integration" in makefile
+    assert "proof-mongo-live" in makefile
     assert "test-mongo-live" in makefile
     assert "test-sidecar" in makefile
     assert "proof-sidecar" in makefile
@@ -589,6 +624,11 @@ def test_proof_runner_uses_explicit_isolated_storage_env():
     proof_runner = (ROOT / "scripts" / "run_tests.py").read_text(
         encoding="utf-8"
     )
+    assert "EXPECTED_HCA_PACKAGE_DIR" in proof_runner
+    assert "PACKAGE_AUTHORITY_SENTENCE" in proof_runner
+    assert "_validate_hca_package_authority" in proof_runner
+    assert "The Python runtime package lives under ./hca and is installed editable as part of repo bootstrap." in proof_runner
+    assert "make test-bootstrap-integration" in proof_runner
     assert "isolated_storage" in proof_runner
     assert "BASELINE_STEPS" in proof_runner
     assert "INTEGRATION_STEP" in proof_runner
@@ -608,6 +648,20 @@ def test_proof_runner_uses_explicit_isolated_storage_env():
     assert 'tempfile.mkdtemp(prefix="hysight-proof-")' in proof_runner
 
 
+def test_runtime_bootstrap_does_not_inject_hca_source_path():
+    bootstrap = (ROOT / "backend" / "server_bootstrap.py").read_text(
+        encoding="utf-8"
+    )
+    pipeline_test = (ROOT / "tests" / "test_hca_pipeline.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "HCA_SRC_DIR" not in bootstrap
+    assert 'hca" / "src"' not in bootstrap
+    assert "HCA_SRC =" not in pipeline_test
+    assert 'hca" / "src"' not in pipeline_test
+
+
 def test_proof_wrapper_delegates_to_canonical_proof_runner():
     script = (ROOT / "scripts" / "proof_local.sh").read_text(
         encoding="utf-8"
@@ -620,6 +674,9 @@ def test_non_test_python_code_keeps_process_and_network_calls_bounded():
         "hca/src/hca/executor/sandbox.py",
         "memory_service/config.py",
         "memory_service/controller.py",
+        "scripts/proof_mongo_live.py",
+        "scripts/proof_receipt.py",
+        "scripts/proof_sidecar.py",
         "scripts/run_tests.py",
     }
     forbidden_patterns = [
@@ -654,3 +711,72 @@ def test_non_test_python_code_keeps_process_and_network_calls_bounded():
                 break
 
     assert offenders == []
+
+
+def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract():
+    mongo_harness = (ROOT / "scripts" / "proof_mongo_live.py").read_text(
+        encoding="utf-8"
+    )
+    sidecar_harness = (ROOT / "scripts" / "proof_sidecar.py").read_text(
+        encoding="utf-8"
+    )
+    receipt_helper = (ROOT / "scripts" / "proof_receipt.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "backend-live-mongo-proof.xml" in mongo_harness
+    assert "backend-live-mongo-proof.json" in mongo_harness
+    assert "docker_disposable_local" in mongo_harness
+    assert "backend-live-sidecar-proof.xml" in sidecar_harness
+    assert "backend-live-sidecar-proof.json" in sidecar_harness
+    assert "cargo_local_sidecar" in sidecar_harness
+    assert '"proof_tier"' in receipt_helper
+    assert '"environment_mode"' in receipt_helper
+    assert '"passed_test_count"' in receipt_helper
+    assert '"skipped_test_count"' in receipt_helper
+    assert '"service_endpoint"' in receipt_helper
+
+
+def test_generated_frontend_api_fixtures_match_backend_export(tmp_path):
+    generated_path = tmp_path / "api.fixtures.generated.json"
+    committed_path = (
+        ROOT / "frontend" / "src" / "lib" / "api.fixtures.generated.json"
+    )
+
+    subprocess.run(
+        [sys.executable, "scripts/export_api_fixtures.py", "--output", str(generated_path)],
+        cwd=ROOT,
+        check=True,
+    )
+
+    generated = json.loads(generated_path.read_text(encoding="utf-8"))
+    committed = json.loads(committed_path.read_text(encoding="utf-8"))
+
+    assert generated == committed
+    assert_contract_payload("GET /api/subsystems", committed["SUBSYSTEMS_FIXTURE"])
+    assert_contract_payload("GET /api/hca/runs", committed["RUN_LIST_FIXTURE"])
+    assert_contract_payload("GET /api/hca/run/{run_id}", committed["RUN_SUMMARY_FIXTURE"])
+    assert_contract_payload(
+        "POST /api/hca/run/{run_id}/approve",
+        committed["RUN_APPROVED_SUMMARY_FIXTURE"],
+    )
+    assert_contract_payload(
+        "GET /api/hca/run/{run_id}/events",
+        committed["RUN_EVENTS_FIXTURE"],
+    )
+    assert_contract_payload(
+        "GET /api/hca/run/{run_id}/artifacts",
+        committed["RUN_ARTIFACTS_FIXTURE"],
+    )
+    assert_contract_payload(
+        "GET /api/hca/run/{run_id}/artifacts/{artifact_id}",
+        committed["RUN_ARTIFACT_DETAIL_FIXTURE"],
+    )
+    assert_contract_payload(
+        "GET /api/hca/memory/list",
+        committed["MEMORY_LIST_FIXTURE"],
+    )
+    assert_contract_payload(
+        "DELETE /api/hca/memory/{memory_id}",
+        committed["DELETE_MEMORY_FIXTURE"],
+    )
