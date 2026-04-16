@@ -1,0 +1,66 @@
+{
+  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py",
+  "commit_sha": "60956961a8564e14b84d484b8fa231e761c1d0b1",
+  "environment_mode": "repo_local_venv",
+  "error_test_count": 0,
+  "failed_test_count": 0,
+  "generated_at": "2026-04-16T19:56:31.264216+00:00",
+  "junit_xml": null,
+  "metadata": {
+    "steps": [
+      {
+        "collection_issues": [],
+        "counts": {
+          "error_test_count": 0,
+          "failed_test_count": 0,
+          "passed_test_count": 7,
+          "skipped_test_count": 0,
+          "total_test_count": 7
+        },
+        "id": "pipeline",
+        "junit_xml": "test_reports/pytest/hca-pipeline-proof.xml",
+        "name": "HCA pipeline proof",
+        "skipped_cases": []
+      },
+      {
+        "collection_issues": [],
+        "counts": {
+          "error_test_count": 0,
+          "failed_test_count": 0,
+          "passed_test_count": 74,
+          "skipped_test_count": 0,
+          "total_test_count": 74
+        },
+        "id": "backend-baseline",
+        "junit_xml": "test_reports/pytest/backend-baseline-proof.xml",
+        "name": "Backend baseline proof",
+        "skipped_cases": []
+      },
+      {
+        "collection_issues": [],
+        "counts": {
+          "error_test_count": 0,
+          "failed_test_count": 0,
+          "passed_test_count": 18,
+          "skipped_test_count": 0,
+          "total_test_count": 18
+        },
+        "id": "contract",
+        "junit_xml": "test_reports/pytest/contract-conformance-proof.xml",
+        "name": "Contract conformance proof",
+        "skipped_cases": []
+      }
+    ]
+  },
+  "outcome": "passed",
+  "passed_test_count": 99,
+  "platform": "macOS-26.2-arm64-arm-64bit",
+  "proof_tier": "baseline",
+  "python_version": "3.9.7",
+  "schema_version": 2,
+  "service_connection_mode": "none",
+  "service_endpoint": "n/a",
+  "skipped_test_count": 0,
+  "timestamp": "2026-04-16T19:56:31.264216+00:00",
+  "total_test_count": 99
+}
