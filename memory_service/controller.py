@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
+import threading
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -96,6 +99,56 @@ def _normalize_hit(record: Dict[str, Any], score: float) -> RetrievalHit:
     )
 
 
+def _fsync_directory(path: Path) -> None:
+    try:
+        directory_fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+
+    try:
+        os.fsync(directory_fd)
+    except OSError:
+        pass
+    finally:
+        os.close(directory_fd)
+
+
+def _load_jsonl_records(path: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    if not path.exists():
+        return records
+
+    file_size = path.stat().st_size
+    with open(path, "rb") as handle:
+        while True:
+            record_offset = handle.tell()
+            raw_line = handle.readline()
+            if raw_line == b"":
+                break
+            if not raw_line.strip():
+                continue
+            try:
+                record = json.loads(raw_line.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                truncated_final_line = (
+                    handle.tell() == file_size and not raw_line.endswith(b"\n")
+                )
+                if truncated_final_line:
+                    _log.warning(
+                        "Ignoring truncated final memory record at byte offset %s in %s",
+                        record_offset,
+                        path,
+                    )
+                    break
+                raise MemoryBackendError(
+                    f"memory store is malformed at byte offset {record_offset}"
+                ) from exc
+            if not isinstance(record, dict):
+                raise MemoryBackendError("memory store contains a non-object JSON record")
+            records.append(record)
+    return records
+
+
 class MemoryController:
     """
     In-process Python implementation of the memory contract.
@@ -124,6 +177,7 @@ class MemoryController:
         if self._settings.uses_sidecar:
             probe_memory_service(self._settings)
         self._records: List[Dict[str, Any]] = []
+        self._records_lock = threading.RLock()
         self._storage_dir = str(self._settings.storage_dir)
         if not self._settings.uses_sidecar:
             self._settings.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -140,21 +194,21 @@ class MemoryController:
         path = self._disk_path()
         if path is None or not path.exists():
             return
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        self._records.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        pass
+        with self._records_lock:
+            self._records = _load_jsonl_records(path)
 
     def _append_to_disk(self, record: Dict[str, Any]) -> None:
         path = self._disk_path()
         if path is None:
             return
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, default=str) + "\n")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with self._records_lock:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, default=str))
+                f.write("\n")
+                f.flush()
+                os.fsync(f.fileno())
+            _fsync_directory(path.parent)
 
     # BM25-lite scoring.
 
@@ -213,24 +267,29 @@ class MemoryController:
         """Retrieve memories matching query using BM25 scoring."""
         if self._settings.uses_sidecar:
             return self._rust_retrieve(query)
-        candidates = [
-            r for r in self._records
-            if (not r.get("expired") or query.include_expired)
-            and (
-                query.memory_layer is None
-                or r.get("memory_layer") == query.memory_layer
-            )
-            and (query.scope is None or r.get("scope") == query.scope)
-            and (query.run_id is None or r.get("run_id") == query.run_id)
+        with self._records_lock:
+            candidates = [
+                (index, r) for index, r in enumerate(self._records)
+                if (not r.get("expired") or query.include_expired)
+                and (
+                    query.memory_layer is None
+                    or r.get("memory_layer") == query.memory_layer
+                )
+                and (query.scope is None or r.get("scope") == query.scope)
+                and (query.run_id is None or r.get("run_id") == query.run_id)
+            ]
+        scored = [
+            (self._bm25(query.query_text, record["raw_text"]), index, record)
+            for index, record in candidates
         ]
         scored = [
-            (self._bm25(query.query_text, r["raw_text"]), r)
-            for r in candidates
+            (score, index, record)
+            for score, index, record in scored
+            if score > 0.0
         ]
-        scored = [(s, r) for s, r in scored if s > 0.0]
-        scored.sort(key=lambda x: x[0], reverse=True)
+        scored.sort(key=lambda item: (-item[0], -item[1]))
         hits: List[RetrievalHit] = []
-        for score, rec in scored[: query.top_k]:
+        for score, _index, rec in scored[: query.top_k]:
             hits.append(_normalize_hit(rec, score))
         return hits
 
@@ -251,12 +310,13 @@ class MemoryController:
                 limit,
                 offset,
             )
-        filtered = [
-            r for r in self._records
-            if (include_expired or not r.get("expired"))
-            and (memory_type is None or r.get("memory_type") == memory_type)
-            and (scope is None or r.get("scope") == scope)
-        ]
+        with self._records_lock:
+            filtered = [
+                r for r in self._records
+                if (include_expired or not r.get("expired"))
+                and (memory_type is None or r.get("memory_type") == memory_type)
+                and (scope is None or r.get("scope") == scope)
+            ]
         filtered.sort(key=lambda r: r.get("stored_at", ""), reverse=True)
         records = [
             _normalize_list_item(r)
@@ -268,11 +328,12 @@ class MemoryController:
         """Delete a record by ID. Returns True if found."""
         if self._settings.uses_sidecar:
             return self._rust_delete(memory_id)
-        before = len(self._records)
-        self._records = [
-            r for r in self._records if r.get("memory_id") != memory_id
-        ]
-        deleted = len(self._records) < before
+        with self._records_lock:
+            before = len(self._records)
+            self._records = [
+                r for r in self._records if r.get("memory_id") != memory_id
+            ]
+            deleted = len(self._records) < before
         if deleted and self._storage_dir:
             self._rewrite_disk()
         return deleted
@@ -281,9 +342,25 @@ class MemoryController:
         path = self._disk_path()
         if path is None:
             return
-        with open(path, "w", encoding="utf-8") as f:
-            for rec in self._records:
-                f.write(json.dumps(rec, default=str) + "\n")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f"{path.stem}-",
+            suffix=path.suffix,
+            dir=path.parent,
+            text=True,
+        )
+        try:
+            with self._records_lock:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    for rec in self._records:
+                        f.write(json.dumps(rec, default=str) + "\n")
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temp_path, path)
+                _fsync_directory(path.parent)
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
 
     def maintain(self) -> MaintenanceReport:
         """Expire stale records and return maintenance stats."""
@@ -292,28 +369,29 @@ class MemoryController:
         now = datetime.now(timezone.utc)
         expired_ids: List[str] = []
         durable = 0
-        for rec in self._records:
-            if rec.get("expired"):
-                expired_ids.append(rec["memory_id"])
-                continue
-            stored_raw = rec.get("stored_at")
-            if stored_raw:
-                try:
-                    age = now - datetime.fromisoformat(stored_raw)
-                    if age > timedelta(days=7):
-                        rec["expired"] = True
-                        expired_ids.append(rec["memory_id"])
-                        continue
-                except (TypeError, ValueError):
-                    pass
-            if rec.get("memory_type") in {
-                "fact",
-                "episode",
-                "preference",
-                "goalstate",
-                "procedure",
-            }:
-                durable += 1
+        with self._records_lock:
+            for rec in self._records:
+                if rec.get("expired"):
+                    expired_ids.append(rec["memory_id"])
+                    continue
+                stored_raw = rec.get("stored_at")
+                if stored_raw:
+                    try:
+                        age = now - datetime.fromisoformat(stored_raw)
+                        if age > timedelta(days=7):
+                            rec["expired"] = True
+                            expired_ids.append(rec["memory_id"])
+                            continue
+                    except (TypeError, ValueError):
+                        pass
+                if rec.get("memory_type") in {
+                    "fact",
+                    "episode",
+                    "preference",
+                    "goalstate",
+                    "procedure",
+                }:
+                    durable += 1
         return MaintenanceReport(
             durable_memory_count=durable,
             expired_count=len(expired_ids),

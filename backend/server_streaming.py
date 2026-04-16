@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures
 import json
+import os
 from typing import Any, Dict, Optional
 
 from fastapi.responses import StreamingResponse
@@ -8,6 +9,13 @@ from pydantic import BaseModel
 
 from backend import server_bootstrap as _server_bootstrap  # noqa: F401
 from hca.api.models import CreateRunRequest  # type: ignore[import-untyped]
+
+
+_STREAM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=max(4, min(16, os.cpu_count() or 1)),
+    thread_name_prefix="hysight-stream",
+)
+_STREAM_POLL_INTERVAL_SECONDS = 0.3
 
 
 _STREAM_LABELS: Dict[str, str] = {
@@ -83,23 +91,21 @@ async def stream_hca_run(body: CreateRunRequest, extract_run_summary) -> Streami
         finally:
             result_holder["done"] = True
 
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-
     async def generate():
-        from hca.storage import iter_events  # type: ignore
+        from hca.storage.event_log import read_events  # type: ignore
 
-        loop = asyncio.get_event_loop()
-        future = loop.run_in_executor(executor, _execute)
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(_STREAM_EXECUTOR, _execute)
 
         try:
             yield _sse("status", {"label": "Connecting to agent…", "step": 0})
 
-            last_event_count = 0
+            event_cursor = 0
             run_id: Optional[str] = None
             step = 1
 
             while not result_holder["done"]:
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(_STREAM_POLL_INTERVAL_SECONDS)
 
                 if not run_id and result_holder["run_id"]:
                     run_id = result_holder["run_id"]
@@ -114,12 +120,16 @@ async def stream_hca_run(body: CreateRunRequest, extract_run_summary) -> Streami
                     step += 1
 
                 if run_id:
-                    events = list(iter_events(run_id))
-                    for event in events[last_event_count:]:
+                    events, event_cursor = read_events(
+                        run_id,
+                        offset=event_cursor,
+                    )
+                    for event in events:
                         yield _sse(
                             "step",
                             {
                                 "step": step,
+                                "event_id": event.get("event_id"),
                                 "event_type": event.get("event_type"),
                                 "label": _stream_label(event),
                                 "actor": event.get("actor"),
@@ -128,7 +138,6 @@ async def stream_hca_run(body: CreateRunRequest, extract_run_summary) -> Streami
                             },
                         )
                         step += 1
-                    last_event_count = len(events)
 
             await asyncio.wait_for(asyncio.wrap_future(future), timeout=5.0)
 
@@ -138,12 +147,16 @@ async def stream_hca_run(body: CreateRunRequest, extract_run_summary) -> Streami
 
             run_id = result_holder["run_id"]
             if run_id:
-                events = list(iter_events(run_id))
-                for event in events[last_event_count:]:
+                events, event_cursor = read_events(
+                    run_id,
+                    offset=event_cursor,
+                )
+                for event in events:
                     yield _sse(
                         "step",
                         {
                             "step": step,
+                            "event_id": event.get("event_id"),
                             "event_type": event.get("event_type"),
                             "label": _stream_label(event),
                             "actor": event.get("actor"),
@@ -156,8 +169,6 @@ async def stream_hca_run(body: CreateRunRequest, extract_run_summary) -> Streami
                 yield _sse("done", extract_run_summary(run_id))
             else:
                 yield _sse("error", {"label": "Run failed to start."})
-        finally:
-            executor.shutdown(wait=False)
 
     return StreamingResponse(
         generate(),
