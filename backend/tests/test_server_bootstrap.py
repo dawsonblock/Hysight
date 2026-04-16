@@ -475,6 +475,7 @@ def test_frontend_proof_workflow_runs_documented_proof_script():
     assert "make venv" in workflow
     assert "make test-bootstrap-frontend" in workflow
     assert "make proof-frontend" in workflow
+    assert "frontend-proof-receipt" in workflow
     assert 'node-version: "20"' in workflow
     assert "actions/upload-artifact@v4" in workflow
     assert "artifacts/proof/frontend.json" in workflow
@@ -634,7 +635,12 @@ def test_run_backend_script_sets_explicit_storage_defaults():
 
 def test_base_compose_does_not_export_sidecar_url():
     compose = (ROOT / "compose.yml").read_text(encoding="utf-8")
+    sidecar_compose = (ROOT / "compose.sidecar.yml").read_text(
+        encoding="utf-8"
+    )
     assert re.search(r"^\s+MEMORY_SERVICE_URL:", compose, re.MULTILINE) is None
+    assert "MEMORY_DATA_DIR: /app/data" in sidecar_compose
+    assert "sidecar-data:/app/data" in sidecar_compose
 
 
 def test_makefile_exposes_local_sidecar_port_override():
@@ -651,9 +657,11 @@ def test_makefile_exposes_local_sidecar_port_override():
     )
     assert "dev: venv" in makefile
     assert "venv:" in makefile
+    assert "test-bootstrap-frontend" in makefile
     assert "test-bootstrap-integration" in makefile
     assert "test-backend-baseline" in makefile
     assert "test-backend-integration" in makefile
+    assert "proof-frontend" in makefile
     assert "proof-mongo-live" in makefile
     assert "test-mongo-live" in makefile
     assert "test-sidecar" in makefile
@@ -674,9 +682,12 @@ def test_bootstrap_contract_and_repo_integrity_sentinel_pin_repo_truth():
     assert "What failure looks like:" in bootstrap
 
     assert '"BOOTSTRAP.md"' in integrity
+    assert '"scripts/proof_frontend.py"' in integrity
     assert '"frontend/src/lib/api.fixtures.generated.json"' in integrity
     assert '"scripts/check_repo_integrity.py"' in integrity
     assert '"dev"' in integrity
+    assert '"test-bootstrap-frontend"' in integrity
+    assert '"proof-frontend"' in integrity
     assert '"test-fixture-drift"' in integrity
     assert '"fixture_drift"' in integrity
 
@@ -710,14 +721,18 @@ def test_proof_runner_uses_explicit_isolated_storage_env():
     assert "REPO_VENV_DIR" in proof_runner
     assert "PROOF_ARTIFACT_DIR" in proof_runner
     assert "PROOF_HISTORY_DIR" in proof_runner
+    assert "FRONTEND_PROOF_RECEIPT_PATH" in proof_runner
     assert "_validate_hca_package_authority" in proof_runner
     assert "The Python runtime package lives under ./hca and is installed editable as part of repo bootstrap." in proof_runner
     assert "EXPECTED_BASELINE_STEP_COUNTS" in proof_runner
     assert "isolated_storage" in proof_runner
     assert "BASELINE_STEPS" in proof_runner
+    assert "FRONTEND_STEP" in proof_runner
     assert "INTEGRATION_STEP" in proof_runner
     assert "MONGO_LIVE_STEP" in proof_runner
+    assert "external_receipt" in proof_runner
     assert "--baseline-step" in proof_runner
+    assert "--frontend" in proof_runner
     assert "--strict-venv" in proof_runner
     assert '"MEMORY_BACKEND": "python"' in proof_runner
     assert "DEFAULT_MEMORY_SERVICE_PORT" in proof_runner
@@ -763,6 +778,7 @@ def test_non_test_python_code_keeps_process_and_network_calls_bounded():
         "hca/src/hca/executor/sandbox.py",
         "memory_service/config.py",
         "memory_service/controller.py",
+        "scripts/proof_frontend.py",
         "scripts/proof_mongo_live.py",
         "scripts/proof_receipt.py",
         "scripts/proof_sidecar.py",
@@ -805,6 +821,9 @@ def test_non_test_python_code_keeps_process_and_network_calls_bounded():
 
 
 def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract():
+    frontend_harness = (ROOT / "scripts" / "proof_frontend.py").read_text(
+        encoding="utf-8"
+    )
     mongo_harness = (ROOT / "scripts" / "proof_mongo_live.py").read_text(
         encoding="utf-8"
     )
@@ -815,6 +834,24 @@ def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract()
         encoding="utf-8"
     )
 
+    assert "PROOF_RECEIPT_PATH" in frontend_harness
+    assert "JEST_REPORT_PATH" in frontend_harness
+    assert "FIXTURE_JUNIT_PATH" in frontend_harness
+    assert "write_proof_receipt(" in frontend_harness
+    assert "frontend-proof-v1" in frontend_harness
+    assert '"node_version"' in frontend_harness
+    assert '"yarn_version"' in frontend_harness
+    assert '"stages"' in frontend_harness
+    assert '"skipped_cases"' in frontend_harness
+    assert '"receipt_format"' in frontend_harness
+    assert "runtime-verification" in frontend_harness
+    assert "fixture-drift" in frontend_harness
+    assert 'name="Frontend tests"' in frontend_harness
+    assert 'name="Frontend build"' in frontend_harness
+    assert "--check-fixture-drift" in frontend_harness
+    assert "--json" in frontend_harness
+    assert "--outputFile=" in frontend_harness
+    assert "make test-bootstrap-frontend" in frontend_harness
     assert "docker_disposable_local" in mongo_harness
     assert "HYSIGHT_PROOF_ENVIRONMENT_MODE" in mongo_harness
     assert "HYSIGHT_PROOF_SERVICE_CONNECTION_MODE" in mongo_harness
@@ -825,8 +862,13 @@ def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract()
     assert "cargo_local_sidecar" in sidecar_harness
     assert "HYSIGHT_PROOF_ENVIRONMENT_MODE" in sidecar_harness
     assert "HYSIGHT_PROOF_SERVICE_CONNECTION_MODE" in sidecar_harness
+    assert "--data-dir" in sidecar_harness
+    assert "TemporaryDirectory(" in sidecar_harness
     assert "MEMORY_DATA_DIR" in sidecar_harness
     assert "hysight-sidecar-proof-" in sidecar_harness
+    assert 'env["MEMORY_DATA_DIR"] = str(data_dir)' in sidecar_harness
+    assert 'proof_env["MEMORY_DATA_DIR"] = str(data_dir)' in sidecar_harness
+    assert "data_dir_handle.cleanup()" in sidecar_harness
     assert "_port_is_available" in sidecar_harness
     assert "MEMORY_SERVICE_PORT=3032 make proof-sidecar" in sidecar_harness
     assert '"scripts/run_tests.py", "--sidecar"' in sidecar_harness
