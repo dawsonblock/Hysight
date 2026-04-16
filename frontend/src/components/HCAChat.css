@@ -1,0 +1,543 @@
+.assist-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84) 0%, rgba(247, 250, 252, 0.96) 30%, rgba(239, 246, 255, 0.58) 100%);
+  color: hsl(var(--foreground));
+  overflow: hidden;
+}
+
+.assist-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: rgba(255, 255, 255, 0.74);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.assist-headerGroup,
+.assist-headerCopy {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.assist-headerCopy {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assist-headerTitle,
+.assist-liveTitle,
+.assist-summaryTitle,
+.assist-approvalTitle,
+.assist-outcomeTitle,
+.assist-welcomeTitle,
+.assist-composerTitle {
+  color: #10233c;
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.assist-headerTitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.assist-headerSub,
+.assist-composerDescription,
+.assist-summaryText,
+.assist-liveSummaryText,
+.assist-liveSummaryMeta,
+.assist-approvalText,
+.assist-welcomeSub,
+.assist-statusMeta,
+.assist-outcomeMeta {
+  color: hsl(var(--muted-foreground));
+  line-height: 1.55;
+}
+
+.assist-headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.assist-chip,
+.assist-memoryBtn,
+.assist-exampleButton,
+.assist-runBtn,
+.assist-approveBtn,
+.assist-denyBtn,
+.assist-disclosureButton,
+.assist-collapsibleBtn {
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.assist-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  color: hsl(var(--muted-foreground));
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.assist-memoryBtn {
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #334155;
+  font-weight: 700;
+}
+
+.assist-memoryBtn.is-active {
+  border-color: rgba(124, 58, 237, 0.28);
+  background: rgba(245, 243, 255, 0.96);
+  color: #6d28d9;
+}
+
+.assist-feed {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px 20px;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.assist-welcome,
+.assist-liveCard,
+.assist-resultCard,
+.assist-composer,
+.assist-errorCard,
+.assist-summaryPanel,
+.assist-approvalCard,
+.assist-outcomeCard,
+.assist-collapsible {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.06);
+}
+
+.assist-welcome {
+  margin: 0 auto;
+  max-width: 720px;
+  padding: 36px 30px;
+  text-align: center;
+}
+
+.assist-welcomeEyebrow,
+.assist-cardEyebrow,
+.assist-composerEyebrow,
+.assist-tryLabel,
+.assist-collapsibleLabel {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0f766e;
+}
+
+.assist-welcomeTitle {
+  margin: 12px 0;
+  font-size: clamp(1.9rem, 3vw, 2.6rem);
+  line-height: 1.05;
+}
+
+.assist-welcomeSub {
+  font-size: 1rem;
+  margin: 0 auto 18px;
+  max-width: 60ch;
+}
+
+.assist-tryLabel {
+  margin-bottom: 12px;
+}
+
+.assist-exampleList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.assist-exampleList--welcome {
+  justify-content: center;
+}
+
+.assist-exampleButton {
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.95);
+  color: #334155;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.assist-exampleButton:hover,
+.assist-memoryBtn:hover,
+.assist-runBtn:hover,
+.assist-approveBtn:hover,
+.assist-denyBtn:hover,
+.assist-disclosureButton:hover,
+.assist-collapsibleBtn:hover {
+  transform: translateY(-1px);
+}
+
+.assist-exampleButton--welcome {
+  justify-content: center;
+}
+
+.assist-userRow,
+.assist-agentRow {
+  display: flex;
+}
+
+.assist-userRow {
+  justify-content: flex-end;
+}
+
+.assist-userBubble {
+  max-width: min(72%, 58ch);
+  padding: 12px 18px;
+  border: 1px solid rgba(59, 130, 246, 0.24);
+  border-radius: 18px 18px 4px 18px;
+  background: rgba(239, 246, 255, 0.95);
+  color: #1d4ed8;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.assist-liveCard,
+.assist-resultCard {
+  width: 100%;
+  overflow: hidden;
+}
+
+.assist-liveHeader,
+.assist-statusBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assist-liveHeader {
+  padding: 16px 18px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.assist-liveHeaderTitle {
+  display: flex;
+  gap: 10px;
+}
+
+.assist-liveTitle {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.assist-liveStatus,
+.assist-collapsibleIcon {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.assist-liveSummary {
+  padding: 14px 18px 6px;
+}
+
+.assist-liveSummaryText,
+.assist-summaryText,
+.assist-approvalText,
+.assist-composerDescription {
+  margin: 0;
+}
+
+.assist-liveSummaryMeta,
+.assist-outcomeMeta,
+.assist-composerHint,
+.assist-collapsibleMeta,
+.assist-runId {
+  font-size: 0.82rem;
+}
+
+.assist-tracePreview {
+  padding-top: 0;
+}
+
+.assist-summaryPanel,
+.assist-approvalCard,
+.assist-outcomeCard {
+  padding: 16px 18px;
+}
+
+.assist-summaryTitle {
+  margin: 8px 0 10px;
+  font-size: 1.3rem;
+  line-height: 1.1;
+}
+
+.assist-summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.assist-summaryFact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.assist-summaryFactLabel {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.assist-summaryFactValue {
+  color: #10233c;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.assist-summaryFactValue.is-mono,
+.assist-token,
+.assist-runId,
+.assist-collapsibleMeta {
+  font-family: "SFMono-Regular", "Consolas", monospace;
+}
+
+.assist-approvalCard {
+  border-color: rgba(196, 181, 253, 0.5);
+  background: rgba(250, 245, 255, 0.96);
+}
+
+.assist-approvalTitle,
+.assist-outcomeTitle,
+.assist-composerTitle {
+  margin: 8px 0 10px;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.assist-approvalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.assist-approveBtn,
+.assist-denyBtn,
+.assist-runBtn,
+.assist-disclosureButton,
+.assist-collapsibleBtn {
+  cursor: pointer;
+}
+
+.assist-approveBtn,
+.assist-denyBtn,
+.assist-runBtn {
+  border: 1px solid transparent;
+  border-radius: 14px;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.assist-approveBtn {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.assist-denyBtn {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.assist-outcomeCard {
+  border-color: rgba(167, 243, 208, 0.48);
+}
+
+.assist-outcomeCard--danger {
+  border-color: rgba(252, 165, 165, 0.42);
+  background: rgba(255, 241, 242, 0.96);
+}
+
+.assist-inlineError {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(248, 113, 113, 0.34);
+  background: rgba(255, 241, 242, 0.92);
+  color: #b91c1c;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.assist-tokenList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assist-token {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(255, 255, 255, 0.82);
+  color: #334155;
+  font-size: 0.78rem;
+}
+
+.assist-collapsible {
+  padding: 14px 16px;
+}
+
+.assist-collapsibleBtn {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.assist-collapsibleMeta {
+  display: block;
+  margin-top: 4px;
+  color: hsl(var(--muted-foreground));
+}
+
+.assist-collapsibleBody {
+  margin-top: 12px;
+}
+
+.assist-errorCard {
+  width: 100%;
+}
+
+.assist-composer {
+  padding: 18px 20px 20px;
+  border-top: 1px solid hsl(var(--border));
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.assist-composerIntro {
+  margin-bottom: 14px;
+}
+
+.assist-composerRow {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  margin-top: 14px;
+}
+
+.assist-textarea {
+  flex: 1;
+  min-height: 96px;
+}
+
+.assist-runBtn {
+  min-width: 132px;
+  background: linear-gradient(135deg, hsl(var(--primary)), #0f766e);
+  color: hsl(var(--primary-foreground));
+}
+
+.assist-disclosureButton--ghost {
+  align-self: flex-start;
+  margin: 0 18px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.92);
+  color: #334155;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+@media (max-width: 960px) {
+  .assist-header,
+  .assist-composerRow {
+    flex-direction: column;
+  }
+
+  .assist-headerActions {
+    justify-content: flex-start;
+  }
+
+  .assist-runBtn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .assist-feed,
+  .assist-composer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .assist-welcome,
+  .assist-summaryPanel,
+  .assist-approvalCard,
+  .assist-outcomeCard,
+  .assist-collapsible {
+    border-radius: 18px;
+  }
+
+  .assist-userBubble {
+    max-width: 88%;
+  }
+}

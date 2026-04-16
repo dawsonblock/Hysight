@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import "./HCAChat.css";
 import {
   decideRunApproval,
   getResponseErrorMessage,
@@ -81,6 +82,15 @@ const STRATEGY_LABELS = {
   artifact_authoring_strategy:    "Artifact Creation",
 };
 
+const EXAMPLE_GOALS = [
+  "Prepare a short release summary for the latest operator run",
+  "Find what we stored about the database migration",
+  "Draft a status update from the most recent replay artifacts",
+  "Check whether anything is waiting for operator approval",
+];
+
+const RECENT_STEP_PREVIEW_COUNT = 4;
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function HCAChat({
@@ -92,6 +102,7 @@ export default function HCAChat({
   const [input, setInput]       = useState("");
   const [loading, setLoading]   = useState(false);
   const bottomRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -274,37 +285,43 @@ export default function HCAChat({
     }
   };
 
+  const handleExampleSelect = useCallback((goalText) => {
+    setInput(goalText);
+    inputRef.current?.focus();
+  }, []);
+
   return (
-    <div data-testid="hca-chat" style={S.container}>
-      {/* Header */}
-      <header style={S.header}>
-        <div style={S.headerLeft}>
+    <div data-testid="hca-chat" className="assist-surface">
+      <header className="assist-header">
+        <div className="assist-headerGroup" style={S.headerLeft}>
           <span style={S.pulse} />
-          <span style={S.headerTitle}>HCA</span>
-          <span style={S.headerSub}>Hybrid Cognitive Agent</span>
+          <div className="assist-headerCopy">
+            <span className="assist-headerTitle">Assist workspace</span>
+            <span className="assist-headerSub">
+              Start one goal, review the live summary, and pause only when an approval decision is needed.
+            </span>
+          </div>
         </div>
-        <div style={S.headerRight}>
-          <Chip>Claude Sonnet 4.5</Chip>
-          <Chip>Gemini Flash</Chip>
-          <Chip>MemVid</Chip>
+        <div className="assist-headerActions" style={S.headerRight}>
+          <Chip>Bounded approval</Chip>
+          <Chip>Replay-backed</Chip>
+          <Chip>Memory-aware</Chip>
           <button
+            className={`assist-memoryBtn${memPanelOpen ? " is-active" : ""}`}
             data-testid="memory-browser-btn"
             onClick={onToggleMemPanel}
-            style={{
-              ...S.memBtn,
-              background: memPanelOpen ? "#ede9fe" : "#f8fafc",
-              color:      memPanelOpen ? "#6d28d9" : "#64748b",
-              borderColor: memPanelOpen ? "#c4b5fd" : "#e2e8f0",
-            }}
+            style={S.memBtn}
+            type="button"
           >
-            Memory
+            Quick memory
           </button>
         </div>
       </header>
 
-      {/* Message feed */}
-      <div style={S.feed}>
-        {messages.length === 0 && <WelcomeBanner />}
+      <div className="assist-feed">
+        {messages.length === 0 && (
+          <WelcomeBanner onSelectExample={handleExampleSelect} />
+        )}
 
         {messages.map((msg) => {
           if (msg.type === "user") {
@@ -338,51 +355,89 @@ export default function HCAChat({
         <div ref={bottomRef} />
       </div>
 
-      {/* Input bar */}
-      <div style={S.inputBar}>
-        <textarea
-          data-testid="goal-input"
-          style={S.textarea}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Enter a goal for the agent…  (Enter to run)"
-          rows={1}
-          disabled={loading}
-        />
-        <button
-          data-testid="submit-goal-btn"
-          style={{ ...S.runBtn, opacity: loading || !input.trim() ? 0.4 : 1 }}
-          onClick={submitGoal}
-          disabled={loading || !input.trim()}
-        >
-          {loading ? "…" : "RUN"}
-        </button>
-      </div>
+      <section className="assist-composer">
+        <div className="assist-composerIntro">
+          <div className="assist-composerEyebrow">Goal composer</div>
+          <div className="assist-composerTitle">
+            Describe the outcome you want, not the tool steps.
+          </div>
+          <p className="assist-composerDescription">
+            Hysight will stream a live summary, keep only the latest signals in front,
+            and stop for approval before a side effect runs.
+          </p>
+        </div>
+
+        <div className="assist-exampleList" aria-label="Example goals">
+          {EXAMPLE_GOALS.map((example) => (
+            <button
+              key={example}
+              className="assist-exampleButton"
+              onClick={() => handleExampleSelect(example)}
+              type="button"
+            >
+              {example}
+            </button>
+          ))}
+        </div>
+
+        <div className="assist-composerRow">
+          <textarea
+            ref={inputRef}
+            className="assist-textarea"
+            data-testid="goal-input"
+            style={S.textarea}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Describe the result you want. The agent will show progress and pause if approval is needed."
+            rows={3}
+            disabled={loading}
+          />
+          <button
+            className="assist-runBtn"
+            data-testid="submit-goal-btn"
+            style={{ ...S.runBtn, opacity: loading || !input.trim() ? 0.55 : 1 }}
+            onClick={submitGoal}
+            disabled={loading || !input.trim()}
+            type="button"
+          >
+            {loading ? "Running..." : "Run goal"}
+          </button>
+        </div>
+
+        <div className="assist-composerHint">
+          Press Enter to submit. Use Shift+Enter when you want a multi-line goal.
+        </div>
+      </section>
     </div>
   );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function WelcomeBanner() {
-  const examples = [
-    "Remember that the API key expires on March 1st",
-    "Find what I said about the database migration",
-    "Write a brief project status summary",
-    "Hello, what can you do?",
-  ];
+function WelcomeBanner({ onSelectExample }) {
   return (
-    <div style={S.welcome}>
-      <div style={S.welcomeIcon}>◎</div>
-      <h1 style={S.welcomeTitle}>Cognitive Agent Console</h1>
-      <p style={S.welcomeSub}>
-        Give the agent a goal. It plans, reasons, and acts — every step of the pipeline visible in real time.
+    <div className="assist-welcome">
+      <div className="assist-welcomeIcon" style={S.welcomeIcon}>◎</div>
+      <div className="assist-welcomeEyebrow">Assist workspace</div>
+      <h1 className="assist-welcomeTitle">
+        Ask for an outcome and keep the decision points obvious.
+      </h1>
+      <p className="assist-welcomeSub">
+        The live run stays readable by default: recent signals first, approval state up front,
+        and the dense reasoning details available only when you need them.
       </p>
-      <p style={S.tryLabel}>Try one of these:</p>
-      <div style={S.chips}>
-        {examples.map((ex) => (
-          <code key={ex} style={S.exChip}>{ex}</code>
+      <p className="assist-tryLabel">Try one of these goals</p>
+      <div className="assist-exampleList assist-exampleList--welcome">
+        {EXAMPLE_GOALS.map((example) => (
+          <button
+            key={example}
+            className="assist-exampleButton assist-exampleButton--welcome"
+            onClick={() => onSelectExample(example)}
+            type="button"
+          >
+            {example}
+          </button>
         ))}
       </div>
     </div>
@@ -390,31 +445,64 @@ function WelcomeBanner() {
 }
 
 function Chip({ children }) {
-  return <span style={S.chip}>{children}</span>;
+  return <span className="assist-chip">{children}</span>;
 }
 
 function UserBubble({ goal }) {
   return (
-    <div data-testid="user-bubble" style={S.userRow}>
-      <div style={S.userBubble}>{goal}</div>
+    <div data-testid="user-bubble" className="assist-userRow">
+      <div className="assist-userBubble">{goal}</div>
     </div>
   );
 }
 
 function StreamingCard({ steps }) {
+  const [traceOpen, setTraceOpen] = useState(false);
+  const latestStep = steps[steps.length - 1] || null;
+  const visibleSteps = traceOpen
+    ? steps
+    : steps.slice(-RECENT_STEP_PREVIEW_COUNT);
+
   return (
-    <div data-testid="streaming-card" style={S.agentRow}>
-      <div style={S.streamCard}>
-        <div style={S.streamHeader}>
-          <span style={S.spinner} />
-          <span style={S.streamTitle}>Agent is thinking…</span>
+    <div data-testid="streaming-card" className="assist-agentRow">
+      <div className="assist-liveCard" style={S.streamCard}>
+        <div className="assist-liveHeader" style={S.streamHeader}>
+          <div className="assist-liveHeaderTitle">
+            <span style={S.spinner} />
+            <div>
+              <div className="assist-cardEyebrow">Live run</div>
+              <span className="assist-liveTitle">The agent is working through the request.</span>
+            </div>
+          </div>
+          <div className="assist-liveStatus">
+            {latestStep ? formatSnakeLabel(latestStep.event_type) : "Starting"}
+          </div>
         </div>
-        {steps.length > 0 && (
-          <div style={S.traceList}>
-            {steps.map((step, i) => (
+        <div className="assist-liveSummary">
+          <p className="assist-liveSummaryText">{summarizeStreamingState(steps)}</p>
+          {latestStep && (
+            <div className="assist-liveSummaryMeta">
+              Latest signal: {latestStep.label}
+            </div>
+          )}
+        </div>
+
+        {visibleSteps.length > 0 && (
+          <div className="assist-tracePreview" style={S.traceList}>
+            {visibleSteps.map((step, i) => (
               <TraceStep key={i} step={step} index={i} />
             ))}
           </div>
+        )}
+
+        {steps.length > RECENT_STEP_PREVIEW_COUNT && (
+          <button
+            className="assist-disclosureButton assist-disclosureButton--ghost"
+            onClick={() => setTraceOpen((currentValue) => !currentValue)}
+            type="button"
+          >
+            {traceOpen ? "Show fewer signals" : `Show full trace (${steps.length})`}
+          </button>
         )}
       </div>
     </div>
@@ -457,6 +545,8 @@ function AgentCard({
 }) {
   const [traceOpen, setTraceOpen] = useState(false);
   const [memOpen,   setMemOpen]   = useState(false);
+  const [reasoningOpen, setReasoningOpen] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
 
   const state = data?.state || "completed";
   const stateMeta = STATE_META[state] || {
@@ -492,311 +582,91 @@ function AgentCard({
     hasValue(data?.approval) ||
     hasValue(data?.last_approval_decision);
   const buttonsDisabled = Boolean(pendingAction);
+  const approvalTokens = approvalBindingTokens(binding);
+  const summaryFacts = [
+    {
+      label: "Strategy",
+      value: STRATEGY_LABELS[plan.strategy] || plan.strategy,
+    },
+    {
+      label: "Action",
+      value: actionTaken.kind || plan.action,
+      mono: true,
+    },
+    {
+      label: "Approval",
+      value: formatApprovalStatus(data),
+    },
+    {
+      label: "Workflow",
+      value: workflow.workflow_class || formatWorkflowOutcome(workflowOutcome),
+    },
+    {
+      label: "Context",
+      value:
+        memoryHits.length > 0
+          ? `${memoryHits.length} memory hit${memoryHits.length === 1 ? "" : "s"}`
+          : plan.memory_context_used
+            ? "Retrieved context"
+            : "No stored context",
+    },
+    {
+      label: "Confidence",
+      value: typeof plan.confidence === "number" ? formatScore(plan.confidence) : null,
+    },
+  ].filter((fact) => hasValue(fact.value));
 
   return (
-    <div data-testid="agent-card" style={S.agentRow}>
-      <div style={S.agentCard}>
-        {/* State badge bar */}
-        <div style={{ ...S.stateBar, background: stateMeta.bg, borderBottom: `1px solid ${stateMeta.border}` }}>
+    <div data-testid="agent-card" className="assist-agentRow">
+      <div className="assist-resultCard" style={S.agentCard}>
+        <div
+          className="assist-statusBar"
+          style={{ ...S.stateBar, background: stateMeta.bg, borderBottom: `1px solid ${stateMeta.border}` }}
+        >
           <span style={{ ...S.stateBadge, color: stateMeta.color }}>
             {stateMeta.label}
           </span>
           {plan.strategy && (
-            <span style={S.strategyLabel}>
+            <span className="assist-statusMeta" style={S.strategyLabel}>
               {STRATEGY_LABELS[plan.strategy] || plan.strategy}
             </span>
           )}
         </div>
 
-        <div style={S.cardBody}>
-          {/* Plan section */}
-          {plan.strategy && (
-            <Section label="PLAN">
-              <DataRow
-                label="Strategy"
-                value={STRATEGY_LABELS[plan.strategy] || plan.strategy}
-              />
-              <DataRow label="Action" value={plan.action || "—"} mono />
-              {plan.planning_mode && (
-                <DataRow label="Mode" value={plan.planning_mode} />
-              )}
-              <DataRow
-                label="Confidence"
-                value={formatScore(plan.confidence)}
-              />
-              {plan.rationale && <DataRow label="Rationale" value={plan.rationale} />}
-              {plan.fallback_reason && (
-                <DataRow label="Fallback" value={plan.fallback_reason} />
-              )}
-              {plan.memory_retrieval_status && (
-                <DataRow
-                  label="Memory"
-                  value={plan.memory_retrieval_status}
-                  accent
+        <div className="assist-cardBody" style={S.cardBody}>
+          <section className="assist-summaryPanel">
+            <div className="assist-cardEyebrow">Run summary</div>
+            <h3 className="assist-summaryTitle">
+              {summarizeRunHeadline(data, actionTaken, plan)}
+            </h3>
+            <p className="assist-summaryText">
+              {summarizeRunDescription(data, actionTaken, request, critique, result, workflowOutcome)}
+            </p>
+            <div className="assist-summaryGrid">
+              {summaryFacts.map((fact) => (
+                <SummaryFact
+                  key={fact.label}
+                  label={fact.label}
+                  mono={fact.mono}
+                  value={fact.value}
                 />
-              )}
-              {plan.memory_retrieval_error && (
-                <DataRow
-                  label="Memory error"
-                  value={plan.memory_retrieval_error}
-                  color="#dc2626"
-                />
-              )}
-              {plan.memory_context_used && (
-                <DataRow label="Context" value="Retrieved from MemVid memory store" accent />
-              )}
-            </Section>
-          )}
+              ))}
+            </div>
+          </section>
 
-          {actionTaken.kind && (
-            <Section label={isAwaiting ? "ACTION READY" : "ACTION"}>
-              <DataRow label="Selected" value={actionTaken.kind} mono />
-              <DataRow
-                label="Approval"
-                value={formatBoolean(actionTaken.requires_approval)}
-              />
-              {hasValue(data?.approval_id) && (
-                <DataRow label="Approval ID" value={data.approval_id} mono />
-              )}
-              {hasValue(actionArgs) && (
-                <div style={S.jsonBlock}>
-                  <span style={S.dataLabelBlock}>Arguments</span>
-                  <pre style={S.jsonPreview}>
-                    {formatObjectPreview(actionArgs)}
-                  </pre>
-                </div>
-              )}
-            </Section>
-          )}
-
-          {hasApprovalContext && (
-            <Section label={isAwaiting ? "APPROVAL CONTEXT" : "APPROVAL"}>
-              <DataRow
-                label="Status"
-                value={formatApprovalStatus(data)}
-              />
-              {request?.reason && (
-                <DataRow label="Reason" value={request.reason} />
-              )}
-              {(request?.action_kind || actionTaken.kind) && (
-                <DataRow
-                  label="Requested action"
-                  value={request?.action_kind || actionTaken.kind}
-                  mono
-                />
-              )}
-              {(request?.action_class || binding?.action_class) && (
-                <DataRow
-                  label="Action class"
-                  value={request?.action_class || binding?.action_class}
-                />
-              )}
-              {request?.requested_at && (
-                <DataRow
-                  label="Requested at"
-                  value={formatDateTime(request.requested_at)}
-                />
-              )}
-              {(decision?.decision || data?.last_approval_decision) && (
-                <DataRow
-                  label="Decision"
-                  value={decision?.decision || data?.last_approval_decision}
-                />
-              )}
-              {decision?.reason && (
-                <DataRow label="Decision reason" value={decision.reason} />
-              )}
-              {grant?.granted_at && (
-                <DataRow
-                  label="Granted at"
-                  value={formatDateTime(grant.granted_at)}
-                />
-              )}
-              {consumption?.consumed_at && (
-                <DataRow
-                  label="Consumed at"
-                  value={formatDateTime(consumption.consumed_at)}
-                />
-              )}
-              {binding?.tool_name && (
-                <DataRow label="Bound tool" value={binding.tool_name} mono />
-              )}
-              {binding?.target && (
-                <DataRow label="Bound target" value={binding.target} mono />
-              )}
-              {binding?.policy_fingerprint && (
-                <DataRow
-                  label="Policy fingerprint"
-                  value={binding.policy_fingerprint}
-                  mono
-                />
-              )}
-              {binding?.action_fingerprint && (
-                <DataRow
-                  label="Action fingerprint"
-                  value={binding.action_fingerprint}
-                  mono
-                />
-              )}
-              {hasValue(binding?.policy_snapshot) && (
-                <div style={S.jsonBlock}>
-                  <span style={S.dataLabelBlock}>Policy snapshot</span>
-                  <pre style={S.jsonPreview}>
-                    {formatObjectPreview(binding.policy_snapshot)}
-                  </pre>
-                </div>
-              )}
-            </Section>
-          )}
-
-          {hasValue(perception.intent_class) && (
-            <Section label="PERCEPTION">
-              <DataRow label="Intent class" value={perception.intent_class} />
-              {perception.intent && (
-                <DataRow label="Intent" value={perception.intent} />
-              )}
-              {perception.perception_mode && (
-                <DataRow label="Mode" value={perception.perception_mode} />
-              )}
-              <DataRow
-                label="LLM attempted"
-                value={formatBoolean(perception.llm_attempted)}
-              />
-              {perception.fallback_reason && (
-                <DataRow
-                  label="Fallback"
-                  value={perception.fallback_reason}
-                />
-              )}
-            </Section>
-          )}
-
-          {(hasValue(critique.verdict) ||
-            (Array.isArray(critique.issues) && critique.issues.length > 0)) && (
-            <Section label="CRITIQUE">
-              {critique.verdict && (
-                <DataRow label="Verdict" value={critique.verdict} />
-              )}
-              <DataRow
-                label="Alignment"
-                value={formatScore(critique.alignment)}
-              />
-              <DataRow
-                label="Feasibility"
-                value={formatScore(critique.feasibility)}
-              />
-              <DataRow label="Safety" value={formatScore(critique.safety)} />
-              <DataRow
-                label="Confidence Δ"
-                value={formatSignedNumber(critique.confidence_delta)}
-              />
-              <DataRow
-                label="LLM powered"
-                value={formatBoolean(critique.llm_powered)}
-              />
-              {critique.fallback_reason && (
-                <DataRow
-                  label="Fallback"
-                  value={critique.fallback_reason}
-                />
-              )}
-              {critique.rationale && (
-                <DataRow label="Rationale" value={critique.rationale} />
-              )}
-              {Array.isArray(critique.issues) && critique.issues.length > 0 && (
-                <div style={S.issueBlock}>
-                  <span style={S.dataLabelBlock}>Issues</span>
-                  <ul style={S.issueList}>
-                    {critique.issues.map((issue) => (
-                      <li key={issue} style={S.issueItem}>
-                        {issue}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Section>
-          )}
-
-          {(hasValue(workflow.workflow_class) ||
-            hasValue(workflowOutcome.reason) ||
-            workflowSteps.length > 0) && (
-            <Section label="WORKFLOW">
-              {workflow.workflow_class && (
-                <DataRow label="Class" value={workflow.workflow_class} />
-              )}
-              {workflow.strategy && (
-                <DataRow label="Strategy" value={workflow.strategy} />
-              )}
-              <DataRow
-                label="Budget"
-                value={formatWorkflowBudget(workflowBudget)}
-              />
-              <DataRow
-                label="Checkpoint"
-                value={formatWorkflowCheckpoint(workflowCheckpoint)}
-                mono
-              />
-              <DataRow
-                label="Outcome"
-                value={formatWorkflowOutcome(workflowOutcome)}
-              />
-              {workflowSteps.length > 0 && (
-                <div style={S.workflowStepBlock}>
-                  <span style={S.dataLabelBlock}>Recent steps</span>
-                  <div style={S.workflowStepList}>
-                    {workflowSteps.slice(-3).map((step, index) => (
-                      <div
-                        key={step.step_id || step.action_id || `${index}`}
-                        style={S.workflowStepItem}
-                      >
-                        <span style={S.workflowStepName}>
-                          {step.step_key || step.tool_name || `step ${index + 1}`}
-                        </span>
-                        <span style={S.workflowStepMeta}>
-                          {step.status || step.receipt_id || "—"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Section>
-          )}
-
-          {/* Execution result */}
-          {result.status && (
-            <Section label="RESULT">
-              <DataRow
-                label="Status"
-                value={result.status}
-                color={result.status === "success" ? "#059669" : "#dc2626"}
-              />
-              {result.outputs && (
-                <div style={S.dataRow}>
-                  <span style={S.dataLabel}>Output</span>
-                  <MarkdownOutput text={_renderOutput(result.outputs)} />
-                </div>
-              )}
-              {result.error && <DataRow label="Error" value={result.error} color="#dc2626" />}
-              {result.artifacts?.length > 0 && (
-                <DataRow label="Artifacts" value={result.artifacts.join(", ")} mono />
-              )}
-            </Section>
-          )}
-
-          {/* Approval gate */}
           {isAwaiting && (
-            <Section label="APPROVAL REQUIRED">
-              <p style={S.approvalNote}>
-                The agent wants to run{" "}
-                <strong style={{ color: "#d97706" }}>{actionTaken.kind}</strong>
-                {workflow.workflow_class
-                  ? ` in ${workflow.workflow_class}`
-                  : ""}
-                .
-                This action needs your sign-off before it executes.
+            <section className="assist-approvalCard">
+              <div className="assist-cardEyebrow">Approval required</div>
+              <h4 className="assist-approvalTitle">
+                {(request?.action_kind || actionTaken.kind || plan.action || "Action")} is waiting for your decision.
+              </h4>
+              <p className="assist-approvalText" style={S.approvalNote}>
+                {request?.reason ||
+                  `Review the selected action before ${actionTaken.kind || plan.action || "it"} executes.`}
               </p>
+
+              {approvalTokens.length > 0 && <TokenList values={approvalTokens} />}
+
               {hasValue(actionArgs) && (
                 <div style={S.jsonBlock}>
                   <span style={S.dataLabelBlock}>Pending arguments</span>
@@ -805,40 +675,304 @@ function AgentCard({
                   </pre>
                 </div>
               )}
-              <div style={S.approvalBtns}>
+
+              <div className="assist-approvalActions" style={S.approvalBtns}>
                 <button
+                  className="assist-approveBtn"
                   data-testid="approve-btn"
                   style={{
                     ...S.approveBtn,
                     opacity: buttonsDisabled ? 0.6 : 1,
                     cursor: buttonsDisabled ? "not-allowed" : "pointer",
                   }}
+                  type="button"
                   onClick={() => onApprove(data.run_id, data.approval_id, id)}
                   disabled={buttonsDisabled}
                 >
                   {pendingAction === "approve" ? "Approving..." : "Approve"}
                 </button>
                 <button
+                  className="assist-denyBtn"
                   data-testid="deny-btn"
                   style={{
                     ...S.denyBtn,
                     opacity: buttonsDisabled ? 0.6 : 1,
                     cursor: buttonsDisabled ? "not-allowed" : "pointer",
                   }}
+                  type="button"
                   onClick={() => onDeny(data.run_id, data.approval_id, id)}
                   disabled={buttonsDisabled}
                 >
                   {pendingAction === "deny" ? "Denying..." : "Deny"}
                 </button>
               </div>
-              {actionError && <div style={S.approvalError}>{actionError}</div>}
-            </Section>
+
+              {actionError && <div className="assist-inlineError" style={S.approvalError}>{actionError}</div>}
+            </section>
           )}
 
-          {/* Memory hits */}
+          {result.status && !isAwaiting && (
+            <section
+              className={`assist-outcomeCard${result.status === "success" ? " assist-outcomeCard--success" : " assist-outcomeCard--danger"}`}
+            >
+              <div className="assist-cardEyebrow">Outcome</div>
+              <h4 className="assist-outcomeTitle">
+                {result.status === "success"
+                  ? "The run completed and returned a result."
+                  : "The run finished with an error state."}
+              </h4>
+
+              {result.outputs && (
+                <div style={S.dataRow}>
+                  <span style={S.dataLabel}>Output</span>
+                  <MarkdownOutput text={_renderOutput(result.outputs)} />
+                </div>
+              )}
+
+              {result.error && (
+                <div className="assist-inlineError">{result.error}</div>
+              )}
+
+              {result.artifacts?.length > 0 && (
+                <div className="assist-outcomeMeta">
+                  Artifacts: {result.artifacts.join(", ")}
+                </div>
+              )}
+            </section>
+          )}
+
+          {(plan.strategy ||
+            hasValue(perception.intent_class) ||
+            hasValue(critique.verdict) ||
+            hasValue(workflow.workflow_class) ||
+            workflowSteps.length > 0) && (
+            <Collapsible
+              label="Reasoning details"
+              meta="Plan, perception, critique, and workflow"
+              open={reasoningOpen}
+              toggle={() => setReasoningOpen((value) => !value)}
+            >
+              {plan.strategy && (
+                <Section label="PLAN">
+                  <DataRow
+                    label="Strategy"
+                    value={STRATEGY_LABELS[plan.strategy] || plan.strategy}
+                  />
+                  <DataRow label="Action" value={plan.action || "—"} mono />
+                  {plan.planning_mode && (
+                    <DataRow label="Mode" value={plan.planning_mode} />
+                  )}
+                  <DataRow
+                    label="Confidence"
+                    value={formatScore(plan.confidence)}
+                  />
+                  {plan.rationale && <DataRow label="Rationale" value={plan.rationale} />}
+                  {plan.fallback_reason && (
+                    <DataRow label="Fallback" value={plan.fallback_reason} />
+                  )}
+                  {plan.memory_retrieval_status && (
+                    <DataRow
+                      label="Memory"
+                      value={plan.memory_retrieval_status}
+                      accent
+                    />
+                  )}
+                  {plan.memory_retrieval_error && (
+                    <DataRow
+                      label="Memory error"
+                      value={plan.memory_retrieval_error}
+                      color="#dc2626"
+                    />
+                  )}
+                  {plan.memory_context_used && (
+                    <DataRow label="Context" value="Retrieved from retained memory" accent />
+                  )}
+                </Section>
+              )}
+
+              {hasValue(perception.intent_class) && (
+                <Section label="PERCEPTION">
+                  <DataRow label="Intent class" value={perception.intent_class} />
+                  {perception.intent && (
+                    <DataRow label="Intent" value={perception.intent} />
+                  )}
+                  {perception.perception_mode && (
+                    <DataRow label="Mode" value={perception.perception_mode} />
+                  )}
+                  <DataRow
+                    label="LLM attempted"
+                    value={formatBoolean(perception.llm_attempted)}
+                  />
+                  {perception.fallback_reason && (
+                    <DataRow label="Fallback" value={perception.fallback_reason} />
+                  )}
+                </Section>
+              )}
+
+              {(hasValue(critique.verdict) ||
+                (Array.isArray(critique.issues) && critique.issues.length > 0)) && (
+                <Section label="CRITIQUE">
+                  {critique.verdict && (
+                    <DataRow label="Verdict" value={critique.verdict} />
+                  )}
+                  <DataRow
+                    label="Alignment"
+                    value={formatScore(critique.alignment)}
+                  />
+                  <DataRow
+                    label="Feasibility"
+                    value={formatScore(critique.feasibility)}
+                  />
+                  <DataRow label="Safety" value={formatScore(critique.safety)} />
+                  <DataRow
+                    label="Confidence delta"
+                    value={formatSignedNumber(critique.confidence_delta)}
+                  />
+                  <DataRow
+                    label="LLM powered"
+                    value={formatBoolean(critique.llm_powered)}
+                  />
+                  {critique.fallback_reason && (
+                    <DataRow label="Fallback" value={critique.fallback_reason} />
+                  )}
+                  {critique.rationale && (
+                    <DataRow label="Rationale" value={critique.rationale} />
+                  )}
+                  {Array.isArray(critique.issues) && critique.issues.length > 0 && (
+                    <div style={S.issueBlock}>
+                      <span style={S.dataLabelBlock}>Issues</span>
+                      <ul style={S.issueList}>
+                        {critique.issues.map((issue) => (
+                          <li key={issue} style={S.issueItem}>
+                            {issue}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </Section>
+              )}
+
+              {(hasValue(workflow.workflow_class) ||
+                hasValue(workflowOutcome.reason) ||
+                workflowSteps.length > 0) && (
+                <Section label="WORKFLOW">
+                  {workflow.workflow_class && (
+                    <DataRow label="Class" value={workflow.workflow_class} />
+                  )}
+                  {workflow.strategy && (
+                    <DataRow label="Strategy" value={workflow.strategy} />
+                  )}
+                  <DataRow
+                    label="Budget"
+                    value={formatWorkflowBudget(workflowBudget)}
+                  />
+                  <DataRow
+                    label="Checkpoint"
+                    value={formatWorkflowCheckpoint(workflowCheckpoint)}
+                    mono
+                  />
+                  <DataRow
+                    label="Outcome"
+                    value={formatWorkflowOutcome(workflowOutcome)}
+                  />
+                  {workflowSteps.length > 0 && (
+                    <div style={S.workflowStepBlock}>
+                      <span style={S.dataLabelBlock}>Recent steps</span>
+                      <div style={S.workflowStepList}>
+                        {workflowSteps.slice(-3).map((step, index) => (
+                          <div
+                            key={step.step_id || step.action_id || `${index}`}
+                            style={S.workflowStepItem}
+                          >
+                            <span style={S.workflowStepName}>
+                              {step.step_key || step.tool_name || `step ${index + 1}`}
+                            </span>
+                            <span style={S.workflowStepMeta}>
+                              {step.status || step.receipt_id || "—"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Section>
+              )}
+            </Collapsible>
+          )}
+
+          {hasApprovalContext && !isAwaiting && (
+            <Collapsible
+              label="Approval details"
+              meta="Binding, timestamps, and policy context"
+              open={approvalOpen}
+              toggle={() => setApprovalOpen((value) => !value)}
+            >
+              <Section label="APPROVAL">
+                <DataRow label="Status" value={formatApprovalStatus(data)} />
+                {request?.reason && <DataRow label="Reason" value={request.reason} />}
+                {(request?.action_kind || actionTaken.kind) && (
+                  <DataRow
+                    label="Requested action"
+                    value={request?.action_kind || actionTaken.kind}
+                    mono
+                  />
+                )}
+                {(request?.action_class || binding?.action_class) && (
+                  <DataRow
+                    label="Action class"
+                    value={request?.action_class || binding?.action_class}
+                  />
+                )}
+                {request?.requested_at && (
+                  <DataRow
+                    label="Requested at"
+                    value={formatDateTime(request.requested_at)}
+                  />
+                )}
+                {(decision?.decision || data?.last_approval_decision) && (
+                  <DataRow
+                    label="Decision"
+                    value={decision?.decision || data?.last_approval_decision}
+                  />
+                )}
+                {decision?.reason && (
+                  <DataRow label="Decision reason" value={decision.reason} />
+                )}
+                {grant?.granted_at && (
+                  <DataRow label="Granted at" value={formatDateTime(grant.granted_at)} />
+                )}
+                {consumption?.consumed_at && (
+                  <DataRow label="Consumed at" value={formatDateTime(consumption.consumed_at)} />
+                )}
+                {binding?.tool_name && (
+                  <DataRow label="Bound tool" value={binding.tool_name} mono />
+                )}
+                {binding?.target && (
+                  <DataRow label="Bound target" value={binding.target} mono />
+                )}
+                {binding?.policy_fingerprint && (
+                  <DataRow label="Policy fingerprint" value={binding.policy_fingerprint} mono />
+                )}
+                {binding?.action_fingerprint && (
+                  <DataRow label="Action fingerprint" value={binding.action_fingerprint} mono />
+                )}
+                {hasValue(binding?.policy_snapshot) && (
+                  <div style={S.jsonBlock}>
+                    <span style={S.dataLabelBlock}>Policy snapshot</span>
+                    <pre style={S.jsonPreview}>
+                      {formatObjectPreview(binding.policy_snapshot)}
+                    </pre>
+                  </div>
+                )}
+              </Section>
+            </Collapsible>
+          )}
+
           {memoryHits.length > 0 && (
             <Collapsible
-              label={`MEMORY CONTEXT  (${memoryHits.length} hit${memoryHits.length > 1 ? "s" : ""})`}
+              label="Memory context"
+              meta={`${memoryHits.length} hit${memoryHits.length > 1 ? "s" : ""}`}
               open={memOpen}
               toggle={() => setMemOpen((v) => !v)}
             >
@@ -864,7 +998,8 @@ function AgentCard({
           {/* Pipeline trace (completed) */}
           {steps.length > 0 && (
             <Collapsible
-              label={`PIPELINE TRACE  (${steps.length} step${steps.length > 1 ? "s" : ""})`}
+              label="Full pipeline trace"
+              meta={`${steps.length} signal${steps.length === 1 ? "" : "s"}`}
               open={traceOpen}
               toggle={() => setTraceOpen((v) => !v)}
             >
@@ -876,7 +1011,7 @@ function AgentCard({
             </Collapsible>
           )}
 
-          <div style={S.runIdLine}>
+          <div className="assist-runId" style={S.runIdLine}>
             run_id: <span style={S.runIdVal}>{data?.run_id}</span>
           </div>
         </div>
@@ -887,8 +1022,8 @@ function AgentCard({
 
 function ErrorCard({ message }) {
   return (
-    <div data-testid="error-bubble" style={S.agentRow}>
-      <div style={S.errorCard}>{message}</div>
+    <div data-testid="error-bubble" className="assist-agentRow">
+      <div className="assist-errorCard" style={S.errorCard}>{message}</div>
     </div>
   );
 }
@@ -920,14 +1055,40 @@ function DataRow({ label, value, mono, color, accent }) {
   );
 }
 
-function Collapsible({ label, open, toggle, children }) {
+function SummaryFact({ label, value, mono = false }) {
   return (
-    <div style={S.section}>
-      <button style={S.collapsibleBtn} onClick={toggle}>
-        <span style={S.sectionLabel}>{label}</span>
-        <span style={{ color: "#94a3b8", fontSize: 11 }}>{open ? "▲" : "▼"}</span>
+    <div className="assist-summaryFact">
+      <div className="assist-summaryFactLabel">{label}</div>
+      <div className={`assist-summaryFactValue${mono ? " is-mono" : ""}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function TokenList({ values }) {
+  return (
+    <div className="assist-tokenList">
+      {values.map((value) => (
+        <span key={value} className="assist-token">
+          {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function Collapsible({ label, meta, open, toggle, children }) {
+  return (
+    <div className="assist-collapsible" style={S.section}>
+      <button className="assist-collapsibleBtn" onClick={toggle} type="button">
+        <div>
+          <span className="assist-collapsibleLabel">{label}</span>
+          {meta ? <span className="assist-collapsibleMeta">{meta}</span> : null}
+        </div>
+        <span className="assist-collapsibleIcon">{open ? "Hide" : "Show"}</span>
       </button>
-      {open && <div style={{ marginTop: 8 }}>{children}</div>}
+      {open && <div className="assist-collapsibleBody">{children}</div>}
     </div>
   );
 }
@@ -1116,6 +1277,100 @@ function formatObjectPreview(value) {
       : serialized;
   } catch {
     return "{}";
+  }
+}
+
+function formatSnakeLabel(value) {
+  if (!value) return "—";
+
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function approvalBindingTokens(binding) {
+  if (!binding || typeof binding !== "object") {
+    return [];
+  }
+
+  return [
+    binding.tool_name ? `tool ${binding.tool_name}` : null,
+    binding.target ? `target ${binding.target}` : null,
+    binding.policy_fingerprint ? `policy ${binding.policy_fingerprint}` : null,
+    binding.action_fingerprint ? `action ${binding.action_fingerprint}` : null,
+  ].filter(Boolean);
+}
+
+function summarizeStreamingState(steps) {
+  if (!steps.length) {
+    return "Waiting for the first live signal from the run.";
+  }
+
+  const latestStep = steps[steps.length - 1];
+
+  switch (latestStep.event_type) {
+    case "approval_requested":
+      return "The run has enough context to pause for approval.";
+    case "execution_started":
+      return "The approved action is now executing.";
+    case "execution_finished":
+      return "Execution finished and the result is being recorded.";
+    case "run_completed":
+      return "The run completed and the summary is ready below.";
+    case "run_failed":
+      return "The run reported a failure. Review the summary card for details.";
+    default:
+      return latestStep.label || `${steps.length} live signal${steps.length === 1 ? "" : "s"} received.`;
+  }
+}
+
+function summarizeRunHeadline(data, actionTaken, plan) {
+  const actionLabel = actionTaken.kind || plan.action || "The selected action";
+
+  switch (data?.state) {
+    case "awaiting_approval":
+      return `${actionLabel} is ready for operator approval.`;
+    case "completed":
+      return "The run completed and returned a result.";
+    case "failed":
+      return "The run failed before it could finish.";
+    case "halted":
+      return "The run was halted before execution completed.";
+    default:
+      return `${actionLabel} is progressing through the workflow.`;
+  }
+}
+
+function summarizeRunDescription(data, actionTaken, request, critique, result, workflowOutcome) {
+  const actionLabel = actionTaken.kind || data?.plan?.action || "action";
+
+  switch (data?.state) {
+    case "awaiting_approval":
+      return (
+        request?.reason ||
+        `${actionLabel} is staged and waiting for a human approval decision before it executes.`
+      );
+    case "completed":
+      return (
+        workflowOutcome?.reason ||
+        result?.status ||
+        `${actionLabel} completed successfully and replay data is available.`
+      );
+    case "failed":
+      return (
+        result?.error ||
+        workflowOutcome?.reason ||
+        critique?.issues?.[0] ||
+        `${actionLabel} did not complete. Review the reasoning and trace details.`
+      );
+    case "halted":
+      return (
+        workflowOutcome?.reason ||
+        critique?.issues?.[0] ||
+        `${actionLabel} stopped before completion.`
+      );
+    default:
+      return `${actionLabel} is still in progress. The latest live signals are shown above.`;
   }
 }
 

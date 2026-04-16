@@ -168,20 +168,27 @@ test("renders the rich operator summary after a streamed run completes", async (
     />
   );
 
+  expect(screen.getAllByText("Assist workspace").length).toBeGreaterThan(0);
+  expect(screen.getByText("Goal composer")).toBeInTheDocument();
+
   await user.type(screen.getByTestId("goal-input"), "Prepare release summary");
-  await user.click(screen.getByRole("button", { name: "RUN" }));
+  await user.click(screen.getByRole("button", { name: "Run goal" }));
 
   expect(await screen.findByText("AWAITING APPROVAL")).toBeInTheDocument();
+  expect(screen.getByText("Run summary")).toBeInTheDocument();
+  expect(screen.getByText("Approval required")).toBeInTheDocument();
+  expect(
+    screen.getAllByText("Operator review is required before writing release artifacts.").length
+  ).toBeGreaterThan(0);
+  expect(screen.getByText("policy policy-release-artifact")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Deny" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /Reasoning details/i }));
+
   expect(screen.getByText("PERCEPTION")).toBeInTheDocument();
   expect(screen.getByText("CRITIQUE")).toBeInTheDocument();
   expect(screen.getByText("WORKFLOW")).toBeInTheDocument();
-  expect(screen.getByText("APPROVAL CONTEXT")).toBeInTheDocument();
-  expect(
-    screen.getByText("Operator review is required before writing release artifacts.")
-  ).toBeInTheDocument();
-  expect(screen.getByText("policy-release-artifact")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Deny" })).toBeInTheDocument();
 
   await waitFor(() => {
     expect(onRunObserved).toHaveBeenCalledWith("run-approval");

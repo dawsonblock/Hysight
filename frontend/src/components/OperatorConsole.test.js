@@ -478,11 +478,16 @@ test("renders replay-backed overview fields and filters the run list", async () 
   expect(await screen.findByText("Focused run")).toBeInTheDocument();
   expect(screen.getByText("Needs sign-off")).toBeInTheDocument();
   expect(await screen.findByText("Replay digest")).toBeInTheDocument();
+  expect(await screen.findByText("What happened")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Reasoning and workflow/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Supporting evidence/i })).toBeInTheDocument();
+  expect(screen.getByText("Needs approval follow-up")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /Reasoning and workflow/i }));
+
   expect(await screen.findByText("Planning")).toBeInTheDocument();
   expect(screen.getByText("Perception")).toBeInTheDocument();
   expect(screen.getAllByText("Critique").length).toBeGreaterThan(0);
-  expect(screen.getByText("Workflow steps")).toBeInTheDocument();
-  expect(screen.getByText("Needs approval follow-up")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Completed" }));
 
@@ -491,6 +496,8 @@ test("renders replay-backed overview fields and filters the run list", async () 
 });
 
 test("renders subsystem health and approval context for pending runs", async () => {
+  const user = userEvent.setup();
+
   renderConsole({ selectedRunId: "run-awaiting" });
 
   expect(await screen.findByText("Subsystem health")).toBeInTheDocument();
@@ -498,6 +505,9 @@ test("renders subsystem health and approval context for pending runs", async () 
   expect(
     (await screen.findAllByText("Write access is gated for operator review.")).length
   ).toBeGreaterThan(0);
+
+  await user.click(screen.getByRole("button", { name: /Approval details/i }));
+
   expect(await screen.findByText("Approval policy snapshot")).toBeInTheDocument();
 
   await waitFor(() => {

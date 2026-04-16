@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./OperatorConsole.css";
 import {
   decideRunApproval,
   getRunArtifactDetail,
@@ -407,16 +408,17 @@ export default function OperatorConsole({
   };
 
   return (
-    <aside style={S.root}>
-      <div style={S.header}>
+    <aside className="runs-console">
+      <div className="runs-consoleHeader">
         <div>
-          <div style={S.eyebrow}>Operator</div>
-          <div style={S.title}>Replay Console</div>
+          <div style={S.eyebrow}>Runs</div>
+          <div style={S.title}>Runs workspace</div>
           <div style={S.subtitle}>
-            Recent runs, bounded event history, and stored artifacts.
+            Replay-backed answers, approvals, and stored evidence.
           </div>
         </div>
         <button
+          className="runs-consoleAction"
           onClick={() => {
             if (hasRunFilters) {
               clearRunFilters();
@@ -492,7 +494,7 @@ export default function OperatorConsole({
         onDeny={() => handleApprovalDecision("deny")}
       />
 
-      <div style={S.searchRow}>
+      <div className="runs-consoleSearch">
         <input
           value={runQuery}
           onChange={(event) => {
@@ -505,19 +507,19 @@ export default function OperatorConsole({
         />
         {runQuery && (
           <button
+            className="runs-consoleAction runs-consoleAction--secondary"
             type="button"
             onClick={() => {
               setRunQuery("");
               setRunPage(0);
             }}
-            style={S.searchClearBtn}
           >
             Clear
           </button>
         )}
       </div>
 
-      <div style={S.runListHeader}>
+      <div className="runs-consoleSectionHeader" style={S.runListHeader}>
         <span style={S.sectionLabel}>Runs</span>
         <span style={S.sectionCount}>
           {filteredRuns.length} shown
@@ -525,7 +527,7 @@ export default function OperatorConsole({
         </span>
       </div>
 
-      <div style={S.filterStack}>
+      <div className="runs-consoleFilters">
         <div style={S.filterChipRow}>
           {RUN_STATE_FILTERS.map((filter) => (
             <button
@@ -583,13 +585,13 @@ export default function OperatorConsole({
         )}
 
         {selectedRunHidden && (
-          <div style={S.noticeBar}>
+          <div className="runs-consoleNotice" style={S.noticeBar}>
             The current selection is outside the active run filters.
           </div>
         )}
       </div>
 
-      <div style={S.runList}>
+      <div className="runs-consoleList">
         {runsLoading && <PanelMessage text="Loading runs…" />}
         {!runsLoading && runsError && <PanelMessage text={runsError} tone="error" />}
         {!runsLoading && !runsError && filteredRuns.length === 0 && (
@@ -606,7 +608,7 @@ export default function OperatorConsole({
       </div>
 
       {filteredRuns.length > RUN_PAGE_SIZE && (
-        <div style={S.pagination}>
+        <div className="runs-consolePagination" style={S.pagination}>
           <button
             type="button"
             style={{ ...S.pageBtn, opacity: runPage === 0 ? 0.4 : 1 }}
@@ -636,7 +638,7 @@ export default function OperatorConsole({
         </div>
       )}
 
-      <div style={S.detailPanel}>
+      <div className="runs-consoleDetail">
         <div style={S.tabs}>
           {TABS.map((tab) => (
             <button
@@ -694,13 +696,9 @@ function RunRow({ run, selected, onClick }) {
   const meta = STATE_META[run.state] || DEFAULT_STATE_META;
   return (
     <button
+      className={`runs-runRow${selected ? " is-selected" : ""}`}
       type="button"
       onClick={onClick}
-      style={{
-        ...S.runRow,
-        borderColor: selected ? "#818cf8" : "#e2e8f0",
-        boxShadow: selected ? "0 0 0 1px rgba(99,102,241,0.12)" : "none",
-      }}
     >
       <div style={S.runRowTop}>
         <span
@@ -743,18 +741,7 @@ function FocusedRunCard({
   const approvalTokens = approvalBindingTokens(binding);
 
   return (
-    <section
-      style={{
-        ...S.focusCard,
-        ...(signal.tone === "attention"
-          ? S.focusCardAttention
-          : signal.tone === "danger"
-            ? S.focusCardDanger
-            : signal.tone === "success"
-              ? S.focusCardSuccess
-              : null),
-      }}
-    >
+    <section className={`runs-focusCard runs-focusCard--${signal.tone}`}>
       <div style={S.focusHeader}>
         <div>
           <div style={S.focusEyebrow}>Focused run</div>
@@ -902,185 +889,208 @@ function OverviewPanel({ run }) {
       value: summarizeValue(value),
     })
   );
+  const overviewFacts = [
+    { label: "State", value: formatStateLabel(run.state) },
+    { label: "Action", value: actionTaken.kind || plan.action || "—" },
+    { label: "Approval", value: formatApprovalStatus(run) },
+    { label: "Latest receipt", value: run.latest_receipt?.status || actionResult.status || "—" },
+    { label: "Workflow", value: activeWorkflow.workflow_class || "—" },
+    { label: "Events", value: String(run.event_count ?? 0) },
+    { label: "Artifacts", value: String(run.artifacts_count ?? 0) },
+    {
+      label: "Duration",
+      value: formatDuration(run.metrics?.run_duration_ms),
+    },
+  ];
+  const needsReview =
+    isApprovalActionable(run) ||
+    hasValue(run.approval_id) ||
+    hasValue(approval);
+  const reviewTokens = approvalBindingTokens(binding);
 
   return (
-    <div style={S.detailBody}>
+    <div className="runs-detailBody">
       <ReplayDigestCard run={run} />
 
-      <div style={S.summaryCard}>
-        <div style={S.summaryGoal}>{run.goal}</div>
-        <div style={S.summaryGrid}>
-          <SummaryField label="Run ID" value={run.run_id} mono />
-          <SummaryField label="State" value={formatStateLabel(run.state)} />
-          <SummaryField label="Created" value={formatDateTime(run.created_at)} />
-          <SummaryField label="Updated" value={formatDateTime(run.updated_at)} />
-          <SummaryField label="Strategy" value={plan.strategy || "—"} />
-          <SummaryField
-            label="Action"
-            value={actionTaken.kind || plan.action || "—"}
-          />
-          <SummaryField
-            label="Workflow"
-            value={activeWorkflow.workflow_class || "—"}
-          />
-          <SummaryField
-            label="Workflow outcome"
-            value={formatWorkflowOutcome(workflowOutcome)}
-          />
-          <SummaryField
-            label="Approval state"
-            value={formatApprovalStatus(run)}
-          />
-          <SummaryField
-            label="Latest Receipt"
-            value={run.latest_receipt?.status || actionResult.status || "—"}
-          />
-          <SummaryField
-            label="Approval required"
-            value={formatBoolean(actionTaken.requires_approval)}
-          />
-          <SummaryField label="Events" value={String(run.event_count)} />
-          <SummaryField
-            label="Artifacts"
-            value={String(run.artifacts_count)}
-          />
-          <SummaryField
-            label="Discrepancies"
-            value={String((run.discrepancies || []).length)}
-          />
+      <section className="runs-overviewLead">
+        <div className="runs-overviewEyebrow">What happened</div>
+        <h3 className="runs-overviewTitle">{summarizeOverviewHeadline(run)}</h3>
+        <p className="runs-overviewDescription">
+          {summarizeOverviewDescription(run)}
+        </p>
+        <div className="runs-overviewGrid">
+          {overviewFacts.map((item) => (
+            <SummaryField key={item.label} label={item.label} value={item.value} />
+          ))}
         </div>
-      </div>
+      </section>
 
-      <FactSection
-        label="Planning"
-        items={[
-          { label: "Strategy", value: plan.strategy },
-          { label: "Suggested action", value: plan.action },
-          { label: "Planning mode", value: plan.planning_mode },
-          {
-            label: "Confidence",
-            value: formatConfidence(plan.confidence),
-          },
-          {
-            label: "Memory context used",
-            value: formatBoolean(plan.memory_context_used),
-          },
-          {
-            label: "Memory retrieval",
-            value: plan.memory_retrieval_status,
-          },
-          {
-            label: "Memory retrieval error",
-            value: plan.memory_retrieval_error,
-          },
-          { label: "Fallback reason", value: plan.fallback_reason },
-          { label: "Rationale", value: plan.rationale },
-        ]}
-      />
+      {needsReview && (
+        <section className="runs-reviewCard">
+          <div className="runs-overviewEyebrow">Needs review</div>
+          <div className="runs-reviewTitle">
+            {request?.action_kind || actionTaken.kind || plan.action || "Action"}
+            {isApprovalActionable(run)
+              ? " is waiting for operator approval."
+              : " has recorded approval history."}
+          </div>
+          <p className="runs-reviewDescription">
+            {request?.reason ||
+              decision?.reason ||
+              "Inspect the approval binding and arguments before moving on."}
+          </p>
+          {reviewTokens.length > 0 && <TokenList values={reviewTokens} mono />}
+          {hasValue(actionTaken.arguments) && (
+            <pre style={S.payloadPreview}>{formatPayload(actionTaken.arguments)}</pre>
+          )}
+        </section>
+      )}
 
-      <FactSection
-        label="Perception"
-        items={[
-          { label: "Intent class", value: perception.intent_class },
-          { label: "Intent", value: perception.intent },
-          { label: "Perception mode", value: perception.perception_mode },
-          {
-            label: "LLM attempted",
-            value: formatBoolean(perception.llm_attempted),
-          },
-          {
-            label: "Fallback reason",
-            value: perception.fallback_reason,
-          },
-        ]}
-      />
+      <OverviewDisclosure
+        label="Reasoning and workflow"
+        description="Planning, perception, critique, workflow, and runtime details."
+      >
+        <FactSection
+          label="Planning"
+          items={[
+            { label: "Strategy", value: plan.strategy },
+            { label: "Suggested action", value: plan.action },
+            { label: "Planning mode", value: plan.planning_mode },
+            {
+              label: "Confidence",
+              value: formatConfidence(plan.confidence),
+            },
+            {
+              label: "Memory context used",
+              value: formatBoolean(plan.memory_context_used),
+            },
+            {
+              label: "Memory retrieval",
+              value: plan.memory_retrieval_status,
+            },
+            {
+              label: "Memory retrieval error",
+              value: plan.memory_retrieval_error,
+            },
+            { label: "Fallback reason", value: plan.fallback_reason },
+            { label: "Rationale", value: plan.rationale },
+          ]}
+        />
 
-      <FactSection
-        label="Critique"
-        items={[
-          { label: "Verdict", value: critique.verdict },
-          { label: "Alignment", value: formatScore(critique.alignment) },
-          {
-            label: "Feasibility",
-            value: formatScore(critique.feasibility),
-          },
-          { label: "Safety", value: formatScore(critique.safety) },
-          {
-            label: "Confidence delta",
-            value: formatSignedNumber(critique.confidence_delta),
-          },
-          {
-            label: "LLM powered",
-            value: formatBoolean(critique.llm_powered),
-          },
-          {
-            label: "Fallback reason",
-            value: critique.fallback_reason,
-          },
-          {
-            label: "Issues",
-            value: Array.isArray(critique.issues)
-              ? critique.issues.join(" • ")
-              : "",
-          },
-          { label: "Rationale", value: critique.rationale },
-        ]}
-      />
+        <FactSection
+          label="Perception"
+          items={[
+            { label: "Intent class", value: perception.intent_class },
+            { label: "Intent", value: perception.intent },
+            { label: "Perception mode", value: perception.perception_mode },
+            {
+              label: "LLM attempted",
+              value: formatBoolean(perception.llm_attempted),
+            },
+            {
+              label: "Fallback reason",
+              value: perception.fallback_reason,
+            },
+          ]}
+        />
 
-      <FactSection
-        label="Workflow"
-        items={[
-          { label: "Class", value: activeWorkflow.workflow_class },
-          { label: "Strategy", value: activeWorkflow.strategy },
-          { label: "Workflow id", value: activeWorkflow.workflow_id, mono: true },
-          {
-            label: "Budget",
-            value: formatWorkflowBudget(workflowBudget),
-          },
-          {
-            label: "Checkpoint",
-            value: formatWorkflowCheckpoint(workflowCheckpoint),
-            mono: true,
-          },
-          {
-            label: "Outcome",
-            value: formatWorkflowOutcome(workflowOutcome),
-          },
-          {
-            label: "Workflow artifacts",
-            value: String(workflowArtifacts.length || 0),
-          },
-        ]}
-      />
+        <FactSection
+          label="Critique"
+          items={[
+            { label: "Verdict", value: critique.verdict },
+            { label: "Alignment", value: formatScore(critique.alignment) },
+            {
+              label: "Feasibility",
+              value: formatScore(critique.feasibility),
+            },
+            { label: "Safety", value: formatScore(critique.safety) },
+            {
+              label: "Confidence delta",
+              value: formatSignedNumber(critique.confidence_delta),
+            },
+            {
+              label: "LLM powered",
+              value: formatBoolean(critique.llm_powered),
+            },
+            {
+              label: "Fallback reason",
+              value: critique.fallback_reason,
+            },
+            {
+              label: "Issues",
+              value: Array.isArray(critique.issues)
+                ? critique.issues.join(" • ")
+                : "",
+            },
+            { label: "Rationale", value: critique.rationale },
+          ]}
+        />
 
-      <FactSection
-        label="Runtime"
-        items={[
-          { label: "Selected action", value: actionTaken.kind },
-          {
-            label: "Requires approval",
-            value: formatBoolean(actionTaken.requires_approval),
-          },
-          {
-            label: "Latest receipt",
-            value: run.latest_receipt?.status || actionResult.status,
-          },
-          {
-            label: "Execution error",
-            value: actionResult.error,
-          },
-          {
-            label: "Approval id",
-            value: run.approval_id,
-            mono: true,
-          },
-        ]}
-      />
+        <FactSection
+          label="Workflow"
+          items={[
+            { label: "Class", value: activeWorkflow.workflow_class },
+            { label: "Strategy", value: activeWorkflow.strategy },
+            { label: "Workflow id", value: activeWorkflow.workflow_id, mono: true },
+            {
+              label: "Budget",
+              value: formatWorkflowBudget(workflowBudget),
+            },
+            {
+              label: "Checkpoint",
+              value: formatWorkflowCheckpoint(workflowCheckpoint),
+              mono: true,
+            },
+            {
+              label: "Outcome",
+              value: formatWorkflowOutcome(workflowOutcome),
+            },
+            {
+              label: "Workflow artifacts",
+              value: String(workflowArtifacts.length || 0),
+            },
+          ]}
+        />
+
+        <FactSection
+          label="Runtime"
+          items={[
+            { label: "Selected action", value: actionTaken.kind },
+            {
+              label: "Requires approval",
+              value: formatBoolean(actionTaken.requires_approval),
+            },
+            {
+              label: "Latest receipt",
+              value: run.latest_receipt?.status || actionResult.status,
+            },
+            {
+              label: "Execution error",
+              value: actionResult.error,
+            },
+            {
+              label: "Approval id",
+              value: run.approval_id,
+              mono: true,
+            },
+          ]}
+        />
+
+        {hasValue(actionTaken.arguments) && (
+          <section style={S.section}>
+            <div style={S.sectionLabel}>Action arguments</div>
+            <pre style={S.payloadPreview}>{formatPayload(actionTaken.arguments)}</pre>
+          </section>
+        )}
+      </OverviewDisclosure>
 
       {(hasValue(run.approval_id) ||
         hasValue(approval) ||
         hasValue(run.last_approval_decision)) && (
-        <>
+        <OverviewDisclosure
+          label="Approval details"
+          description="Binding, policy fingerprints, decision trail, and safeguards."
+        >
           <FactSection
             label="Approval"
             items={[
@@ -1148,152 +1158,166 @@ function OverviewPanel({ run }) {
               </pre>
             </section>
           )}
-        </>
+        </OverviewDisclosure>
       )}
 
-      <FactSection
-        label="Metrics"
-        items={[
-          {
-            label: "Run duration",
-            value: formatDuration(run.metrics?.run_duration_ms),
-          },
-          {
-            label: "Tool latency",
-            value: formatLatencySummary(run.metrics?.tool_latency),
-          },
-          {
-            label: "Retrieval latency",
-            value: formatLatencySummary(
-              run.metrics?.memory_retrieval_latency
-            ),
-          },
-          {
-            label: "Commit latency",
-            value: formatLatencySummary(run.metrics?.memory_commit_latency),
-          },
-        ]}
-      />
+      <OverviewDisclosure
+        label="Supporting evidence"
+        description="Metrics, memory hits, key events, workflow steps, and discrepancies."
+      >
+        <FactSection
+          label="Metrics"
+          items={[
+            {
+              label: "Run duration",
+              value: formatDuration(run.metrics?.run_duration_ms),
+            },
+            {
+              label: "Tool latency",
+              value: formatLatencySummary(run.metrics?.tool_latency),
+            },
+            {
+              label: "Retrieval latency",
+              value: formatLatencySummary(
+                run.metrics?.memory_retrieval_latency
+              ),
+            },
+            {
+              label: "Commit latency",
+              value: formatLatencySummary(run.metrics?.memory_commit_latency),
+            },
+          ]}
+        />
 
-      <FactSection label="Memory counts" items={memoryCountItems} />
+        <FactSection label="Memory counts" items={memoryCountItems} />
 
-      <FactSection label="Memory outcomes" items={memoryOutcomeItems} />
+        <FactSection label="Memory outcomes" items={memoryOutcomeItems} />
 
-      {hasValue(actionTaken.arguments) && (
-        <section style={S.section}>
-          <div style={S.sectionLabel}>Action arguments</div>
-          <pre style={S.payloadPreview}>{formatPayload(actionTaken.arguments)}</pre>
-        </section>
-      )}
-
-      {memoryHits.length > 0 && (
-        <section style={S.section}>
-          <div style={S.sectionLabel}>Memory hits</div>
-          <div style={S.memoryHitList}>
-            {memoryHits.map((hit, index) => (
-              <div
-                key={`${hit.text}-${index}`}
-                style={S.memoryHitCard}
-              >
-                <div style={S.memoryHitTop}>
-                  <span style={S.memoryHitScore}>{formatScore(hit.score)}</span>
-                  <span style={S.memoryHitMeta}>
-                    {[
-                      hit.memory_type,
-                      formatDateTime(hit.stored_at),
-                    ]
-                      .filter(Boolean)
-                      .join(" • ") || "recorded memory"}
-                  </span>
-                </div>
-                <div style={S.memoryHitText}>{hit.text}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {Array.isArray(run.key_events) && run.key_events.length > 0 && (
-        <section style={S.section}>
-          <div style={S.sectionLabel}>Key events</div>
-          <div style={S.eventList}>
-            {[...run.key_events].reverse().map((event, index) => (
-              <div key={`${event.type}-${index}`} style={S.eventCard}>
-                <div style={S.eventTop}>
-                  <span style={S.eventType}>{event.type}</span>
-                  <span style={S.eventTime}>{formatDateTime(event.timestamp)}</span>
-                </div>
-                <div style={S.eventSummary}>{event.summary}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {Array.isArray(run.workflow_step_history) &&
-        run.workflow_step_history.length > 0 && (
+        {memoryHits.length > 0 && (
           <section style={S.section}>
-            <div style={S.sectionLabel}>Workflow steps</div>
-            <div style={S.stepList}>
-              {workflowSteps.map((step, index) => (
-                <div
-                  key={step.step_id || step.action_id || `${index}`}
-                  style={S.stepCard}
-                >
-                  <div style={S.stepHeader}>
-                    <div>
-                      <div style={S.stepKey}>
-                        {step.step_key || step.tool_name || `step ${index + 1}`}
-                      </div>
-                      <div style={S.stepSubline}>
-                        {[
-                          step.tool_name,
-                          step.action_id,
-                          step.receipt_id,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ") || "workflow step"}
-                      </div>
-                    </div>
-                    <div style={S.stepMeta}>{step.status || "—"}</div>
+            <div style={S.sectionLabel}>Memory hits</div>
+            <div style={S.memoryHitList}>
+              {memoryHits.map((hit, index) => (
+                <div key={`${hit.text}-${index}`} style={S.memoryHitCard}>
+                  <div style={S.memoryHitTop}>
+                    <span style={S.memoryHitScore}>{formatScore(hit.score)}</span>
+                    <span style={S.memoryHitMeta}>
+                      {[
+                        hit.memory_type,
+                        formatDateTime(hit.stored_at),
+                      ]
+                        .filter(Boolean)
+                        .join(" • ") || "recorded memory"}
+                    </span>
                   </div>
-                  {(hasValue(step.touched_paths) ||
-                    hasValue(step.artifact_summaries)) && (
-                    <div style={S.stepDetailRow}>
-                      {Array.isArray(step.touched_paths) &&
-                        step.touched_paths.length > 0 && (
-                          <span style={S.stepToken}>
-                            {step.touched_paths.length} touched path
-                            {step.touched_paths.length === 1 ? "" : "s"}
-                          </span>
-                        )}
-                      {Array.isArray(step.artifact_summaries) &&
-                        step.artifact_summaries.length > 0 && (
-                          <span style={S.stepToken}>
-                            {step.artifact_summaries.length} artifact
-                            {step.artifact_summaries.length === 1 ? "" : "s"}
-                          </span>
-                        )}
-                    </div>
-                  )}
-                  {hasValue(step.mutation_result) && (
-                    <pre style={S.payloadPreview}>
-                      {formatPayload(step.mutation_result)}
-                    </pre>
-                  )}
+                  <div style={S.memoryHitText}>{hit.text}</div>
                 </div>
               ))}
             </div>
           </section>
         )}
 
-      {Array.isArray(run.discrepancies) && run.discrepancies.length > 0 && (
-        <section style={S.section}>
-          <div style={S.sectionLabel}>Discrepancies</div>
-          <div style={S.discrepancyBox}>{run.discrepancies.join("\n")}</div>
-        </section>
-      )}
+        {Array.isArray(run.key_events) && run.key_events.length > 0 && (
+          <section style={S.section}>
+            <div style={S.sectionLabel}>Key events</div>
+            <div style={S.eventList}>
+              {[...run.key_events].reverse().map((event, index) => (
+                <div key={`${event.type}-${index}`} style={S.eventCard}>
+                  <div style={S.eventTop}>
+                    <span style={S.eventType}>{event.type}</span>
+                    <span style={S.eventTime}>{formatDateTime(event.timestamp)}</span>
+                  </div>
+                  <div style={S.eventSummary}>{event.summary}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {Array.isArray(run.workflow_step_history) &&
+          run.workflow_step_history.length > 0 && (
+            <section style={S.section}>
+              <div style={S.sectionLabel}>Workflow steps</div>
+              <div style={S.stepList}>
+                {workflowSteps.map((step, index) => (
+                  <div key={step.step_id || step.action_id || `${index}`} style={S.stepCard}>
+                    <div style={S.stepHeader}>
+                      <div>
+                        <div style={S.stepKey}>
+                          {step.step_key || step.tool_name || `step ${index + 1}`}
+                        </div>
+                        <div style={S.stepSubline}>
+                          {[
+                            step.tool_name,
+                            step.action_id,
+                            step.receipt_id,
+                          ]
+                            .filter(Boolean)
+                            .join(" • ") || "workflow step"}
+                        </div>
+                      </div>
+                      <div style={S.stepMeta}>{step.status || "—"}</div>
+                    </div>
+                    {(hasValue(step.touched_paths) ||
+                      hasValue(step.artifact_summaries)) && (
+                      <div style={S.stepDetailRow}>
+                        {Array.isArray(step.touched_paths) &&
+                          step.touched_paths.length > 0 && (
+                            <span style={S.stepToken}>
+                              {step.touched_paths.length} touched path
+                              {step.touched_paths.length === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        {Array.isArray(step.artifact_summaries) &&
+                          step.artifact_summaries.length > 0 && (
+                            <span style={S.stepToken}>
+                              {step.artifact_summaries.length} artifact
+                              {step.artifact_summaries.length === 1 ? "" : "s"}
+                            </span>
+                          )}
+                      </div>
+                    )}
+                    {hasValue(step.mutation_result) && (
+                      <pre style={S.payloadPreview}>
+                        {formatPayload(step.mutation_result)}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+        {Array.isArray(run.discrepancies) && run.discrepancies.length > 0 && (
+          <section style={S.section}>
+            <div style={S.sectionLabel}>Discrepancies</div>
+            <div style={S.discrepancyBox}>{run.discrepancies.join("\n")}</div>
+          </section>
+        )}
+      </OverviewDisclosure>
     </div>
+  );
+}
+
+function OverviewDisclosure({ label, description, children }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <section className="runs-disclosure">
+      <button
+        className="runs-disclosureButton"
+        onClick={() => setOpen((currentValue) => !currentValue)}
+        type="button"
+      >
+        <div>
+          <div className="runs-disclosureTitle">{label}</div>
+          <div className="runs-disclosureDescription">{description}</div>
+        </div>
+        <span className="runs-disclosureToggle">{open ? "Hide" : "Show"}</span>
+      </button>
+
+      {open && <div className="runs-disclosureBody">{children}</div>}
+    </section>
   );
 }
 
@@ -1430,7 +1454,7 @@ function ReplayDigestCard({ run }) {
   ].filter(Boolean);
 
   return (
-    <section style={S.digestCard}>
+    <section className="runs-digestCard">
       <div style={S.digestHeader}>
         <div>
           <div style={S.digestEyebrow}>Replay digest</div>
@@ -2043,12 +2067,7 @@ function MetricStrip({ items, compact = false }) {
 function PanelMessage({ text, tone = "default" }) {
   return (
     <div
-      style={{
-        ...S.message,
-        color: tone === "error" ? "#b91c1c" : "#475569",
-        background: tone === "error" ? "#fff1f2" : "#f8fafc",
-        borderColor: tone === "error" ? "#fecdd3" : "#e2e8f0",
-      }}
+      className={`runs-panelMessage${tone === "error" ? " is-error" : ""}`}
     >
       {text}
     </div>
@@ -2502,6 +2521,39 @@ function isApprovalActionable(run) {
   }
 
   return run.action_taken?.requires_approval !== false;
+}
+
+function summarizeOverviewHeadline(run) {
+  const actionLabel = run.action_taken?.kind || run.plan?.action || "Action";
+
+  switch (run.state) {
+    case "awaiting_approval":
+      return `${actionLabel} is blocked on operator approval.`;
+    case "completed":
+      return `${actionLabel} completed and the result is ready to review.`;
+    case "failed":
+      return `${actionLabel} failed and needs investigation.`;
+    case "halted":
+      return `${actionLabel} was halted before completion.`;
+    default:
+      return `${actionLabel} is still progressing through the run.`;
+  }
+}
+
+function summarizeOverviewDescription(run) {
+  const signal = summarizeRunSignal(run);
+
+  switch (run.state) {
+    case "awaiting_approval":
+      return `${signal.summary} Review the approval request first, then open the reasoning details only if you need the full chain of context.`;
+    case "completed":
+      return `${signal.summary} Use the supporting evidence section for receipts, memory hits, and workflow steps, then jump to artifacts or events only if you need raw detail.`;
+    case "failed":
+    case "halted":
+      return `${signal.summary} Start with the supporting evidence section, then open raw events if the summary is not enough.`;
+    default:
+      return `${signal.summary} The overview keeps the answer first and the deeper replay context one click away.`;
+  }
 }
 const S = {
   root: {
