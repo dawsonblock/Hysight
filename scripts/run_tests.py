@@ -110,8 +110,8 @@ EXPECTED_BASELINE_STEP_COUNTS = {
         "error_test_count": 0,
     },
     "backend-baseline": {
-        "total_test_count": 76,
-        "passed_test_count": 76,
+        "total_test_count": 79,
+        "passed_test_count": 79,
         "skipped_test_count": 0,
         "failed_test_count": 0,
         "error_test_count": 0,

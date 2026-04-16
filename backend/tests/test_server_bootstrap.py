@@ -1023,7 +1023,10 @@ def test_sidecar_proof_main_uses_isolated_temp_data_dir(
     log_path = tmp_path / "proof-sidecar.log"
     isolated_root = tmp_path / "isolated-sidecar-root"
     isolated_root.mkdir()
-    captured: dict[str, object] = {}
+    captured_cargo_command: list[str] = []
+    captured_proof_command: list[str] = []
+    captured_cargo_env: dict[str, str] = {}
+    captured_proof_env: dict[str, str] = {}
 
     class _FakeTempDir:
         def __init__(self, name: str):
@@ -1073,13 +1076,13 @@ def test_sidecar_proof_main_uses_isolated_temp_data_dir(
     )
 
     def _fake_popen(command, **kwargs):
-        captured["cargo_command"] = command
-        captured["cargo_env"] = kwargs["env"]
+        captured_cargo_command.extend(command)
+        captured_cargo_env.update(kwargs["env"])
         return _FakeProcess()
 
     def _fake_run(command, **kwargs):
-        captured["proof_command"] = command
-        captured["proof_env"] = kwargs["env"]
+        captured_proof_command.extend(command)
+        captured_proof_env.update(kwargs["env"])
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(proof_sidecar.subprocess, "Popen", _fake_popen)
@@ -1088,25 +1091,25 @@ def test_sidecar_proof_main_uses_isolated_temp_data_dir(
     result = proof_sidecar.main()
 
     assert result == 0
-    assert captured["cargo_command"] == [
+    assert captured_cargo_command == [
         "cargo",
         "run",
         "--manifest-path",
         "memvid_service/Cargo.toml",
         "--release",
     ]
-    assert captured["cargo_env"]["MEMORY_SERVICE_PORT"] == "3032"
-    assert captured["cargo_env"]["MEMORY_DATA_DIR"] == str(isolated_root)
-    assert captured["proof_command"] == [
+    assert captured_cargo_env["MEMORY_SERVICE_PORT"] == "3032"
+    assert captured_cargo_env["MEMORY_DATA_DIR"] == str(isolated_root)
+    assert captured_proof_command == [
         sys.executable,
         "scripts/run_tests.py",
         "--sidecar",
     ]
-    assert captured["proof_env"]["MEMORY_SERVICE_PORT"] == "3032"
-    assert captured["proof_env"]["MEMORY_SERVICE_URL"] == "http://localhost:3032"
-    assert captured["proof_env"]["MEMORY_DATA_DIR"] == str(isolated_root)
-    assert captured["proof_env"]["RUN_MEMVID_TESTS"] == "1"
-    assert captured["proof_env"]["MEMORY_BACKEND"] == "rust"
+    assert captured_proof_env["MEMORY_SERVICE_PORT"] == "3032"
+    assert captured_proof_env["MEMORY_SERVICE_URL"] == "http://localhost:3032"
+    assert captured_proof_env["MEMORY_DATA_DIR"] == str(isolated_root)
+    assert captured_proof_env["RUN_MEMVID_TESTS"] == "1"
+    assert captured_proof_env["MEMORY_BACKEND"] == "rust"
     assert fake_temp_dir.cleaned is True
 
 

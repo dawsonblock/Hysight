@@ -12,12 +12,20 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Sequence
 
-from proof_receipt import (
-    empty_test_counts,
-    merge_test_counts,
-    summarize_junit_xml,
-    write_proof_receipt,
-)
+try:
+    from proof_receipt import (
+        empty_test_counts,
+        merge_test_counts,
+        summarize_junit_xml,
+        write_proof_receipt,
+    )
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.proof_receipt import (
+        empty_test_counts,
+        merge_test_counts,
+        summarize_junit_xml,
+        write_proof_receipt,
+    )
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
