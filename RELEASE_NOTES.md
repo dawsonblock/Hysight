@@ -45,6 +45,9 @@ than coupling them to the default local proof surface.
 - Credentialed browser access remains fail-closed.
   - `CORS_ORIGINS` must be an explicit comma-separated allowlist of absolute
     origins.
+- Proof receipts now land under `artifacts/proof/`, with timestamped live
+  history receipts under `artifacts/proof/history/` for the live Mongo and
+  live sidecar harnesses.
 
 ## Proof Commands
 
@@ -52,6 +55,19 @@ than coupling them to the default local proof surface.
 
 ```bash
 python scripts/run_tests.py
+```
+
+Current enforced baseline contract in the runner:
+
+- HCA pipeline proof: `7 passed`
+- Backend baseline proof: `81 passed`
+- Contract conformance proof: `18 passed`
+
+- Optional frontend proof:
+
+```bash
+make test-bootstrap-frontend
+make proof-frontend
 ```
 
 - Optional live Rust sidecar proof:
@@ -69,6 +85,12 @@ MEMORY_SERVICE_PORT=3032 make proof-sidecar
 ```
 
 - Optional live Mongo-backed `/api/status` proof:
+
+```bash
+make proof-mongo-live
+```
+
+Narrow already-running-Mongo path when you do not want the disposable harness:
 
 ```bash
 make test-mongo-live

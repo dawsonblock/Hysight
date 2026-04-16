@@ -1,5 +1,7 @@
 # Hysight Repair Report
 
+Historical note: this report captures the repair pass at the time it landed. For the current canonical proof contract, baseline counts, and receipt locations, use `README.md`, `BOOTSTRAP.md`, and `docs/deployment.md`.
+
 ## Current architecture summary
 
 Hysight now presents one clear backend authority path:

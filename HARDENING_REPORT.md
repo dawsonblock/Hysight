@@ -1,5 +1,7 @@
 # Hardening Report
 
+Historical note: this report captures the hardening pass at the time it landed. For the current canonical bootstrap path, proof commands, and receipt locations, use `README.md`, `BOOTSTRAP.md`, and `docs/deployment.md`.
+
 This document records the production-hardening work completed in the current implementation pass.
 
 ## Scope Completed

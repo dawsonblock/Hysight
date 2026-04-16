@@ -5,7 +5,7 @@ This pass tightened the repo's optional proof surfaces, runtime authority contra
 ## Optional proof surfaces
 
 - Added `scripts/proof_mongo_live.py` and `scripts/proof_sidecar.py` as full local lifecycle harnesses for the opt-in live Mongo and memvid sidecar proofs.
-- Added `scripts/proof_receipt.py` so both harnesses and the matching CI jobs emit machine-readable receipts under `test_reports/proof_receipts/`.
+- Added `scripts/proof_receipt.py` so the canonical proof entrypoints and the matching CI jobs emit machine-readable receipts under `artifacts/proof/`, with timestamped live-proof history under `artifacts/proof/history/`.
 - Updated `Makefile` and `.github/workflows/backend-proof.yml` so `make proof-mongo-live` and `make proof-sidecar` are the full-harness entrypoints, while `make test-mongo-live` and `make test-sidecar` remain the narrow already-running-service paths.
 
 ## Package and runtime truth
@@ -22,8 +22,24 @@ This pass tightened the repo's optional proof surfaces, runtime authority contra
 
 ## Verification
 
-- `python -m pytest backend/tests/test_server_bootstrap.py -q`
-- `cd frontend && CI=1 npm test -- --runInBand --watch=false src/lib/api.test.js src/components/OperatorConsole.test.js src/components/MemoryBrowser.test.js`
-- `python scripts/run_tests.py`
+Recent verification on the supported bootstrap path:
 
-All of the above passed on this branch after the hardening changes.
+- `./.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q`
+  - `42 passed, 1 deselected`
+- `make proof-frontend`
+  - runtime verification passed under Node `20.20.2` and Yarn `1.22.22`
+  - fixture drift passed
+  - lint passed
+  - Jest: `5 passed test suites`, `19 passed tests`
+  - build passed
+  - receipt: `artifacts/proof/frontend.json`
+- `./.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline`
+  - `81 passed, 1 deselected`
+- `./.venv/bin/python scripts/check_repo_integrity.py`
+  - passed
+
+Current baseline contract enforced by `scripts/run_tests.py`:
+
+- HCA pipeline proof: `7 passed`
+- Backend baseline proof: `81 passed`
+- Contract conformance proof: `18 passed`
