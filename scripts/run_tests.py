@@ -35,12 +35,20 @@ import tempfile
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Sequence
 
-from proof_receipt import (
-    empty_test_counts,
-    merge_test_counts,
-    summarize_junit_xml,
-    write_proof_receipt,
-)
+try:
+    from proof_receipt import (
+        empty_test_counts,
+        merge_test_counts,
+        summarize_junit_xml,
+        write_proof_receipt,
+    )
+except ModuleNotFoundError:  # pragma: no cover - exercised via module import tests
+    from scripts.proof_receipt import (
+        empty_test_counts,
+        merge_test_counts,
+        summarize_junit_xml,
+        write_proof_receipt,
+    )
 
 DEFAULT_MEMORY_SERVICE_PORT = (
     os.environ.get("MEMORY_SERVICE_PORT", "").strip() or "3031"
@@ -110,8 +118,8 @@ EXPECTED_BASELINE_STEP_COUNTS = {
         "error_test_count": 0,
     },
     "backend-baseline": {
-        "total_test_count": 79,
-        "passed_test_count": 79,
+        "total_test_count": 81,
+        "passed_test_count": 81,
         "skipped_test_count": 0,
         "failed_test_count": 0,
         "error_test_count": 0,

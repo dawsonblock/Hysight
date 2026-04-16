@@ -609,6 +609,123 @@ def test_frontend_parse_jest_counts_tracks_pending_and_todo_cases(tmp_path):
     }
 
 
+def test_run_tests_external_receipt_step_requires_fresh_receipt(
+    monkeypatch,
+    tmp_path,
+):
+    run_tests = import_module("scripts.run_tests")
+    receipt_path = tmp_path / "frontend.json"
+    receipt_path.write_text(
+        json.dumps(
+            {
+                "outcome": "passed",
+                "total_test_count": 99,
+                "passed_test_count": 99,
+            }
+        ),
+        encoding="utf-8",
+    )
+    step = {
+        "id": "frontend",
+        "name": "Frontend proof",
+        "receipt_name": "frontend",
+        "external_receipt": receipt_path,
+        "cmd": [sys.executable, "scripts/proof_frontend.py"],
+    }
+
+    def _fake_run(command, **kwargs):
+        assert command == [sys.executable, "scripts/proof_frontend.py"]
+        assert kwargs["cwd"] == run_tests.REPO_ROOT
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(run_tests.subprocess, "run", _fake_run)
+
+    result = run_tests._run_external_receipt_step(step)
+
+    assert result["returncode"] == 0
+    assert result["counts"] == {
+        "total_test_count": 0,
+        "passed_test_count": 0,
+        "skipped_test_count": 0,
+        "failed_test_count": 0,
+        "error_test_count": 0,
+    }
+    assert result["junit_error"] == f"missing proof receipt: {receipt_path}"
+    assert receipt_path.exists() is False
+    assert run_tests._validate_result(step, result) == [
+        f"Frontend proof: unable to parse JUnit XML: missing proof receipt: {receipt_path}"
+    ]
+
+
+def test_run_tests_external_receipt_step_surfaces_failed_receipt_outcome(
+    monkeypatch,
+    tmp_path,
+):
+    run_tests = import_module("scripts.run_tests")
+    receipt_path = tmp_path / "frontend.json"
+    step = {
+        "id": "frontend",
+        "name": "Frontend proof",
+        "receipt_name": "frontend",
+        "external_receipt": receipt_path,
+        "cmd": [sys.executable, "scripts/proof_frontend.py"],
+    }
+
+    def _fake_run(command, **kwargs):
+        assert command == [sys.executable, "scripts/proof_frontend.py"]
+        assert kwargs["cwd"] == run_tests.REPO_ROOT
+        receipt_path.write_text(
+            json.dumps(
+                {
+                    "outcome": "failed",
+                    "failure_reason": "lint failed",
+                    "total_test_count": 5,
+                    "passed_test_count": 4,
+                    "skipped_test_count": 1,
+                    "failed_test_count": 0,
+                    "error_test_count": 0,
+                    "skipped_cases": [
+                        {
+                            "classname": "frontend-suite",
+                            "name": "todo case",
+                            "message": "todo",
+                        }
+                    ],
+                    "metadata": {"num_total_test_suites": 2},
+                }
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="proof ok\n", stderr="")
+
+    monkeypatch.setattr(run_tests.subprocess, "run", _fake_run)
+
+    result = run_tests._run_external_receipt_step(step)
+
+    assert result["returncode"] == 0
+    assert result["counts"] == {
+        "total_test_count": 5,
+        "passed_test_count": 4,
+        "skipped_test_count": 1,
+        "failed_test_count": 0,
+        "error_test_count": 0,
+    }
+    assert result["skipped_cases"] == [
+        {
+            "classname": "frontend-suite",
+            "name": "todo case",
+            "message": "todo",
+        }
+    ]
+    assert result["proof_metadata"] == {"num_total_test_suites": 2}
+    assert result["proof_outcome"] == "failed"
+    assert result["proof_failure_reason"] == "lint failed"
+    assert result["junit_error"] is None
+    assert run_tests._validate_result(step, result) == [
+        "Frontend proof: external proof receipt outcome was 'failed'"
+    ]
+
+
 def test_fastapi_entrypoints_are_limited_to_authorized_surfaces():
     fastapi_apps = []
     for path in ROOT.rglob("*.py"):
