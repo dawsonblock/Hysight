@@ -75,18 +75,19 @@ jobs:
         run: make test
       - name: Print baseline proof summary
         if: always()
-        run: python - <<'PY'
-import json
-from pathlib import Path
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
 
-path = Path("artifacts/proof/baseline.json")
-if not path.exists():
-    raise SystemExit("baseline receipt missing")
-payload = json.loads(path.read_text(encoding="utf-8"))
-print(
-    f"baseline outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']} failed={payload['failed_test_count']} errors={payload['error_test_count']}"
-)
-PY
+          path = Path("artifacts/proof/baseline.json")
+          if not path.exists():
+            raise SystemExit("baseline receipt missing")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          print(
+            f"baseline outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']} failed={payload['failed_test_count']} errors={payload['error_test_count']}"
+          )
+          PY
       - name: Upload baseline proof receipt
         if: always()
         uses: actions/upload-artifact@v4
@@ -121,15 +122,17 @@ PY
         run: make test-pipeline
       - name: Print HCA smoke proof summary
         if: always()
-        run: python - <<'PY'
-import json
-from pathlib import Path
-path = Path("artifacts/proof/pipeline.json")
-if not path.exists():
-    raise SystemExit("pipeline receipt missing")
-payload = json.loads(path.read_text(encoding="utf-8"))
-print(f"pipeline outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
-PY
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("artifacts/proof/pipeline.json")
+          if not path.exists():
+              raise SystemExit("pipeline receipt missing")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          print(f"pipeline outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+          PY
       - name: Upload HCA smoke proof receipt
         if: always()
         uses: actions/upload-artifact@v4
@@ -164,15 +167,17 @@ PY
         run: make test-contract
       - name: Print contract proof summary
         if: always()
-        run: python - <<'PY'
-import json
-from pathlib import Path
-path = Path("artifacts/proof/contract.json")
-if not path.exists():
-    raise SystemExit("contract receipt missing")
-payload = json.loads(path.read_text(encoding="utf-8"))
-print(f"contract outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
-PY
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("artifacts/proof/contract.json")
+          if not path.exists():
+              raise SystemExit("contract receipt missing")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          print(f"contract outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+          PY
       - name: Upload contract proof receipt
         if: always()
         uses: actions/upload-artifact@v4
@@ -207,15 +212,17 @@ PY
         run: make test-backend-baseline
       - name: Print backend baseline proof summary
         if: always()
-        run: python - <<'PY'
-import json
-from pathlib import Path
-path = Path("artifacts/proof/backend-baseline.json")
-if not path.exists():
-    raise SystemExit("backend baseline receipt missing")
-payload = json.loads(path.read_text(encoding="utf-8"))
-print(f"backend-baseline outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
-PY
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("artifacts/proof/backend-baseline.json")
+          if not path.exists():
+              raise SystemExit("backend baseline receipt missing")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          print(f"backend-baseline outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+          PY
       - name: Upload backend baseline proof receipt
         if: always()
         uses: actions/upload-artifact@v4
@@ -251,15 +258,17 @@ PY
         run: make test-backend-integration
       - name: Print backend integration proof summary
         if: always()
-        run: python - <<'PY'
-import json
-from pathlib import Path
-path = Path("artifacts/proof/integration.json")
-if not path.exists():
-    raise SystemExit("integration receipt missing")
-payload = json.loads(path.read_text(encoding="utf-8"))
-print(f"integration outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
-PY
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("artifacts/proof/integration.json")
+          if not path.exists():
+              raise SystemExit("integration receipt missing")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          print(f"integration outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+          PY
       - name: Upload backend integration proof receipt
         if: always()
         uses: actions/upload-artifact@v4
@@ -325,15 +334,17 @@ PY
         run: make proof-mongo-live
       - name: Print live Mongo proof summary
         if: always()
-        run: python - <<'PY'
-import json
-from pathlib import Path
-path = Path("artifacts/proof/live-mongo.json")
-if not path.exists():
-    raise SystemExit("live Mongo receipt missing")
-payload = json.loads(path.read_text(encoding="utf-8"))
-print(f"live-mongo outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
-PY
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("artifacts/proof/live-mongo.json")
+          if not path.exists():
+              raise SystemExit("live Mongo receipt missing")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          print(f"live-mongo outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+          PY
       - name: Upload live Mongo proof receipt
         if: always()
         uses: actions/upload-artifact@v4
@@ -378,15 +389,17 @@ PY
         run: make proof-sidecar
       - name: Print live sidecar proof summary
         if: always()
-        run: python - <<'PY'
-import json
-from pathlib import Path
-path = Path("artifacts/proof/live-sidecar.json")
-if not path.exists():
-    raise SystemExit("live sidecar receipt missing")
-payload = json.loads(path.read_text(encoding="utf-8"))
-print(f"live-sidecar outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
-PY
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("artifacts/proof/live-sidecar.json")
+          if not path.exists():
+              raise SystemExit("live sidecar receipt missing")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          print(f"live-sidecar outcome={payload['outcome']} passed={payload['passed_test_count']} skipped={payload['skipped_test_count']}")
+          PY
       - name: Upload live sidecar proof receipt
         if: always()
         uses: actions/upload-artifact@v4
