@@ -466,6 +466,20 @@ def test_backend_proof_workflow_runs_documented_proof_script():
     assert "artifacts/proof/history/live-sidecar-*.json" in workflow
 
 
+def test_frontend_proof_workflow_runs_documented_proof_script():
+    workflow = (
+        ROOT / ".github" / "workflows" / "frontend-proof.yml"
+    ).read_text(encoding="utf-8")
+    assert "Frontend Proof" in workflow
+    assert "python scripts/check_repo_integrity.py" in workflow
+    assert "make venv" in workflow
+    assert "make test-bootstrap-frontend" in workflow
+    assert "make proof-frontend" in workflow
+    assert 'node-version: "20"' in workflow
+    assert "actions/upload-artifact@v4" in workflow
+    assert "artifacts/proof/frontend.json" in workflow
+
+
 def test_fastapi_entrypoints_are_limited_to_authorized_surfaces():
     fastapi_apps = []
     for path in ROOT.rglob("*.py"):
@@ -811,6 +825,8 @@ def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract()
     assert "cargo_local_sidecar" in sidecar_harness
     assert "HYSIGHT_PROOF_ENVIRONMENT_MODE" in sidecar_harness
     assert "HYSIGHT_PROOF_SERVICE_CONNECTION_MODE" in sidecar_harness
+    assert "MEMORY_DATA_DIR" in sidecar_harness
+    assert "hysight-sidecar-proof-" in sidecar_harness
     assert "_port_is_available" in sidecar_harness
     assert "MEMORY_SERVICE_PORT=3032 make proof-sidecar" in sidecar_harness
     assert '"scripts/run_tests.py", "--sidecar"' in sidecar_harness
@@ -821,6 +837,12 @@ def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract()
     assert '"passed_test_count"' in receipt_helper
     assert '"skipped_test_count"' in receipt_helper
     assert '"service_endpoint"' in receipt_helper
+
+
+def test_runtime_state_paths_remain_gitignored():
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "storage/" in gitignore
+    assert "data/" in gitignore
 
 
 @pytest.mark.fixture_drift

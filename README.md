@@ -18,7 +18,8 @@ A proof-first Hybrid Cognitive Agent runtime with bounded authority, replay-back
 | I want to... | Command |
 | --- | --- |
 | Verify the default local proof surface | `python scripts/run_tests.py` |
-| Verify the frontend operator surface | `cd frontend && yarn lint && CI=true yarn test --watch=false --runInBand && yarn build` |
+| Install frontend proof dependencies | `make test-bootstrap-frontend` |
+| Verify the frontend operator surface | `make proof-frontend` |
 | Start the backend | `./scripts/run_backend.sh` |
 | Start the frontend | `cd frontend && yarn start` |
 | Run the optional memvid sidecar | `cargo run --manifest-path memvid_service/Cargo.toml --release` |
@@ -41,13 +42,19 @@ make test
 # 4. Optional — install the extra integration/live proof dependencies
 make test-bootstrap-integration
 
-# 5. Optional — mock-backed integration proof (no live services required)
+# 5. Optional — install the frontend proof dependencies (Node 20 / Yarn 1.22.22)
+make test-bootstrap-frontend
+
+# 6. Optional — canonical frontend proof wrapper
+make proof-frontend
+
+# 7. Optional — mock-backed integration proof (no live services required)
 python scripts/run_tests.py --integration
 
-# 6. Optional — isolated live Mongo proof with a disposable Docker MongoDB
+# 8. Optional — isolated live Mongo proof with a disposable Docker MongoDB
 make proof-mongo-live
 
-# 7. Optional — live sidecar proof harness (starts and stops the sidecar)
+# 9. Optional — live sidecar proof harness (starts and stops the sidecar)
 make proof-sidecar
 
 # If localhost:3031 is already occupied, move the sidecar proof harness together
@@ -60,7 +67,7 @@ make test-sidecar
 ```
 
 The default local proof surface is service-free. The optional integration,
-live Mongo, and live sidecar proofs are separate opt-in tiers.
+frontend, live Mongo, and live sidecar proofs are separate opt-in tiers.
 
 That is the shortest path to prove the system locally. Everything else below covers setup, configuration, operator workflows, and advanced usage.
 
@@ -81,6 +88,8 @@ Hysight is built for teams who want agentic behavior without surrendering contro
 ## Why Hysight
 
 Hysight is an implementation of a **Hybrid Cognitive Agent (HCA)** as a bounded operator runtime. Its authority path stays inside the existing runtime, approval, executor, and replay layers instead of handing control to an open-ended autonomous loop. The cognitive modules (Planner, Critic, Perception, ToolReasoner) still compete for space in a capacity-limited **Global Workspace**, but they can only propose actions and workflow plans that the registry and executor actually implement.
+
+Experimental cognition stubs under `hca/src/hca/modules/`, `hca/src/hca/meta/`, and `hca/src/hca/prediction/` remain outside the current proof surface unless they are explicitly named in the runtime authority path.
 
 The runtime executes through one canonical authority path in `hca/src/hca/runtime/runtime.py`. A run may execute either a single validated action or a bounded workflow plan that chains inspection, approval-bound mutation, verification, and deterministic reporting steps inside the same run context. Approvals, snapshots, receipts, artifacts, and replay all remain anchored to that single path, and workflow runs commonly terminate on `create_run_report` rather than the mutating step itself.
 

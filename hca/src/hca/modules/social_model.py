@@ -1,4 +1,7 @@
-"""Social modelling module stub."""
+"""Experimental social modelling stub.
+
+This module is not part of the authoritative runtime path or proof surface.
+"""
 
 from hca.common.types import ModuleProposal, WorkspaceItem
 

@@ -1,4 +1,7 @@
-"""Predictor stubs."""
+"""Experimental predictor stubs.
+
+These helpers are not part of the authoritative runtime path or proof surface.
+"""
 
 
 def predict_outcome(action) -> float:

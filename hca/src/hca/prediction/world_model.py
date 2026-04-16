@@ -1,4 +1,7 @@
-"""World model stub."""
+"""Experimental world-model stub.
+
+This module is not part of the authoritative runtime path or proof surface.
+"""
 
 
 class WorldModel:

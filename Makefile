@@ -2,6 +2,7 @@
 	dev \
 	venv \
 	test-bootstrap \
+	test-bootstrap-frontend \
 	test-bootstrap-integration \
 	dev-bootstrap \
 	test \
@@ -9,6 +10,7 @@
 	test-contract \
 	test-backend-baseline \
 	test-backend-integration \
+	proof-frontend \
 	proof-mongo-live \
 	test-mongo-live \
 	test-sidecar \
@@ -43,6 +45,9 @@ venv:
 test-bootstrap:
 	$(PIP) install -r backend/requirements-test.txt
 
+test-bootstrap-frontend:
+	cd frontend && yarn install --frozen-lockfile
+
 test-bootstrap-integration:
 	$(PIP) install -r backend/requirements-test.txt -r backend/requirements-integration.txt
 
@@ -63,6 +68,9 @@ test-backend-baseline:
 
 test-backend-integration:
 	$(PYTHON) scripts/run_tests.py --integration
+
+proof-frontend:
+	$(PYTHON) scripts/proof_frontend.py
 
 proof-mongo-live:
 	$(PYTHON) scripts/proof_mongo_live.py --image "$(LIVE_MONGO_IMAGE)" --port "$(LIVE_MONGO_PORT)" --db-name "$(LIVE_MONGO_DB_NAME)"

@@ -67,6 +67,7 @@ The overlay (`compose.sidecar.yml`) automatically sets:
 
 - `MEMORY_BACKEND=rust`
 - `MEMORY_SERVICE_URL=http://memvid-sidecar:3031`
+- `MEMORY_DATA_DIR=/app/data`
 
 And adds a `depends_on` so the backend waits for the sidecar to be healthy before starting.
 
@@ -80,8 +81,9 @@ The frontend and operator APIs still talk to the same backend routes (`/api/...`
 # canonical local proof wrapper
 ./scripts/proof_local.sh
 
-# frontend operator proof
-cd frontend && yarn lint && CI=true yarn test --watch=false --runInBand && yarn build
+# frontend operator proof bootstrap + wrapper
+make test-bootstrap-frontend
+make proof-frontend
 
 # create and use the repo-local virtual environment
 make venv
@@ -128,8 +130,8 @@ temporary `HCA_STORAGE_ROOT` and matching `MEMORY_STORAGE_DIR`, so proof does
 not rely on repo-default storage state.
 
 The default local proof surface is `make test` / `python scripts/run_tests.py`.
-The backend integration, live Mongo, and live sidecar proofs are separate
-opt-in tiers.
+The frontend, backend integration, live Mongo, and live sidecar proofs are
+separate opt-in tiers.
 
 If you use the repo-scoped VS Code verification workflow, prepare
 `test_result.md` first with

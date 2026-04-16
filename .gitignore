@@ -83,6 +83,7 @@ memvid_service/target/
 
 # Runtime state
 storage/
+data/
 
 memory/test_credentials.md
 

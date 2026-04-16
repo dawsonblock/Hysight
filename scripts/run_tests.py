@@ -7,6 +7,8 @@ Default mode runs only the supported service-free local baseline proof surface:
 
 Optional proof tiers are explicit and do not broaden the baseline contract:
 
+    python scripts/run_tests.py --frontend
+
     python scripts/run_tests.py --integration
 
     MONGO_URL=mongodb://127.0.0.1:27017 \
@@ -34,6 +36,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Sequence
 
 from proof_receipt import (
+    empty_test_counts,
     merge_test_counts,
     summarize_junit_xml,
     write_proof_receipt,
@@ -95,6 +98,8 @@ STEP_JUNIT_FILENAMES = {
     "mongo-live": "backend-live-mongo-proof.xml",
     "sidecar": "backend-live-sidecar-proof.xml",
 }
+
+FRONTEND_PROOF_RECEIPT_PATH = PROOF_ARTIFACT_DIR / "frontend.json"
 
 EXPECTED_BASELINE_STEP_COUNTS = {
     "pipeline": {
@@ -204,6 +209,14 @@ SIDECAR_STEP: Step = {
         "MEMORY_BACKEND": "rust",
         "MEMORY_SERVICE_URL": MEMORY_SERVICE_URL,
     },
+}
+
+FRONTEND_STEP: Step = {
+    "id": "frontend",
+    "name": "Frontend proof",
+    "receipt_name": "frontend",
+    "external_receipt": FRONTEND_PROOF_RECEIPT_PATH,
+    "cmd": [sys.executable, "scripts/proof_frontend.py"],
 }
 
 # ---------------------------------------------------------------------------
@@ -429,13 +442,61 @@ def _warn_if_stale_optional_receipt(
     )
 
 
+def _summarize_proof_receipt(
+    receipt_path: pathlib.Path,
+) -> tuple[
+    Dict[str, int],
+    List[Dict[str, str]],
+    Dict[str, Any] | None,
+    str | None,
+    str | None,
+    str | None,
+]:
+    counts = empty_test_counts()
+    if not receipt_path.exists():
+        return counts, [], None, f"missing proof receipt: {receipt_path}", None, None
+
+    try:
+        payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return counts, [], None, f"invalid proof receipt json: {exc}", None, None
+
+    for key in counts:
+        try:
+            counts[key] = int(payload.get(key, 0))
+        except (TypeError, ValueError):
+            return counts, [], None, f"invalid count field {key!r} in proof receipt", None, None
+
+    skipped_cases = payload.get("skipped_cases")
+    if not isinstance(skipped_cases, list):
+        skipped_cases = []
+
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = None
+
+    receipt_error = payload.get("junit_summary_error")
+    if receipt_error is not None and not isinstance(receipt_error, str):
+        receipt_error = "invalid receipt error field"
+
+    outcome = payload.get("outcome")
+    if outcome is not None and not isinstance(outcome, str):
+        outcome = None
+
+    failure_reason = payload.get("failure_reason")
+    if failure_reason is not None and not isinstance(failure_reason, str):
+        failure_reason = None
+
+    return counts, skipped_cases, metadata, receipt_error, outcome, failure_reason
+
+
 def _invocation_receipt_name(
     args: argparse.Namespace,
     steps: Sequence[Step],
 ) -> str:
     if args.baseline_step:
         return args.baseline_step
-    if not any((args.integration, args.mongo_live, args.sidecar)):
+    if not any((args.frontend, args.integration, args.mongo_live, args.sidecar)):
         return "baseline"
     if len(steps) == 1:
         return str(steps[0]["receipt_name"])
@@ -534,6 +595,11 @@ def _validate_result(step: Step, result: StepResult) -> List[str]:
             f"{step['name']}: pytest reported collection issues: "
             f"{', '.join(result['collection_issues'])}"
         )
+    if step.get("external_receipt") and result.get("proof_outcome") not in {None, "passed"}:
+        errors.append(
+            f"{step['name']}: external proof receipt outcome was "
+            f"{result.get('proof_outcome')!r}"
+        )
     if step["id"] in EXPECTED_BASELINE_STEP_COUNTS:
         errors.extend(_validate_baseline_result(result))
     return errors
@@ -555,11 +621,20 @@ def _write_invocation_receipt(
                 "counts": result["counts"],
                 "junit_xml": (
                     str(result["junit_xml"].relative_to(REPO_ROOT))
-                    if result["junit_xml"].exists()
+                    if isinstance(result.get("junit_xml"), pathlib.Path)
+                    and result["junit_xml"].exists()
+                    else None
+                ),
+                "receipt_json": (
+                    str(result["receipt_path"].relative_to(REPO_ROOT))
+                    if isinstance(result.get("receipt_path"), pathlib.Path)
+                    and result["receipt_path"].exists()
                     else None
                 ),
                 "collection_issues": result["collection_issues"],
                 "skipped_cases": result["skipped_cases"],
+                "proof_metadata": result.get("proof_metadata"),
+                "proof_failure_reason": result.get("proof_failure_reason"),
             }
             for result in results
         ],
@@ -598,7 +673,59 @@ def _write_invocation_receipt(
 # Runner
 # ---------------------------------------------------------------------------
 
+
+def _run_external_receipt_step(step: Step) -> StepResult:
+    receipt_path = pathlib.Path(step["external_receipt"])
+    receipt_path.unlink(missing_ok=True)
+    cmd = list(step["cmd"])
+    extra_env = step.get("env", {})
+    env = dict(os.environ)
+    env.update(extra_env)
+
+    print(f"\n==> [{step['name']}]")
+    display_env = " ".join(f"{k}={v}" for k, v in extra_env.items())
+    display_cmd = shlex.join(cmd)
+    if display_env:
+        print(f"    {display_env} {display_cmd}")
+    else:
+        print(f"    {display_cmd}")
+
+    completed = subprocess.run(
+        cmd,
+        env=env,
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, end="", file=sys.stderr)
+
+    counts, skipped_cases, proof_metadata, receipt_error, proof_outcome, proof_failure_reason = _summarize_proof_receipt(
+        receipt_path
+    )
+    return {
+        "id": step["id"],
+        "name": step["name"],
+        "receipt_name": step["receipt_name"],
+        "returncode": completed.returncode,
+        "junit_xml": None,
+        "receipt_path": receipt_path,
+        "counts": counts,
+        "skipped_cases": skipped_cases,
+        "junit_error": receipt_error,
+        "collection_issues": [],
+        "proof_metadata": proof_metadata,
+        "proof_outcome": proof_outcome,
+        "proof_failure_reason": proof_failure_reason,
+    }
+
 def _run_step(step: Step) -> StepResult:
+    if step.get("external_receipt"):
+        return _run_external_receipt_step(step)
+
     junit_xml = _step_junit_path(step["id"])
     junit_xml.unlink(missing_ok=True)
     cmd = _build_pytest_command(step, junit_xml)
@@ -682,6 +809,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--frontend",
+        action="store_true",
+        help=(
+            "Run the opt-in frontend proof tier. Requires Node 20.x, "
+            "Yarn 1.22.22, installed frontend dependencies, and the repo-local "
+            "Python test environment."
+        ),
+    )
+    parser.add_argument(
         "--integration",
         action="store_true",
         help=(
@@ -718,7 +854,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if args.baseline_step and any((args.integration, args.mongo_live, args.sidecar)):
+    if args.baseline_step and any((args.frontend, args.integration, args.mongo_live, args.sidecar)):
         print(
             "--baseline-step cannot be combined with optional proof flags.",
             file=sys.stderr,
@@ -729,7 +865,7 @@ def main() -> int:
         return 1
 
     if not _validate_hca_package_authority(
-        include_integration=bool(args.integration or args.mongo_live)
+        include_integration=bool(args.frontend or args.integration or args.mongo_live)
     ):
         return 1
 
@@ -766,10 +902,12 @@ def main() -> int:
         steps = [
             next(step for step in BASELINE_STEPS if step["id"] == args.baseline_step)
         ]
-    elif not any((args.integration, args.mongo_live, args.sidecar)):
+    elif not any((args.frontend, args.integration, args.mongo_live, args.sidecar)):
         steps = list(BASELINE_STEPS)
     else:
         steps = []
+        if args.frontend:
+            steps.append(FRONTEND_STEP)
         if args.integration:
             steps.append(INTEGRATION_STEP)
         if args.mongo_live:
@@ -796,7 +934,7 @@ def main() -> int:
             result = _run_step(step)
             results.append(result)
             if result["returncode"] != 0:
-                failure_reason = (
+                failure_reason = result.get("proof_failure_reason") or (
                     f"[{step['name']}] exited with code {result['returncode']}"
                 )
                 print(f"\nFAILED: {failure_reason}")

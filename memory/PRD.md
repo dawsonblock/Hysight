@@ -3,6 +3,7 @@
 > Historical migration and design notes from Apr 2025.
 > This file is not the current operational source of truth.
 > For current runtime behavior use `README.md`, `backend/.env.example`, `backend/server.py`, and `contract/schema.json`.
+> Current sidecar data roots are env-driven and untracked; do not treat the historical `data/` paths below as seeded runtime state.
 
 ## Original Problem Statement
 

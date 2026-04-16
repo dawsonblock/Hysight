@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import os
 import socket
-import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from urllib.error import URLError
@@ -82,6 +82,15 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=float(os.environ.get("MEMORY_SERVICE_READY_TIMEOUT", "90")),
     )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Absolute directory for the sidecar memory data root. When unset, "
+            "proof uses an isolated temporary directory."
+        ),
+    )
     parser.add_argument("--log-path", type=Path, default=DEFAULT_LOG_PATH)
     return parser.parse_args()
 
@@ -92,7 +101,17 @@ def main() -> int:
     args.log_path.parent.mkdir(parents=True, exist_ok=True)
 
     sidecar_process: subprocess.Popen[str] | None = None
+    data_dir_handle: tempfile.TemporaryDirectory[str] | None = None
     log_handle = None
+
+    if args.data_dir is not None:
+        data_dir = args.data_dir.expanduser().resolve()
+        data_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        data_dir_handle = tempfile.TemporaryDirectory(
+            prefix="hysight-sidecar-proof-"
+        )
+        data_dir = Path(data_dir_handle.name).resolve()
 
     try:
         if _check_health(service_url):
@@ -116,6 +135,7 @@ def main() -> int:
         log_handle = args.log_path.open("w", encoding="utf-8")
         env = dict(os.environ)
         env["MEMORY_SERVICE_PORT"] = str(args.port)
+        env["MEMORY_DATA_DIR"] = str(data_dir)
         sidecar_process = subprocess.Popen(
             [
                 "cargo",
@@ -145,6 +165,7 @@ def main() -> int:
         proof_env["MEMORY_SERVICE_PORT"] = str(args.port)
         proof_env["RUN_MEMVID_TESTS"] = "1"
         proof_env["MEMORY_BACKEND"] = "rust"
+        proof_env["MEMORY_DATA_DIR"] = str(data_dir)
         proof_env["HYSIGHT_PROOF_ENVIRONMENT_MODE"] = "cargo_local_sidecar"
         proof_env["HYSIGHT_PROOF_SERVICE_CONNECTION_MODE"] = (
             "cargo-run:memvid_service"
@@ -172,6 +193,8 @@ def main() -> int:
         if log_handle is not None:
             log_handle.close()
         _stop_process(sidecar_process)
+        if data_dir_handle is not None:
+            data_dir_handle.cleanup()
 
 
 if __name__ == "__main__":
