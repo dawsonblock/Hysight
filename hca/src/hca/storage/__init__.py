@@ -1,7 +1,15 @@
 """Storage package exports."""
 
-from hca.storage.event_log import append_event, iter_events
-from hca.storage.runs import save_run, load_run, run_operation_lock
+from hca.storage.event_log import append_event, iter_events, read_events
+from hca.storage.runs import (
+    JSONLReadResult,
+    JSONLReplayError,
+    append_jsonl_record,
+    load_run,
+    read_jsonl_records,
+    run_operation_lock,
+    save_run,
+)
 from hca.storage.receipts import append_receipt, iter_receipts
 from hca.storage.approvals import (
     append_request,
@@ -29,9 +37,14 @@ from hca.storage.snapshots import (
 __all__ = [
     "append_event",
     "iter_events",
+    "read_events",
     "save_run",
     "load_run",
     "run_operation_lock",
+    "append_jsonl_record",
+    "read_jsonl_records",
+    "JSONLReadResult",
+    "JSONLReplayError",
     "append_receipt",
     "iter_receipts",
     "append_request",

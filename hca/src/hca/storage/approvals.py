@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
@@ -16,6 +15,7 @@ from hca.common.types import (
 from hca.common.enums import ApprovalDecision
 from hca.common.time import parse_iso, utc_now
 from hca.paths import run_storage_path
+from hca.storage.runs import append_jsonl_record, read_jsonl_records
 
 
 logger = logging.getLogger(__name__)
@@ -30,9 +30,11 @@ def _append_record(
     run_id: str, record_type: str, payload: Dict[str, Any]
 ) -> None:
     path = _path(run_id)
-    os.makedirs(path.parent, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps({"record_type": record_type, **payload}) + "\n")
+    append_jsonl_record(
+        run_id,
+        path,
+        {"record_type": record_type, **payload},
+    )
 
 
 def _scan_records(run_id: str) -> Tuple[List[Dict[str, Any]], int]:
@@ -40,21 +42,13 @@ def _scan_records(run_id: str) -> Tuple[List[Dict[str, Any]], int]:
     if not path.exists():
         return [], 0
 
-    records: List[Dict[str, Any]] = []
-    corruption_count = 0
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError:
-                corruption_count += 1
+    result = read_jsonl_records(path)
+    records = result.records
+    corruption_count = 1 if result.skipped_truncated_final_line else 0
 
     if corruption_count:
         logger.warning(
-            "Skipped %s malformed approval record(s) for run %s",
+            "Skipped %s truncated approval record(s) for run %s",
             corruption_count,
             run_id,
         )

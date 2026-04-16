@@ -7,8 +7,9 @@ import os
 import tempfile
 import threading
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 try:  # pragma: no cover - Windows fallback keeps import optional.
     import fcntl
@@ -22,6 +23,17 @@ from hca.paths import run_storage_path
 _RUN_LOCKS: dict[str, threading.RLock] = {}
 _RUN_LOCKS_GUARD = threading.Lock()
 _RUN_LOCK_DEPTH = threading.local()
+
+
+class JSONLReplayError(RuntimeError):
+    """Raised when append-only JSONL storage is malformed."""
+
+
+@dataclass(frozen=True)
+class JSONLReadResult:
+    records: list[dict[str, Any]]
+    next_offset: int
+    skipped_truncated_final_line: bool = False
 
 
 def _run_path(run_id: str) -> Path:
@@ -95,31 +107,100 @@ def run_operation_lock(run_id: str) -> Iterator[None]:
         process_lock.release()
 
 
+def append_jsonl_record(run_id: str, path: Path, record: Any) -> None:
+    """Append one JSON object line under the run lock and fsync it."""
+    line = json.dumps(record, default=str)
+    with run_operation_lock(run_id):
+        os.makedirs(path.parent, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(line)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        _fsync_directory(path.parent)
+
+
+def read_jsonl_records(
+    path: Path,
+    *,
+    start_offset: int = 0,
+) -> JSONLReadResult:
+    """Read JSONL records while tolerating only a torn final line.
+
+    When the last line is truncated at EOF, replay skips it and reports the
+    offset of the truncated line so tailing readers can retry later.
+    """
+    if not path.exists():
+        return JSONLReadResult(records=[], next_offset=max(start_offset, 0))
+
+    file_size = path.stat().st_size
+    safe_offset = min(max(start_offset, 0), file_size)
+    records: list[dict[str, Any]] = []
+    next_offset = safe_offset
+
+    with open(path, "rb") as handle:
+        handle.seek(safe_offset)
+        while True:
+            record_offset = handle.tell()
+            raw_line = handle.readline()
+            if raw_line == b"":
+                break
+
+            next_offset = handle.tell()
+            if not raw_line.strip():
+                continue
+
+            try:
+                record = json.loads(raw_line.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                truncated_final_line = (
+                    next_offset == file_size and not raw_line.endswith(b"\n")
+                )
+                if truncated_final_line:
+                    return JSONLReadResult(
+                        records=records,
+                        next_offset=record_offset,
+                        skipped_truncated_final_line=True,
+                    )
+                raise JSONLReplayError(
+                    f"Malformed JSONL record in {path} at byte offset {record_offset}"
+                ) from exc
+
+            if not isinstance(record, dict):
+                raise JSONLReplayError(
+                    f"JSONL record in {path} at byte offset {record_offset} is not an object"
+                )
+            records.append(record)
+
+    return JSONLReadResult(records=records, next_offset=next_offset)
+
+
 def save_run(context: RunContext) -> None:
     """Persist the run context to disk."""
     path = _run_path(context.run_id)
-    os.makedirs(path.parent, exist_ok=True)
-    fd, temp_path = tempfile.mkstemp(
-        prefix=f"{path.stem}-",
-        suffix=path.suffix,
-        dir=path.parent,
-        text=True,
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(
-                context.model_dump(),
-                handle,
-                default=str,
-                indent=2,
-            )
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_path, path)
-        _fsync_directory(path.parent)
-    finally:
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+    with run_operation_lock(context.run_id):
+        os.makedirs(path.parent, exist_ok=True)
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f"{path.stem}-",
+            suffix=path.suffix,
+            dir=path.parent,
+            text=True,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(
+                    context.model_dump(),
+                    handle,
+                    default=str,
+                    indent=2,
+                )
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, path)
+            _fsync_directory(path.parent)
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
 
 
 def load_run(run_id: str) -> Optional[RunContext]:

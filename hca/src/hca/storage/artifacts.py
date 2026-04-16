@@ -1,11 +1,10 @@
 """Storage for artifact records."""
 
-import json
-import os
 from pathlib import Path
 from typing import Iterator, Dict, Any
 
 from hca.paths import run_storage_path
+from hca.storage.runs import append_jsonl_record, read_jsonl_records
 
 
 def _path(run_id: str) -> Path:
@@ -14,15 +13,8 @@ def _path(run_id: str) -> Path:
 
 def append_artifact(run_id: str, record: Dict[str, Any]) -> None:
     path = _path(run_id)
-    os.makedirs(path.parent, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+    append_jsonl_record(run_id, path, record)
 
 
 def iter_artifacts(run_id: str) -> Iterator[Dict[str, Any]]:
-    path = _path(run_id)
-    if not path.exists():
-        return
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            yield json.loads(line)
+    yield from read_jsonl_records(_path(run_id)).records

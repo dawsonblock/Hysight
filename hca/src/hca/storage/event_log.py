@@ -1,7 +1,5 @@
-"""Append‑only event log for runs."""
+"""Append-only event log for runs."""
 
-import json
-import os
 from pathlib import Path
 from typing import Dict, Iterator, Optional, Any
 
@@ -9,6 +7,7 @@ from hca.common.types import RunContext
 from hca.common.time import utc_now as _now
 from hca.common.enums import EventType, RuntimeState
 from hca.paths import run_storage_path
+from hca.storage.runs import append_jsonl_record, read_jsonl_records
 
 
 def _events_path(run_id: str) -> Path:
@@ -26,7 +25,6 @@ def append_event(
 ) -> None:
     """Append an event to the run's event log."""
     path = _events_path(run.run_id)
-    os.makedirs(path.parent, exist_ok=True)
     record = {
         "event_id": os.urandom(8).hex(),
         "run_id": run.run_id,
@@ -38,15 +36,18 @@ def append_event(
         "prior_state": prior_state.value if prior_state else None,
         "next_state": next_state.value if next_state else None,
     }
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+    append_jsonl_record(run.run_id, path, record)
+
+
+def read_events(
+    run_id: str,
+    *,
+    offset: int = 0,
+) -> tuple[list[Dict[str, Any]], int]:
+    result = read_jsonl_records(_events_path(run_id), start_offset=offset)
+    return result.records, result.next_offset
 
 
 def iter_events(run_id: str) -> Iterator[Dict[str, Any]]:
     """Iterate over all events for a run."""
-    path = _events_path(run_id)
-    if not path.exists():
-        return
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            yield json.loads(line)
+    yield from read_jsonl_records(_events_path(run_id)).records
