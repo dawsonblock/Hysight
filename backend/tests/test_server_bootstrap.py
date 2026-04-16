@@ -37,9 +37,22 @@ _ASYNCIO_DEPRECATION_FILTER = (
     ":DeprecationWarning"
 )
 
+_FRONTEND_COMPATIBILITY_ROUTE_PATTERNS = (
+    re.compile(r"['\"`](?:/api)?/runs(?:['\"`]|/|\?)"),
+    re.compile(r"['\"`]/['\"`]\s*\+\s*['\"`]runs(?:['\"`]|/|\?)"),
+    re.compile(r"['\"`](?:/api)?['\"`]\s*\+\s*['\"`]/runs(?:['\"`]|/|\?)"),
+)
+
 
 def _is_workspace_python_path(relative_path: str) -> bool:
     return not relative_path.startswith(".venv/")
+
+
+def _contains_frontend_compatibility_run_route(content: str) -> bool:
+    return any(
+        pattern.search(content)
+        for pattern in _FRONTEND_COMPATIBILITY_ROUTE_PATTERNS
+    )
 
 
 def test_load_settings_allows_db_disabled_when_env_unset(monkeypatch):
@@ -386,7 +399,10 @@ def test_frontend_uses_shared_api_client_only():
             direct_fetch_files.append(relative_path)
         if relative_path not in allowed_frontend_api_files and "http://localhost:8000" in content:
             direct_backend_url_files.append(relative_path)
-        if relative_path not in allowed_frontend_api_files and re.search(r"['\"]/?runs(?:/|['\"])", content):
+        if (
+            relative_path not in allowed_frontend_api_files
+            and _contains_frontend_compatibility_run_route(content)
+        ):
             compatibility_route_files.append(relative_path)
         if (
             relative_path not in allowed_frontend_api_files
