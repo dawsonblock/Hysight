@@ -1,362 +1,395 @@
 # Hysight
 
-A proof-first Hybrid Cognitive Agent runtime with bounded authority, replay-backed operations, and human approval for side effects.
+Proof-first Hybrid Cognitive Agent runtime with bounded authority, replay-backed operator workflows, and explicit approval gates for side effects.
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-operator%20api-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Motor%203.3-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
-[![Rust](https://img.shields.io/badge/Rust-Axum%200.7-CE412B?logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Verification](https://img.shields.io/badge/verification-proof--first-0f172a)](#testing)
-[![Operator Surface](https://img.shields.io/badge/operator-replay--backed-0f766e)](#api)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-memvid%20sidecar-CE412B?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Verification](https://img.shields.io/badge/verification-proof--first-0f172a)](#proof-surfaces)
 
----
+Hysight is a bounded operator runtime for Hybrid Cognitive Agent workflows. The runtime keeps execution inside one authority path: proposals enter a capacity-limited workspace, approved actions flow through the executor, every transition is written to storage, and the backend plus frontend read that replay-backed state back out. The supported local workflow starts with proof, not with ad hoc service startup.
 
-## Quick start
+## Jump To
 
-| I want to... | Command |
-| --- | --- |
-| Verify the default local proof surface | `python scripts/run_tests.py` |
-| Install frontend proof dependencies | `make test-bootstrap-frontend` |
-| Verify the frontend operator surface | `make proof-frontend` |
-| Start the backend | `./scripts/run_backend.sh` |
-| Start the frontend | `cd frontend && yarn start` |
-| Run the optional memvid sidecar | `cargo run --manifest-path memvid_service/Cargo.toml --release` |
+- [What Hysight Is](#what-hysight-is)
+- [System Overview](#system-overview)
+- [Quick Start](#quick-start)
+- [Proof Surfaces](#proof-surfaces)
+- [Run Modes](#run-modes)
+- [Configuration](#configuration)
+- [API Surface](#api-surface)
+- [Repository Layout](#repository-layout)
+- [Developer Workflow](#developer-workflow)
+- [Troubleshooting](#troubleshooting)
+- [Documentation Map](#documentation-map)
 
-If you only do one thing, run the proof surface first. Hysight treats local verification as the default entry point, not an afterthought.
+## What Hysight Is
 
-The Python runtime package lives under `./hca` and is installed editable as part of repo bootstrap.
+Hysight implements a Hybrid Cognitive Agent as a bounded runtime rather than an open-ended autonomy loop.
 
-```bash
-# 1. Create the local virtual environment
-make venv
-source .venv/bin/activate
+Core properties:
 
-# 2. Install the default backend proof surface
-make test-bootstrap
+- Bounded authority: modules can propose, but only the executor and registry can actually perform work.
+- Replay-backed operations: the operator UI, API summaries, receipts, approvals, and artifacts all read from stored run state.
+- Proof-first development: the shortest supported path is `python scripts/run_tests.py`.
+- Explicit approvals: mutation and other configured side effects fail closed without approval.
+- Graceful degradation: optional LLM-assisted modules fall back to deterministic behavior when external model dependencies are unavailable.
 
-# 3. Run the default local proof surface
-make test
+Inside the current proof surface:
 
-# 4. Optional — install the extra integration/live proof dependencies
-make test-bootstrap-integration
+- The runtime authority path under `hca/src/hca/runtime/`
+- The deployed FastAPI surface at `backend.server:app`
+- The replay-backed operator console in `frontend/`
+- The optional memvid sidecar contract behind the backend memory boundary
 
-# 5. Optional — install the frontend proof dependencies (Node 20 / Yarn 1.22.22)
-make test-bootstrap-frontend
+Outside the current proof surface unless explicitly wired into the authority path:
 
-# 6. Optional — canonical frontend proof wrapper
-make proof-frontend
+- Experimental cognition stubs under `hca/src/hca/modules/`
+- Experimental meta and prediction helpers not named by the runtime authority path
 
-# 7. Optional — mock-backed integration proof (no live services required)
-python scripts/run_tests.py --integration
+## System Overview
 
-# 8. Optional — isolated live Mongo proof with a disposable Docker MongoDB
-make proof-mongo-live
-
-# 9. Optional — live sidecar proof harness (starts and stops the sidecar)
-make proof-sidecar
-
-# If localhost:3031 is already occupied, move the sidecar proof harness together
-MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
-MEMORY_SERVICE_PORT=3032 python scripts/run_tests.py --sidecar
-
-# Narrow already-running-service paths remain available too
-make test-mongo-live
-make test-sidecar
-```
-
-The default local proof surface is service-free. The optional integration,
-frontend, live Mongo, and live sidecar proofs are separate opt-in tiers.
-
-That is the shortest path to prove the system locally. Everything else below covers setup, configuration, operator workflows, and advanced usage.
-
-## Jump to
-
-- [Why Hysight](#why-hysight)
-- [Architecture](#architecture)
-- [Bounded Tool Catalog](#bounded-tool-catalog)
-- [Running the Application](#running-the-application)
-- [API](#api)
-- [Testing](#testing)
-- [Verification Workflow](#verification-workflow)
-
-Hysight is built for teams who want agentic behavior without surrendering control: bounded tools, explicit approvals, replayable execution, and a default workflow that starts with proof instead of promises.
-
----
-
-## Why Hysight
-
-Hysight is an implementation of a **Hybrid Cognitive Agent (HCA)** as a bounded operator runtime. Its authority path stays inside the existing runtime, approval, executor, and replay layers instead of handing control to an open-ended autonomous loop. The cognitive modules (Planner, Critic, Perception, ToolReasoner) still compete for space in a capacity-limited **Global Workspace**, but they can only propose actions and workflow plans that the registry and executor actually implement.
-
-Experimental cognition stubs under `hca/src/hca/modules/`, `hca/src/hca/meta/`, and `hca/src/hca/prediction/` remain outside the current proof surface unless they are explicitly named in the runtime authority path.
-
-The runtime executes through one canonical authority path in `hca/src/hca/runtime/runtime.py`. A run may execute either a single validated action or a bounded workflow plan that chains inspection, approval-bound mutation, verification, and deterministic reporting steps inside the same run context. Approvals, snapshots, receipts, artifacts, and replay all remain anchored to that single path, and workflow runs commonly terminate on `create_run_report` rather than the mutating step itself.
-
-The frontend also exposes a replay-backed operator console beside the live chat surface. Recent run summaries, per-run event history, and artifact previews all come from the same bounded backend replay and storage surface rather than a second UI-only state model.
-
-### What makes it different
-
-- Bounded authority: proposals are cheap, but execution only happens through canonical action binding, approval policy, and the executor.
-- Replay-backed operations: the operator UI and HTTP APIs read from the same stored run history, receipts, approvals, artifacts, and snapshots that the runtime writes.
-- Proof-first workflow: the shortest supported path is to verify the repo locally before starting services.
-- Graceful degradation: LLM-assisted modules can fall back to deterministic behavior when external model dependencies are unavailable.
-
-### At a glance
-
-| Layer | Role | Where to look |
-| --- | --- | --- |
-| Runtime | Deterministic orchestration, workflow execution, state transitions, replay | `hca/src/hca/runtime/` |
-| Executor | Canonical binding, approvals, bounded tool dispatch | `hca/src/hca/executor/` |
-| Workspace | Capacity-limited proposal competition and ranking | `hca/src/hca/workspace/` |
-| Backend | FastAPI operator surface and memory/status endpoints | `backend/` |
-| Frontend | Live chat plus replay-backed operator console | `frontend/` |
-| Contracts | JSON schema and runtime/operator reference docs | `contract/`, `hca/docs/` |
-
----
-
-## Architecture
-
-### Authority path
+The canonical deployed HTTP surface is `backend.server:app`. The FastAPI app in `hca/src/hca/api/app.py` is a compatibility surface for repo-local tests and inspection, not the normal deployment target.
 
 ```mermaid
 flowchart LR
     Goal[Goal] --> Runtime[Runtime]
     Runtime --> Modules[Planner / Critic / Perception / ToolReasoner]
     Modules --> Workspace[Global Workspace]
-    Workspace --> Scoring[Meta monitor + action scoring]
+    Workspace --> Scoring[Scoring + conflict detection]
     Scoring --> Binding[Canonical action binding]
     Binding --> Approval[Approval gate]
     Approval --> Executor[Executor]
     Executor --> Tools[Bounded registry tools]
     Tools --> Storage[Events / receipts / artifacts / snapshots]
-    Storage --> Replay[Replay]
-    Replay --> Operator[Backend APIs + operator console]
+    Storage --> Replay[Replay-backed summaries]
+    Replay --> Operator[FastAPI + React operator console]
 ```
 
-### Expanded system layout
+At a glance:
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│                      HCA Runtime                        │
-│                                                         │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌──────┐  │
-│  │ Planner  │  │  Critic  │  │Perception │  │ Tool │  │
-│  │ (LLM)    │  │(LLM+Rule)│  │  (Text)   │  │Rsner │  │
-│  └────┬─────┘  └────┬─────┘  └─────┬─────┘  └──┬───┘  │
-│       │             │              │             │      │
-│       └─────────────┴──────────────┴─────────────┘      │
-│                          │                              │
-│               ┌──────────▼──────────┐                  │
-│               │  Global Workspace   │  ← capacity: 7   │
-│               │  (scored + ranked)  │                  │
-│               └──────────┬──────────┘                  │
-│                          │                              │
-│               ┌──────────▼──────────┐                  │
-│               │   Meta Monitor      │                  │
-│               │  conflict detect    │                  │
-│               │  missing-info scan  │                  │
-│               │  confidence track   │                  │
-│               └──────────┬──────────┘                  │
-│                          │                              │
-│               ┌──────────▼──────────┐                  │
-│               │  Action Scoring     │                  │
-│               │  risk / reversibil. │                  │
-│               └──────────┬──────────┘                  │
-│                          │                              │
-│          ┌───────────────▼───────────────┐             │
-│          │      Approval Gate            │             │
-│          │  registry policy + approval   │             │
-│          └───────────────┬───────────────┘             │
-│                          │                              │
-│               ┌──────────▼──────────┐                  │
-│               │     Executor        │                  │
-│               │  tool call + audit  │                  │
-│               └──────────┬──────────┘                  │
-│                          │                              │
-│               ┌──────────▼──────────┐                  │
-│               │   Memory Commit     │                  │
-│               │  episodic / semantic│                  │
-│               └─────────────────────┘                  │
-└─────────────────────────────────────────────────────────┘
-    │                            │
-  ┌──────▼──────┐            ┌────────▼────────┐
-  │  FastAPI    │            │  memvid-sidecar │
-  │  Backend    │            │  (Rust / Axum)  │
-  └──────┬──────┘            └─────────────────┘
-    │
-  ┌──────▼──────┐
-  │  React 19   │
-  │  Frontend   │
-  └─────────────┘
-```
+| Layer | Responsibility | Primary path |
+| --- | --- | --- |
+| Runtime | State machine, workflow orchestration, replay | `hca/src/hca/runtime/` |
+| Executor | Approval enforcement and bounded tool dispatch | `hca/src/hca/executor/` |
+| Workspace | Capacity-limited proposal competition and ranking | `hca/src/hca/workspace/` |
+| Backend | Public HTTP API, memory routes, subsystem status | `backend/` |
+| Frontend | Live chat plus replay-backed operator console | `frontend/` |
+| Sidecar | Optional Rust-backed memory service | `memvid_service/` |
+| Contracts | API schema and runtime/operator docs | `contract/`, `hca/docs/` |
 
----
+## Quick Start
 
-## Key Features
-
-| Feature | Description |
-| --- | --- |
-| **Global Workspace** | Capacity-limited (7 slots) item-ranked workspace inspired by Global Workspace Theory |
-| **Optional LLM Modules** | Planner, Critic, and TextPerception can use external LLMs when configured and fall back to deterministic behavior when unavailable |
-| **Approval Gate** | Approval is defined centrally in the tool registry. Read-only workspace inspection tools execute directly; mutation and other configured side effects require explicit approval and resume with the same canonical action binding. |
-| **Immutable Event Log** | Every state transition, proposal, and execution is appended to an append-only JSONL log |
-| **Conflict Detection** | Automatic detection of contradicting action proposals across modules |
-| **Bounded Workflow Plans** | The planner/runtime can select explicit investigation and mutation-verification workflow templates that execute step-by-step without bypassing the executor, approval, or replay layers. |
-| **Bounded Tool Catalog** | Repo-bounded tools now cover stat, glob, search, targeted text reads, investigation reports, run reports, approved text patching, artifact writes, and an allowlisted command path |
-| **Memory Outcomes** | Local episodic memory writes are authoritative. External memory-controller ingestion remains best-effort, but success and failure are now emitted explicitly in the event log. |
-| **Evaluation Harnesses** | Six built-in harnesses: audit, coordination, embodiment, memory, metacognition, proactivity |
-| **Portable Storage** | All paths resolve from repo root; override via `HCA_STORAGE_ROOT` env var |
-| **Memvid Sidecar** | Rust/Axum HTTP sidecar exposing the `ingest / retrieve / maintain` memory contract |
-
-## Bounded Tool Catalog
-
-The executor registry is the authoritative capability surface. The runtime and planner should only rely on tools that appear there.
-
-Current bounded tools:
-
-- `echo`
-- `list_dir`
-- `stat_path`
-- `glob_workspace`
-- `search_workspace`
-- `read_text_range`
-- `read_file` (legacy alias for `read_text_range`)
-- `investigate_workspace_issue`
-- `summarize_search_results`
-- `create_run_report`
-- `create_diff_report`
-- `patch_text_file`
-- `replace_in_file` (legacy alias for `patch_text_file`)
-- `store_note`
-- `write_artifact`
-- `run_command` (allowlisted only; no shell)
-
-Mutation and reporting behavior:
-
-- Workflow plans persist `active_workflow`, workflow checkpoints, step history, and workflow artifacts in the run context, snapshots, and replay output.
-- `contract_api_drift` now performs bounded target-local evidence collection and a broader bounded contract-surface comparison before emitting a dedicated `contract_drift_summary` artifact.
-- `patch_text_file` binds approval to the canonical validated action plus a file-state hash before execution.
-- Successful patch actions emit before/after hashes, changed-line summaries, and a diff artifact.
-- `summarize_search_results` writes a deterministic investigation artifact from bounded search output and targeted file excerpts.
-- `create_diff_report` certifies an applied mutation with hashes, changed lines, diff-artifact linkage, and approval provenance.
-- `create_run_report` materializes a deterministic artifact from prior events, receipts, approvals, artifacts, and memory outcomes for a run.
-- In workflow runs, the terminal selected action and latest receipt may be `create_run_report`, so mutation and verification evidence should be read from workflow step history or the relevant receipt rather than assuming the last receipt is the mutating step.
-- `investigate_workspace_issue` is a bounded read-only workflow tool that searches, reads targeted ranges, and emits a structured evidence artifact.
-- Workflow budgets fail closed: exhausting a declared step budget emits `workflow_budget_exhausted`, and unresolved next-step arguments emit `workflow_terminated` with `next_step_unbuildable` rather than improvising execution.
-
-Replay and memory guarantees:
-
-- Replay and resume validate canonical action identity against approval bindings before consuming approval.
-- Replay reconstructs workflow state, including active workflow metadata, workflow checkpoints, step history, and workflow artifacts.
-- Local episodic memory writes are part of the normal runtime path.
-- External memory-controller ingestion is best-effort, but emits `external_memory_written` or `external_memory_write_failed` events instead of failing silently.
-- Command execution, when used, stays bounded to allowlisted argument arrays, repo-relative cwd, timeouts, and truncated output.
-
-Approvals fail closed on replay:
-
-- Resume only proceeds when the replay-backed approval record still exists and matches the pending approval for the run.
-- Denied or consumed approvals halt or reject resumption instead of falling through to execution.
-- Approval resume re-validates the canonical action binding before consuming approval, so tampered or stale selected-action payloads are rejected.
-- Approval decisions stay authoritative in append-only approval records and replay output rather than trusting stale in-memory run context alone.
-
----
-
-## Repository Structure
-
-```text
-Hysight/
-├── hca/                        # Core cognitive agent package
-│   ├── src/hca/
-│   │   ├── api/                # Shared API models + internal compatibility app
-│   │   ├── cli/                # CLI entry points (smoke, eval, replay)
-│   │   ├── common/             # Shared enums, types, time utilities
-│   │   ├── evaluation/         # Evaluation harnesses and metrics
-│   │   ├── executor/           # Approval enforcement + tool registry
-│   │   ├── memory/             # Episodic, semantic, procedural, identity stores
-│   │   ├── meta/               # Conflict detection, missing-info scan, self-model
-│   │   ├── modules/            # Cognitive modules: Planner, Critic, Perception, ToolReasoner
-│   │   ├── paths.py            # Centralized, repo-relative path resolver
-│   │   ├── prediction/         # Action scoring and ranking
-│   │   ├── runtime/            # Orchestrator, state machine, replay, snapshots
-│   │   ├── storage/            # Run state, event log, receipts, artifacts, approvals
-│   │   └── workspace/          # Global Workspace: admission, broadcast, ranking, recurrence
-│   ├── configs/                # YAML configuration (base, models, policy, safety, memory)
-│   └── tests/                  # Unit and integration test suites
-│
-├── backend/                    # FastAPI HTTP server + MongoDB integration
-│   ├── server.py               # Application factory, settings, lifecycle, routes
-│   └── tests/                  # Backend unit and integration tests
-│
-├── frontend/                   # React 19 single-page application
-│   ├── src/                    # Components, pages, hooks, API client
-│   └── public/                 # Static assets
-│
-├── memory_service/             # Optional in-process memory controller (Python)
-├── memvid/                     # Memvid memory engine bindings
-├── memvid_service/             # Memvid HTTP sidecar (Rust / Axum)
-├── storage/                    # Runtime-generated run state (gitignored)
-└── tests/                      # Top-level integration tests
-```
-
----
-
-## Tech Stack
-
-### Backend / Agent
-
-- Python 3.9+, FastAPI 0.110, Pydantic v2
-- Motor 3.3 (async MongoDB driver)
-- PyYAML for configuration
-- `python-dotenv` for environment management
-
-### Frontend
-
-- React 19, React Router v7
-- shadcn/ui (Radix UI primitives + Tailwind CSS)
-- Recharts for data visualization
-- Fetch-based API client helpers
-
-### Sidecar
-
-- Rust (edition 2021), Axum 0.7, Tokio
-
-### Tooling
-
-- pytest, httpx for testing
-- black, isort, flake8, mypy for code quality
-- ESLint 9 and Jest via CRACO for frontend proof
-
----
-
-## Prerequisites
-
-- Python 3.9+
-- Node.js 20.x and Yarn 1
-- MongoDB 6+ if you want the optional `/api/status` persistence endpoints
-- Rust toolchain (only required to build the `memvid-sidecar`)
-
----
-
-## Installation
-
-### 1. Clone and enter the repository
+If you only do one thing, run the proof surface first.
 
 ```bash
 git clone https://github.com/dawsonblock/Hysight.git
 cd Hysight
+
+make venv
+source .venv/bin/activate
+
+cp .env.example .env
+
+make test-bootstrap
+make test
 ```
 
-### 2. Set up the Python environment
+That path creates the repo-local virtual environment, installs the default backend proof surface, and runs the service-free baseline proof contract.
+
+Then start the app stack you actually want:
+
+```bash
+# backend API
+./scripts/run_backend.sh
+
+# optional frontend
+make test-bootstrap-frontend
+cd frontend && yarn start
+```
+
+Important bootstrap facts:
+
+- The Python runtime package lives under `./hca`.
+- `make venv` installs `backend/requirements-test.txt`, which installs editable `./hca`.
+- The default proof surface does not require MongoDB or a running sidecar.
+- The frontend is pinned to Node 20 and Yarn 1.22.22 and validates its runtime on install.
+
+## Proof Surfaces
+
+`python scripts/run_tests.py` is the single proof authority for the default local backend surface. `./scripts/proof_local.sh` is intentionally a thin wrapper over that command.
+
+Current baseline expectations:
+
+| Step | Expected passing tests |
+| --- | --- |
+| HCA pipeline | 7 |
+| Backend baseline | 81 |
+| Contract conformance | 18 |
+
+Supported proof tiers:
+
+| Tier | Command | Requires live services | Main receipt |
+| --- | --- | --- | --- |
+| Default local proof | `python scripts/run_tests.py` | No | `artifacts/proof/baseline.json` |
+| Pipeline only | `python scripts/run_tests.py --baseline-step pipeline` | No | `artifacts/proof/pipeline.json` |
+| Backend baseline only | `python scripts/run_tests.py --baseline-step backend-baseline` | No | `artifacts/proof/backend-baseline.json` |
+| Contract only | `python scripts/run_tests.py --baseline-step contract` | No | `artifacts/proof/contract.json` |
+| Frontend proof | `python scripts/run_tests.py --frontend` or `make proof-frontend` | No | `artifacts/proof/frontend.json` |
+| Backend integration proof | `python scripts/run_tests.py --integration` or `make test-backend-integration` | No | `artifacts/proof/integration.json` |
+| Live Mongo proof | `make proof-mongo-live` | Docker Mongo harness | `artifacts/proof/live-mongo.json` |
+| Live sidecar proof | `make proof-sidecar` | Rust sidecar harness | `artifacts/proof/live-sidecar.json` |
+
+Proof artifacts and generated evidence:
+
+| Location | Purpose |
+| --- | --- |
+| `artifacts/proof/` | Latest proof receipts |
+| `artifacts/proof/history/` | Timestamped history receipts for live Mongo and live sidecar proofs |
+| `test_reports/pytest/` | JUnit XML output for proof steps |
+| `storage/` | Replay-backed runtime state, snapshots, approvals, artifacts, and event logs |
+
+Frontend proof details:
+
+- Node runtime verification
+- API fixture drift verification
+- ESLint
+- Jest
+- Production build
+
+## Run Modes
+
+### 1. Default backend-only mode
+
+This is the standard local runtime path.
 
 ```bash
 make venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate
+cp .env.example .env
+./scripts/run_backend.sh
 ```
 
-### 3. Bootstrap the proof surface
+Public API:
 
-The shortest supported setup path is:
+- Root: `http://localhost:8000/api/`
+- OpenAPI docs: `http://localhost:8000/docs`
+- Subsystem status: `http://localhost:8000/api/subsystems`
+
+Notes:
+
+- `MEMORY_BACKEND=python` is the default.
+- `MEMORY_SERVICE_URL` must be unset in python mode.
+- If `MONGO_URL` and `DB_NAME` are both unset, the backend still serves the HCA and memory routes; Mongo-backed `/api/status` persistence remains disabled.
+
+### 2. Frontend plus backend
+
+```bash
+make test-bootstrap-frontend
+cd frontend
+yarn start
+```
+
+Frontend details:
+
+- React 19 single-page app
+- Default local URL: `http://localhost:3000`
+- Requests proxy to `http://localhost:8000` by default
+- Operator layout combines live chat with a replay-backed console for recent runs, event history, approvals, and stored artifacts
+
+If you need a non-default backend origin, copy `frontend/.env.example` to `frontend/.env.local` and set `REACT_APP_BACKEND_URL`.
+
+### 3. Optional local sidecar mode
+
+Use this when you intentionally want the Rust-backed memory implementation.
+
+```bash
+MEMORY_SERVICE_PORT=3031 make run-memvid-sidecar
+MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3031 ./scripts/run_backend.sh
+```
+
+If port `3031` is already occupied:
+
+```bash
+MEMORY_SERVICE_PORT=3032 make run-memvid-sidecar
+MEMORY_SERVICE_PORT=3032 make proof-sidecar
+```
+
+### 4. Container deployment
+
+Default local deployment:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Optional sidecar overlay:
+
+```bash
+cp .env.example .env
+docker compose -f compose.yml -f compose.sidecar.yml up --build
+```
+
+What the sidecar overlay adds:
+
+- `MEMORY_BACKEND=rust`
+- `MEMORY_SERVICE_URL=http://memvid-sidecar:3031`
+- `MEMORY_DATA_DIR=/app/data`
+- A health-checked backend dependency on the sidecar
+
+## Configuration
+
+Copy the shared environment template before local runs or container runs:
+
+```bash
+cp .env.example .env
+```
+
+Key variables:
+
+| Variable | Default | Required | Notes |
+| --- | --- | --- | --- |
+| `MEMORY_BACKEND` | `python` | No | Set to `rust` only when using the sidecar |
+| `MEMORY_SERVICE_URL` | unset | Only in `rust` mode | Must stay unset in `python` mode |
+| `HCA_STORAGE_ROOT` | `<repo>/storage` | No | Absolute run storage root |
+| `MEMORY_STORAGE_DIR` | `<HCA_STORAGE_ROOT>/memory` | No | Must be an absolute child path under `HCA_STORAGE_ROOT` |
+| `MONGO_URL` | unset | Paired with `DB_NAME` | Set both or neither |
+| `DB_NAME` | unset | Paired with `MONGO_URL` | Set both or neither |
+| `CORS_ORIGINS` | unset | No | Comma-separated absolute origins only |
+| `EMERGENT_LLM_KEY` | unset | For real agent runs | Optional for some proof-only paths |
+
+Fail-closed configuration rules:
+
+- `MEMORY_SERVICE_URL` is rejected unless `MEMORY_BACKEND=rust`.
+- `MEMORY_STORAGE_DIR` must stay inside `HCA_STORAGE_ROOT`.
+- `MONGO_URL` and `DB_NAME` must be set together or omitted together.
+- `CORS_ORIGINS` cannot contain `*`.
+
+## API Surface
+
+The frontend and the operator workflows use the same replay-backed backend surface. There is no second UI-only state model.
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | `/api/` | Backend root health message |
+| `GET` | `/api/subsystems` | Database, memory, storage, and LLM readiness |
+| `POST` | `/api/status` | Persist a status check when Mongo is configured |
+| `GET` | `/api/status` | List persisted status checks when Mongo is configured |
+| `POST` | `/api/hca/run` | Create and execute a run |
+| `POST` | `/api/hca/run/stream` | Stream run progress via server-sent events |
+| `GET` | `/api/hca/runs` | List recent replay-backed runs |
+| `GET` | `/api/hca/run/{run_id}` | Fetch run summary, state, and trace |
+| `GET` | `/api/hca/run/{run_id}/events` | List newest-first run events |
+| `GET` | `/api/hca/run/{run_id}/artifacts` | List stored artifact records |
+| `GET` | `/api/hca/run/{run_id}/artifacts/{artifact_id}` | Fetch an artifact content preview |
+| `POST` | `/api/hca/run/{run_id}/approve` | Approve a pending action |
+| `POST` | `/api/hca/run/{run_id}/deny` | Deny a pending action |
+| `POST` | `/api/hca/memory/retrieve` | Retrieve memory using the `query_text` contract |
+| `POST` | `/api/hca/memory/maintain` | Run memory maintenance |
+| `GET` | `/api/hca/memory/list` | List stored memory entries |
+| `DELETE` | `/api/hca/memory/{memory_id}` | Delete a memory record |
+
+Example calls:
+
+```bash
+# root
+curl http://localhost:8000/api/
+
+# subsystem readiness
+curl http://localhost:8000/api/subsystems
+
+# recent runs
+curl "http://localhost:8000/api/hca/runs?limit=5"
+
+# newest events for one run
+curl "http://localhost:8000/api/hca/run/<run-id>/events?limit=20"
+
+# replay-backed artifact list
+curl "http://localhost:8000/api/hca/run/<run-id>/artifacts?limit=20"
+```
+
+## CLI Commands
+
+The installed `./hca` package also exposes repo-local CLI entry points:
+
+```bash
+# single goal smoke test
+hca-smoke "summarize the latest quarterly report"
+
+# evaluation harnesses
+hca-eval all --json
+
+# replay a prior run
+hca-replay --run-id <run-id>
+```
+
+## Repository Layout
+
+```text
+Hysight/
+├── backend/                 # FastAPI server, route modules, backend tests
+├── contract/                # HTTP schema contract
+├── docs/                    # Deployment and support docs
+├── frontend/                # React operator UI, API client, frontend tests
+├── hca/                     # Core HCA runtime package
+│   └── src/hca/
+│       ├── executor/        # Approval gate and bounded tool registry
+│       ├── memory/          # Episodic and semantic memory layers
+│       ├── runtime/         # Orchestration, replay, snapshots, state machine
+│       ├── storage/         # Event log, approvals, receipts, artifacts
+│       └── workspace/       # Global Workspace admission and ranking
+├── memvid/                  # Memory engine implementation
+├── memvid_service/          # Rust / Axum sidecar service
+├── memory_service/          # In-process Python memory controller
+├── scripts/                 # Bootstrap, proof, and support scripts
+├── storage/                 # Repo-local runtime output (gitignored)
+└── tests/                   # Top-level proof tests
+```
+
+## Developer Workflow
+
+Common commands:
+
+| Task | Command |
+| --- | --- |
+| Create repo-local venv | `make venv` |
+| Install default test surface | `make test-bootstrap` |
+| Install frontend deps | `make test-bootstrap-frontend` |
+| Install integration extras | `make test-bootstrap-integration` |
+| Install dev tooling | `make dev-bootstrap` |
+| Run full local proof surface | `make test` |
+| Run fixture drift guard | `make test-fixture-drift` |
+| Run backend baseline only | `make test-backend-baseline` |
+| Run contract proof only | `make test-contract` |
+| Run pipeline proof only | `make test-pipeline` |
+| Run frontend proof wrapper | `make proof-frontend` |
+| Run integration proof | `make test-backend-integration` |
+| Run live Mongo proof harness | `make proof-mongo-live` |
+| Run live sidecar proof harness | `make proof-sidecar` |
+
+Notes for local development:
+
+- The proof runner isolates `HCA_STORAGE_ROOT` and `MEMORY_STORAGE_DIR` per proof step so verification does not depend on leftover repo state.
+- The frontend is pinned to Node `20.20.2` and Yarn `1.22.22` and checks runtime compatibility before install.
+- `backend/tests/test_server_bootstrap.py` acts as a repo-level contract sentinel for launch surfaces, proof workflows, and helper script behavior.
+
+## Tech Stack
+
+| Area | Primary tech |
+| --- | --- |
+| Backend | Python, FastAPI, Pydantic |
+| Frontend | React 19, CRACO, Tailwind, Radix primitives |
+| Proof | pytest, JUnit XML, proof receipts under `artifacts/proof/` |
+| Data | Optional MongoDB for `/api/status` persistence |
+| Sidecar | Rust, Axum, Tokio |
+
+## Troubleshooting
+
+### Proof runner says the runtime package is not resolving from `./hca`
+
+Use the supported bootstrap path:
 
 ```bash
 make venv
@@ -364,542 +397,55 @@ source .venv/bin/activate
 make test-bootstrap
 ```
 
-If you do not want to use `make`, the equivalent command is:
+### `MemoryConfigurationError: MEMORY_SERVICE_URL is required`
 
-```bash
-python -m pip install -r backend/requirements-test.txt
-```
+You enabled `MEMORY_BACKEND=rust` without a healthy sidecar. Either:
 
-That single install command covers:
+- switch back to `MEMORY_BACKEND=python`, or
+- start the sidecar and set `MEMORY_SERVICE_URL=http://localhost:3031`
 
-- the editable `./hca` runtime package
-- backend runtime dependencies
-- backend test dependencies such as `requests-mock`
+### `MemoryConfigurationError: MEMORY_SERVICE_URL must be unset unless MEMORY_BACKEND=rust`
 
-The install authority for the Python runtime is `./hca`; the backend proof
-surface does not install a second runtime package from anywhere else.
+Remove `MEMORY_SERVICE_URL` while running in python mode.
 
-If you want the optional integration and live Mongo proof tiers too, install:
+### `BackendConfigurationError: Mongo configuration is partial`
 
-```bash
-make venv
-source .venv/bin/activate
-make test-bootstrap-integration
-```
+Set both `MONGO_URL` and `DB_NAME`, or set neither.
 
-Or, without `make`:
+### Frontend install fails runtime verification
 
-```bash
-python -m pip install -r backend/requirements-integration.txt
-```
-
-That adds the optional Mongo drivers used by `python scripts/run_tests.py
---integration` and `make test-mongo-live` without changing the default local
-proof contract.
-
-If you also want formatter, lint, and type-check tooling, use:
-
-```bash
-make dev-bootstrap
-```
-
-Or, without `make`:
-
-```bash
-python -m pip install -r backend/requirements-dev.txt
-```
-
-For frontend work, switch to the repo's Node target before running Yarn
-commands. The frontend package now ships `frontend/.nvmrc` and
-`frontend/.node-version` pinned to Node 20, plus `frontend/.tool-versions`,
-`frontend/mise.toml`, and a `volta` block in `frontend/package.json`, so local
-runs can match the CI workflow across the common Node version managers. The
-frontend package also declares the same Node 20 / Yarn 1.22.22 engine
-requirements plus a `preinstall` runtime guard for fast failure on mismatched
-runtimes.
-
-If you only need the backend runtime and not the proof surface:
-
-```bash
-python -m pip install -e ./hca -r backend/requirements-core.txt
-```
-
-If you want the broader backend runtime bundle, including optional Mongo
-support and emergent integration dependencies, install:
-
-```bash
-python -m pip install -e ./hca -r backend/requirements.txt
-```
-
-### 4. Configure environment variables
-
-```bash
-cp backend/.env.example backend/.env   # fill in values before starting
-```
-
-Edit `backend/.env`:
-
-```dotenv
-# Optional — MongoDB connection
-# If both values are omitted, the backend starts in local mode and `/api/status`
-# returns 503. If either value is set without the other, startup fails.
-MONGO_URL=mongodb://localhost:27017
-DB_NAME=hysight
-
-# Optional — override where run artifacts are written
-# HCA_STORAGE_ROOT=/path/to/custom/storage
-
-# Optional — override the local python memory store path.
-# If set, it must stay under HCA_STORAGE_ROOT.
-# MEMORY_STORAGE_DIR=/path/to/custom/storage/memory
-
-# Optional — enable the Rust memory sidecar.
-# If MEMORY_BACKEND=rust is set, MEMORY_SERVICE_URL must point to a healthy
-# sidecar that responds on /health or startup will fail. Leave
-# MEMORY_SERVICE_URL unset in python mode; mixed mode is rejected.
-# MEMORY_BACKEND=rust
-# MEMORY_SERVICE_URL=http://localhost:3031
-
-# Optional — credentialed browser access.
-# CORS is fail-closed by default; use absolute origins only.
-# CORS_ORIGINS=http://localhost:3000
-
-# Optional — LLM API key for the Critic module
-# EMERGENT_LLM_KEY=...
-```
-
-### 5. Install the frontend
-
-```bash
-cd frontend
-yarn install
-cd ..
-```
-
-If you need the frontend to talk to a non-default backend origin, copy
-`frontend/.env.example` to `frontend/.env.local` and set
-`REACT_APP_BACKEND_URL`. Leave it unset for the standard local workflow.
-
-### 6. (Optional) Build the memvid sidecar
-
-```bash
-cd memvid_service
-cargo build --release
-cd ..
-```
-
-This is only required if you want to run the live memvid sidecar path. The
-default backend proof commands do not require a running Rust sidecar.
-
-To enable the Rust-backed memory path in the backend, set both
-`MEMORY_BACKEND=rust` and `MEMORY_SERVICE_URL=http://localhost:3031` before
-starting the FastAPI app. Startup now validates the sidecar via `/health` and
-fails fast if the service is unreachable.
-
-The proof runner now sets isolated temporary `HCA_STORAGE_ROOT` and
-`MEMORY_STORAGE_DIR` values for each proof step so local proof does not depend
-on repo-default storage paths or leftover state.
-
----
-
-## Running the Application
-
-### Start the backend
-
-**Linux / macOS / WSL / Git Bash:**
-
-```bash
-./scripts/run_backend.sh
-```
-
-**Windows (PowerShell / CMD) — portable alternative:**
-
-```powershell
-python -m uvicorn backend.server:app --host 0.0.0.0 --port 8000 --reload
-```
-
-> On Windows, load `.env` first or set the relevant variables in your shell
-> before running the command above. The shell script handles this automatically
-> on Unix-like systems.
-
-The script loads `.env`, validates prerequisites and mode, and starts uvicorn.
-The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
-
-### Start the frontend
-
-```bash
-cd frontend
-yarn start
-```
-
-The UI will open at `http://localhost:3000`. In local development, `/api`
-requests proxy to the backend at `http://localhost:8000` by default.
-
-The default layout is two-pane: live agent chat on the left and a persistent operator console on the right. The operator console lists recent runs, shows replay-backed workflow and approval state, and lets you inspect stored events and artifact previews without separate manual API calls.
-
-Mongo-backed `/api/status` persistence is optional. If `MONGO_URL` and
-`DB_NAME` are both unset, the backend still serves HCA and memory routes while
-`/api/status` returns `503` by design.
-
-The operator surface also exposes `GET /api/subsystems`, which always reports
-the current database, memory, storage, and LLM readiness state even when
-Mongo-backed status persistence is disabled.
-
-### (Optional) Run the memvid sidecar
-
-```bash
-cargo run --manifest-path memvid_service/Cargo.toml --release
-```
-
----
-
-## Usage
-
-### CLI — Smoke test
-
-Run a single end-to-end pass through the agent with a goal string:
-
-```bash
-# from repo root, with the hca package installed
-hca-smoke "summarize the latest quarterly report"
-```
-
-### CLI — Evaluation
-
-Run the full evaluation harness suite:
-
-```bash
-hca-eval all --json
-```
-
-### CLI — Replay
-
-Replay a past run from its stored event log:
-
-```bash
-hca-replay --run-id <run-id>
-```
-
-### API
-
-The deployed HTTP surface is `backend.server:app`. The `hca/src/hca/api/app.py`
-application is a repo-local compatibility layer for direct runtime tests and
-inspection, not the frontend or container entrypoint.
-
-All agent operations are available via the REST API:
-
-| Method | Path | Description |
-| --- | --- | --- |
-| `GET` | `/api/` | Backend root message |
-| `POST` | `/api/status` | Create a persisted status check when Mongo is configured |
-| `GET` | `/api/status` | List persisted status checks when Mongo is configured |
-| `GET` | `/api/subsystems` | Report database, memory, storage, and LLM subsystem health |
-| `POST` | `/api/hca/run` | Create and execute a new HCA run |
-| `POST` | `/api/hca/run/stream` | Stream run progress via server-sent events |
-| `GET` | `/api/hca/runs` | List recent replay-backed run summaries |
-| `GET` | `/api/hca/run/{run_id}` | Fetch run state, trace, and summary |
-| `GET` | `/api/hca/run/{run_id}/events` | List bounded newest-first run events |
-| `GET` | `/api/hca/run/{run_id}/artifacts` | List stored artifact records for a run |
-| `GET` | `/api/hca/run/{run_id}/artifacts/{artifact_id}` | Fetch a bounded artifact content preview |
-| `POST` | `/api/hca/run/{run_id}/approve` | Grant approval for a pending action |
-| `POST` | `/api/hca/run/{run_id}/deny` | Deny a pending action |
-| `POST` | `/api/hca/memory/retrieve` | Retrieve memories using the `query_text` contract |
-| `POST` | `/api/hca/memory/maintain` | Run memory maintenance |
-| `GET` | `/api/hca/memory/list` | List stored memories |
-| `DELETE` | `/api/hca/memory/{memory_id}` | Delete a memory record |
-
-### Operator API examples
-
-The frontend operator console uses the same bounded replay-backed HTTP surface
-shown below. There is no separate UI-only state model.
-
-```bash
-# List recent runs
-curl "http://localhost:8000/api/hca/runs?limit=5"
-
-# Inspect backend subsystem readiness and degraded-mode state
-curl "http://localhost:8000/api/subsystems"
-
-# Fetch the newest events for a specific run
-curl "http://localhost:8000/api/hca/run/<run-id>/events?limit=20"
-
-# List stored artifacts for a run
-curl "http://localhost:8000/api/hca/run/<run-id>/artifacts?limit=20"
-
-# Preview a single artifact body
-curl "http://localhost:8000/api/hca/run/<run-id>/artifacts/<artifact-id>"
-```
-
-### Runtime reference docs
-
-- [hca/docs/operator-runtime-contract.md](hca/docs/operator-runtime-contract.md)
-  freezes the current bounded operator/runtime contract from code reality.
-- [hca/docs/runtime-contracts.md](hca/docs/runtime-contracts.md)
-  describes the runtime types, workflow semantics, and state-machine
-  guarantees.
-- [contract/schema.json](contract/schema.json) is the authoritative HTTP
-  payload contract used by the backend contract-conformance proof.
-
----
-
-## Configuration
-
-All runtime configuration lives in `hca/configs/`:
-
-| File | Purpose |
-| --- | --- |
-| `base.yaml` | Workspace capacity, approval timeout, tool action classes |
-| `models.yaml` | Planner and Critic model identifiers |
-| `policy.yaml` | Risk level thresholds and approval requirements |
-| `safety.yaml` | Proactive throttle settings |
-| `memory.yaml` | Per-type retention policies |
-| `environments.yaml` | Environment-specific overrides |
-
-**Excerpt from `base.yaml`:**
-
-```yaml
-runtime:
-  workspace_capacity: 7         # max items in the Global Workspace
-  approval_timeout_seconds: 3600
-
-policy:
-  default_risk_threshold: low
-
-tools:
-  echo:
-    action_class: low
-    requires_approval: false
-  store_note:
-    action_class: medium
-    requires_approval: true
-  write_artifact:
-    action_class: high
-    requires_approval: true
-```
-
-### Storage path override
-
-By default, all run artifacts are written to `<repo-root>/storage/runs/<run-id>/`. Override this with:
-
-```bash
-export HCA_STORAGE_ROOT=/data/hysight/storage
-```
-
----
-
-## Runtime Lifecycle
-
-The agent moves through a deterministic state machine on every run:
-
-```text
-created → initializing → gathering_inputs → proposing → admitting
-       → broadcasting → recurrent_update → action_selection
-       → awaiting_approval?  → executing → observing
-       → memory_commit → reporting → completed
-                                            ↓
-                                      (failed | halted)
-```
-
-Each transition is recorded as an event. The Critic module runs during `broadcasting` — using the LLM when available, otherwise falling back to rule-based conflict and missing-info checks.
-
----
-
-## Testing
-
-### Bootstrap
-
-Install test dependencies before running any test commands:
-
-```bash
-python -m pip install -r backend/requirements-test.txt
-```
-
-Equivalent `make` alias: `make test-bootstrap`.
-
-If `backend/tests/test_contract_conformance.py` or the mock sidecar tests fail
-because `requests-mock` is missing, the environment was not bootstrapped with
-the repo's declared test dependencies yet.
-
-For formatter and lint tooling:
-
-```bash
-python -m pip install -r backend/requirements-dev.txt   # or: make dev-bootstrap
-```
-
-### Default proof surface (no external services required)
-
-The fastest correct path — runs all four proof modes in order:
-
-```bash
-./scripts/proof_local.sh
-```
-
-Equivalent direct invocation:
-
-```bash
-python scripts/run_tests.py
-```
-
-This backend proof path is the authoritative local runtime proof. It does not
-claim frontend verification, optional integration coverage, live Mongo
-coverage, or live Rust sidecar coverage by itself.
-
-### Individual proof modes
-
-| Proof mode | Command | CI job |
-| --- | --- | --- |
-| Baseline local proof surface | `python scripts/run_tests.py` | Baseline Local Proof Surface |
-| HCA pipeline proof | `pytest tests/test_hca_pipeline.py -q` | HCA Smoke Proof |
-| Contract conformance proof | `pytest backend/tests/test_contract_conformance.py -q` | Contract Conformance Proof |
-| Backend baseline proof | `pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q` | Backend Baseline Proof |
-| Backend integration proof | `pytest backend/tests/test_memvid_sidecar.py -q --run-integration` | Backend Integration Proof |
-| Backend live Mongo proof | `pytest backend/tests/test_status_live_mongo.py -q --run-live` | Backend Live Mongo Proof |
-| Backend live sidecar proof | `pytest backend/tests/test_memvid_sidecar.py -q --run-live` | Backend Live Sidecar Proof |
-
-### Frontend proof
-
-The operator UI is under its own CI proof surface in
-`.github/workflows/frontend-proof.yml`.
-
-Run it locally with:
+The frontend expects Node 20 and Yarn 1.22.22. Align your local Node toolchain before running:
 
 ```bash
 cd frontend
 yarn install --frozen-lockfile
-yarn lint
-CI=true yarn test --watch=false --runInBand
-yarn build
 ```
 
-This verifies the actual frontend toolchain in use today: dependency install,
-ESLint, Jest, API client boundary tests, and the production build.
+### `CORS_ORIGINS` rejects `*`
 
-## Verification Workflow
+Hysight does not allow wildcard CORS. Use explicit absolute origins such as:
 
-Hysight also ships repo-scoped VS Code customizations for verification and
-release-summary work. They are intended to keep proof runs narrow, keep
-`test_result.md` up to date, and make the next verifier explicit instead of
-reconstructing context from chat history.
-
-### Shared handoff file
-
-- `test_result.md` is the coordination file for implementation and verification
-  passes.
-- The protocol block at the top of that file is authoritative and should be
-  preserved exactly.
-- Backend and frontend verifiers record proof evidence, retest needs, and
-  handoff notes there.
-
-### Repo-scoped custom agents
-
-- [`.github/agents/backend-verification.agent.md`](.github/agents/backend-verification.agent.md)
-  validates FastAPI, backend runtime, Mongo-backed status proof, and sidecar
-  proof work.
-- [`.github/agents/frontend-verification.agent.md`](.github/agents/frontend-verification.agent.md)
-  validates React regressions, API-client boundary tests, lint, Jest, and the
-  production build.
-- [`.github/agents/release-notes.agent.md`](.github/agents/release-notes.agent.md)
-  turns [HARDENING_REPORT.md](HARDENING_REPORT.md),
-  [REPAIR_REPORT.md](REPAIR_REPORT.md), and
-  [RELEASE_NOTES.md](RELEASE_NOTES.md) into concise release-facing summaries.
-
-### Recommended handoff flow
-
-1. Run the prompt in
-   [`.github/prompts/prepare-verification-handoff.prompt.md`](.github/prompts/prepare-verification-handoff.prompt.md)
-   to update `test_result.md` before delegating verification.
-2. Invoke the backend or frontend verification agent based on the files and
-   proof surface involved.
-3. Use the release-notes agent when the implementation or repair reports need
-   to be collapsed into release-facing documentation.
-
-The handoff prompt prepares the tracking file and recommends the next verifier;
-it does not run tests by itself.
-
-### Live sidecar proof (opt-in locally)
-
-Proves real sidecar availability, retrieval, and restart semantics. Requires a
-running memvid sidecar (see [Build the memvid sidecar](#6-optional-build-the-memvid-sidecar)). This is not part of the default local proof surface:
-
-```bash
-make proof-sidecar
-
-# If localhost:3031 is busy, override the harness port
-MEMORY_SERVICE_PORT=3032 make proof-sidecar
-
-# Or use the narrow already-running-sidecar path
-make run-memvid-sidecar
-make test-sidecar
+```dotenv
+CORS_ORIGINS=http://localhost:3000,https://app.example.com
 ```
 
-Or directly:
+## Documentation Map
 
-```bash
-RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL=http://localhost:3032 \
-  pytest backend/tests/test_memvid_sidecar.py -q --run-live
-```
-
-The proof runner defaults to `http://localhost:3031`, but it will derive the
-loopback URL from `MEMORY_SERVICE_PORT` when `MEMORY_SERVICE_URL` is unset.
-
-### Live Mongo-backed `/api/status` proof (opt-in locally)
-
-Proves the real Mongo-backed status persistence path against a live MongoDB
-instance without changing the default service-free proof surface. This proof
-also sits outside the default local contract:
-
-```bash
-make proof-mongo-live
-
-# Or use the narrow already-running-Mongo path
-LIVE_MONGO_URL=mongodb://127.0.0.1:27017 \
-LIVE_MONGO_DB_NAME=hysight_live \
-make test-mongo-live
-```
-
-CI job name: **Backend Live Mongo Proof**. The separate live sidecar CI job is
-named **Backend Live Sidecar Proof**.
-
-### Notes
-
-- The baseline local proof validates the FastAPI app, in-process memory routes,
-  and HCA runtime behavior without external services.
-- The optional integration proof adds mock-backed memvid boundary coverage
-  without requiring a running sidecar.
-- The live sidecar proof remains a separate local opt-in path for the real Rust
-  sidecar, even though CI also exercises that supported mode.
-- The live Mongo proof remains a separate local opt-in path for real
-  `/api/status` persistence.
-- `./scripts/proof_local.sh` is the no-logic wrapper around the canonical
-  proof authority `python scripts/run_tests.py`.
-- GitHub Actions mirrors the backend proof modes in `.github/workflows/backend-proof.yml`
-  and the frontend proof surface in `.github/workflows/frontend-proof.yml`.
-- The backend rejects the legacy `{"query": ...}` memory retrieve body;
-  use `{"query_text": ...}` everywhere.
-- CORS is disabled by default; enable with explicit absolute origins via
-  `CORS_ORIGINS`.
-
----
-
-## Project Conventions
-
-- **Path resolution**: Never use `os.getcwd()` or hardcoded absolute paths. Import from `hca.paths` (`run_storage_path`, `REPO_ROOT`, etc.).
-- **Approval contract**: All `high`-class tool calls must pass through `Executor.execute(..., approved=True)` with a valid `ApprovalConsumption` record.
-- **Event immutability**: Storage event-log functions (`append_event`, `append_snapshot`, etc.) are append-only. Do not overwrite events.
-- **Module proposals**: Cognitive modules return a `ModuleProposal`; they must not directly mutate run state.
-- **LLM fallback**: Any code path that calls an LLM must degrade gracefully — catch `ImportError` and `Exception` and return a rule-based result.
-
----
+- [BOOTSTRAP.md](BOOTSTRAP.md): bootstrap truth for the repo-local runtime package and proof entrypoint
+- [docs/deployment.md](docs/deployment.md): local and container deployment guide
+- [hca/docs/operator-runtime-contract.md](hca/docs/operator-runtime-contract.md): current bounded operator/runtime contract
+- [hca/docs/runtime-contracts.md](hca/docs/runtime-contracts.md): runtime types, workflow semantics, and state guarantees
+- [contract/schema.json](contract/schema.json): authoritative HTTP payload contract used by contract-conformance proof
+- [HARDENING_REPORT.md](HARDENING_REPORT.md): hardening implementation detail
+- [REPAIR_REPORT.md](REPAIR_REPORT.md): repair and validation detail
+- [RELEASE_NOTES.md](RELEASE_NOTES.md): release-facing summary
 
 ## Contributing
 
-1. Fork the repository and create a feature branch from `main`.
-2. Write tests for any new behavior — unit tests in `hca/tests/unit/`, integration tests in `hca/tests/integration/`.
-3. Run the full test suite and ensure it passes with no new failures.
-4. Open a pull request with a clear description of the change and the motivation.
+1. Create a branch from `main`.
+2. Keep changes inside the existing authority path unless you are intentionally expanding the proof surface.
+3. Add or update tests for behavior changes.
+4. Re-run the proof tiers touched by your change.
+5. Open a pull request with the behavioral delta and verification evidence.
 
----
-
-## License
-
-[MIT](LICENSE) © Dawson Block
+The fastest trustworthy change review in this repo starts with proof evidence, not screenshots.
