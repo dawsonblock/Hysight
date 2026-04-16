@@ -539,44 +539,19 @@ class Runtime:
                     "receipt_id": receipt_payload.get("receipt_id"),
                 },
             )
-            self._set_state(
+            return self._fail_run(
                 context,
-                RuntimeState.failed,
-                {
-                    "reason": "workflow_step_failed",
+                "workflow_step_failed",
+                details={
                     "workflow_id": workflow.workflow_id,
                     "workflow_step_id": candidate.workflow_step_id,
                     "failure_count": self._execution_failure_count,
-                },
-            )
-            append_event(
-                context,
-                EventType.report_emitted,
-                "runtime",
-                {
-                    "action_id": candidate.action_id,
                     "status": receipt_payload.get("status"),
-                    "failure_count": self._execution_failure_count,
-                    "workflow_id": workflow.workflow_id,
                 },
-            )
-            append_event(
-                context,
-                EventType.run_failed,
-                "runtime",
-                {
-                    "receipt_id": receipt_payload.get("receipt_id"),
-                    "failure_count": self._execution_failure_count,
-                    "workflow_id": workflow.workflow_id,
-                },
-            )
-            self._write_snapshot(
-                context,
-                workspace or [],
+                workspace=workspace,
                 selected_action=candidate,
                 latest_receipt_id=receipt_payload.get("receipt_id"),
             )
-            return context.run_id
 
         checkpoint = context.workflow_checkpoint
         next_index = (
@@ -656,21 +631,14 @@ class Runtime:
                     "next_step_id": next_step.step_id,
                 },
             )
-            self._set_state(
+            return self._fail_run(
                 context,
-                RuntimeState.failed,
-                {
-                    "reason": "workflow_budget_exhausted",
-                    "workflow_id": workflow.workflow_id,
-                },
-            )
-            self._write_snapshot(
-                context,
-                workspace or [],
+                "workflow_budget_exhausted",
+                details={"workflow_id": workflow.workflow_id},
+                workspace=workspace,
                 selected_action=candidate,
                 latest_receipt_id=receipt_payload.get("receipt_id"),
             )
-            return context.run_id
 
         try:
             next_candidate = self._candidate_for_workflow_step(
@@ -691,22 +659,17 @@ class Runtime:
                     "error": str(exc),
                 },
             )
-            self._set_state(
+            return self._fail_run(
                 context,
-                RuntimeState.failed,
-                {
-                    "reason": "workflow_next_step_unbuildable",
+                "workflow_next_step_unbuildable",
+                details={
                     "workflow_id": workflow.workflow_id,
                     "workflow_step_id": next_step.step_id,
                 },
-            )
-            self._write_snapshot(
-                context,
-                workspace or [],
+                workspace=workspace,
                 selected_action=candidate,
                 latest_receipt_id=receipt_payload.get("receipt_id"),
             )
-            return context.run_id
         self._select_action(context, next_candidate)
         if next_candidate.requires_approval:
             return self._request_approval(
@@ -892,6 +855,70 @@ class Runtime:
             episodic_payload,
         )
 
+    def _fail_run(
+        self,
+        context: RunContext,
+        reason: str,
+        *,
+        details: Optional[Dict[str, Any]] = None,
+        workspace: Optional[Workspace] = None,
+        selected_action: Optional[ActionCandidate] = None,
+        latest_receipt_id: Optional[str] = None,
+    ) -> str:
+        state_payload = {"reason": reason, **(details or {})}
+        terminal_payload = {
+            "terminal_state": RuntimeState.failed.value,
+            **state_payload,
+        }
+        if selected_action is not None:
+            terminal_payload.setdefault("action_id", selected_action.action_id)
+            terminal_payload.setdefault("action_kind", selected_action.kind)
+        if latest_receipt_id is not None:
+            terminal_payload["receipt_id"] = latest_receipt_id
+
+        append_event(
+            context,
+            EventType.report_emitted,
+            "runtime",
+            terminal_payload,
+        )
+        self._set_state(context, RuntimeState.failed, state_payload)
+        append_event(
+            context,
+            EventType.run_failed,
+            "runtime",
+            terminal_payload,
+        )
+        self._write_snapshot(
+            context,
+            workspace or [],
+            selected_action=selected_action,
+            latest_receipt_id=latest_receipt_id,
+        )
+        return context.run_id
+
+    def _record_unhandled_failure(
+        self,
+        context: RunContext,
+        exc: Exception,
+    ) -> None:
+        if context.state in {
+            RuntimeState.completed,
+            RuntimeState.failed,
+            RuntimeState.halted,
+        }:
+            return
+        self._execution_failure_count += 1
+        self._fail_run(
+            context,
+            "unhandled_runtime_exception",
+            details={
+                "failure_count": self._execution_failure_count,
+                "error_type": exc.__class__.__name__,
+                "error": str(exc),
+            },
+        )
+
     def _halt_run(self, context: RunContext, reason: str) -> str:
         append_event(
             context,
@@ -997,7 +1024,11 @@ class Runtime:
         self._current_state = RuntimeState.created
         self._remaining_replan = self.replan_budget
         self._execution_failure_count = 0
-        return self._step(context)
+        try:
+            return self._step(context)
+        except Exception as exc:
+            self._record_unhandled_failure(context, exc)
+            raise
 
     def grant_approval(
         self,
@@ -1047,133 +1078,130 @@ class Runtime:
             context = load_run(run_id)
             if not context:
                 raise ValueError(f"Run {run_id} not found")
+            try:
+                from hca.runtime.replay import reconstruct_state
 
-            from hca.runtime.replay import reconstruct_state
+                replayed = reconstruct_state(run_id)
+                approval = replayed.get("approval")
+                if (
+                    isinstance(approval, dict)
+                    and approval.get("approval_id") == approval_id
+                    and approval.get("status") == "denied"
+                ):
+                    self._current_state = context.state
+                    return self._halt_run(
+                        context,
+                        f"Approval {approval_id} denied",
+                    )
 
-            replayed = reconstruct_state(run_id)
-            approval = replayed.get("approval")
-            if (
-                isinstance(approval, dict)
-                and approval.get("approval_id") == approval_id
-                and approval.get("status") == "denied"
-            ):
-                self._current_state = context.state
-                return self._halt_run(
-                    context,
-                    f"Approval {approval_id} denied",
+                context, replayed, _approval = (
+                    self._load_authoritative_pending_approval(
+                        run_id,
+                        approval_id,
+                        allowed_statuses=("pending", "granted"),
+                    )
                 )
-
-            context, replayed, _approval = (
-                self._load_authoritative_pending_approval(
+                validation = validate_resume_approval(
                     run_id,
                     approval_id,
-                    allowed_statuses=("pending", "granted"),
+                    token,
                 )
-            )
-            validation = validate_resume_approval(
-                run_id,
-                approval_id,
-                token,
-            )
-            if not validation["ok"]:
-                reason = validation["reason"] or "invalid_approval"
-                status = validation["resolved_status"]
-                if status == "denied":
-                    return self._halt_run(
-                        context, f"Approval {approval_id} denied"
-                    )
-                if status == "expired":
-                    self._set_state(
+                if not validation["ok"]:
+                    reason = validation["reason"] or "invalid_approval"
+                    status = validation["resolved_status"]
+                    if status == "denied":
+                        return self._halt_run(
+                            context, f"Approval {approval_id} denied"
+                        )
+                    if status == "expired":
+                        self._fail_run(
+                            context,
+                            reason,
+                            details={"approval_id": approval_id},
+                        )
+                    raise ValueError(reason.replace("_", " "))
+
+                action_data = replayed.get("selected_action")
+                if not isinstance(action_data, dict):
+                    self._fail_run(
                         context,
-                        RuntimeState.failed,
-                        {"reason": reason, "approval_id": approval_id},
+                        "selected_action_unrecoverable",
                     )
-                    self._write_snapshot(context, [], None)
-                raise ValueError(reason.replace("_", " "))
+                    raise ValueError(
+                        "Could not reconstruct selected action from events"
+                    )
 
-            action_data = replayed.get("selected_action")
-            if not isinstance(action_data, dict):
-                self._set_state(
-                    context,
-                    RuntimeState.failed,
-                    {"reason": "selected_action_unrecoverable"},
-                )
-                self._write_snapshot(context, [], None)
-                raise ValueError(
-                    "Could not reconstruct selected action from events"
-                )
+                try:
+                    candidate = canonicalize_action_candidate(
+                        ActionCandidate.model_validate(action_data)
+                    )
+                except (KeyError, ToolValidationError) as exc:
+                    self._fail_run(
+                        context,
+                        "selected_action_binding_invalid",
+                        details={"approval_id": approval_id},
+                    )
+                    raise ValueError(
+                        "Could not validate selected action from events"
+                    ) from exc
 
-            try:
-                candidate = canonicalize_action_candidate(
-                    ActionCandidate.model_validate(action_data)
+                if not candidate.requires_approval:
+                    raise ValueError("selected action is not approval gated")
+
+                validation = validate_resume_approval(
+                    run_id,
+                    approval_id,
+                    token,
+                    candidate=candidate,
                 )
-            except (KeyError, ToolValidationError) as exc:
-                self._set_state(
+                if not validation["ok"]:
+                    reason = validation["reason"] or "invalid_approval"
+                    if reason in {
+                        "approved_action_mismatch",
+                        "approval_binding_corrupted",
+                    }:
+                        self._fail_run(
+                            context,
+                            reason,
+                            details={"approval_id": approval_id},
+                            selected_action=candidate,
+                        )
+                    raise ValueError(reason.replace("_", " "))
+
+                append_event(
                     context,
-                    RuntimeState.failed,
+                    EventType.approval_granted,
+                    "runtime",
                     {
-                        "reason": "selected_action_binding_invalid",
                         "approval_id": approval_id,
+                        "token": token,
+                        "action_fingerprint": (
+                            candidate.binding.action_fingerprint
+                            if candidate.binding is not None
+                            else None
+                        ),
                     },
                 )
-                self._write_snapshot(context, [], None)
-                raise ValueError(
-                    "Could not validate selected action from events"
-                ) from exc
-
-            if not candidate.requires_approval:
-                raise ValueError("selected action is not approval gated")
-
-            validation = validate_resume_approval(
-                run_id,
-                approval_id,
-                token,
-                candidate=candidate,
-            )
-            if not validation["ok"]:
-                reason = validation["reason"] or "invalid_approval"
-                if reason in {
-                    "approved_action_mismatch",
-                    "approval_binding_corrupted",
-                }:
-                    self._set_state(
-                        context,
-                        RuntimeState.failed,
-                        {"reason": reason, "approval_id": approval_id},
-                    )
-                    self._write_snapshot(context, [], candidate)
-                raise ValueError(reason.replace("_", " "))
-
-            append_event(
-                context,
-                EventType.approval_granted,
-                "runtime",
-                {
-                    "approval_id": approval_id,
-                    "token": token,
-                    "action_fingerprint": (
-                        candidate.binding.action_fingerprint
-                        if candidate.binding is not None
-                        else None
+                append_approval_consumption(
+                    run_id,
+                    ApprovalConsumption(
+                        approval_id=approval_id,
+                        token=token,
+                        binding=candidate.binding,
                     ),
-                },
-            )
-            append_approval_consumption(
-                run_id,
-                ApprovalConsumption(
-                    approval_id=approval_id,
-                    token=token,
-                    binding=candidate.binding,
-                ),
-            )
-            self._set_pending_approval(context, None)
+                )
+                self._set_pending_approval(context, None)
 
-            return self._execute_and_complete(
-                context,
-                candidate,
-                approved=True,
-                approval_id=approval_id,
-            )
+                return self._execute_and_complete(
+                    context,
+                    candidate,
+                    approved=True,
+                    approval_id=approval_id,
+                )
+            except Exception as exc:
+                if not isinstance(exc, ValueError):
+                    self._record_unhandled_failure(context, exc)
+                raise
 
     def _step(self, context: RunContext) -> str:
         self._set_state(context, RuntimeState.initializing)
@@ -1292,13 +1320,11 @@ class Runtime:
             )
 
         if not candidates and not workflow_plans:
-            self._set_state(
+            return self._fail_run(
                 context,
-                RuntimeState.failed,
-                {"reason": "no_actionable_candidates"},
+                "no_actionable_candidates",
+                workspace=workspace,
             )
-            self._write_snapshot(context, workspace)
-            return context.run_id
 
         if workflow_plans:
             scored_workflows = score_workflow_plans(workflow_plans)
@@ -1352,13 +1378,11 @@ class Runtime:
                 )
 
         if not candidates:
-            self._set_state(
+            return self._fail_run(
                 context,
-                RuntimeState.failed,
-                {"reason": "no_valid_action_candidates"},
+                "no_valid_action_candidates",
+                workspace=workspace,
             )
-            self._write_snapshot(context, workspace)
-            return context.run_id
 
         scored = score_actions(candidates)
         for candidate, score in scored:
@@ -1484,33 +1508,18 @@ class Runtime:
             )
         except Exception as exc:
             self._execution_failure_count += 1
-            append_event(
+            return self._fail_run(
                 context,
-                EventType.report_emitted,
-                "runtime",
-                {
-                    "reason_code": "memory_commit_failed",
-                    "action_id": candidate.action_id,
+                "memory_commit_failed",
+                details={
                     "failure_count": self._execution_failure_count,
                     "error_type": exc.__class__.__name__,
                     "error": str(exc),
                 },
-            )
-            self._set_state(
-                context,
-                RuntimeState.failed,
-                {
-                    "reason": "memory_commit_failed",
-                    "failure_count": self._execution_failure_count,
-                },
-            )
-            self._write_snapshot(
-                context,
-                workspace or [],
+                workspace=workspace,
                 selected_action=candidate,
                 latest_receipt_id=receipt.receipt_id,
             )
-            return context.run_id
 
         if (
             context.active_workflow is not None
@@ -1554,67 +1563,27 @@ class Runtime:
                 },
             )
             if workspace is None:
-                self._set_state(
+                return self._fail_run(
                     context,
-                    RuntimeState.failed,
-                    {
-                        "reason": "execution_failure",
+                    "execution_failure",
+                    details={
                         "failure_count": self._execution_failure_count,
-                    },
-                )
-                append_event(
-                    context,
-                    EventType.report_emitted,
-                    "runtime",
-                    {
-                        "action_id": candidate.action_id,
                         "status": receipt.status.value,
-                        "failure_count": self._execution_failure_count,
                     },
-                )
-                append_event(
-                    context,
-                    EventType.run_failed,
-                    "runtime",
-                    {
-                        "receipt_id": receipt.receipt_id,
-                        "failure_count": self._execution_failure_count,
-                    },
-                )
-                self._write_snapshot(
-                    context,
-                    [],
                     selected_action=candidate,
                     latest_receipt_id=receipt.receipt_id,
                 )
-                return context.run_id
             if self._execution_failure_count > 2:
-                self._set_state(
+                return self._fail_run(
                     context,
-                    RuntimeState.failed,
-                    {
-                        "reason": "repeated_execution_failures",
+                    "repeated_execution_failures",
+                    details={
                         "failure_count": self._execution_failure_count,
-                    },
-                )
-                append_event(
-                    context,
-                    EventType.report_emitted,
-                    "runtime",
-                    {
-                        "action_id": candidate.action_id,
                         "status": receipt.status.value,
-                        "failure_count": self._execution_failure_count,
                     },
-                )
-                append_event(
-                    context,
-                    EventType.run_failed,
-                    "runtime",
-                    {
-                        "receipt_id": receipt.receipt_id,
-                        "failure_count": self._execution_failure_count,
-                    },
+                    workspace=workspace,
+                    selected_action=candidate,
+                    latest_receipt_id=receipt.receipt_id,
                 )
             else:
                 append_event(
