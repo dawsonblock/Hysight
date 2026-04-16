@@ -1,3 +1,4 @@
+import argparse
 import sys
 from importlib import import_module
 from pathlib import Path
@@ -481,6 +482,133 @@ def test_frontend_proof_workflow_runs_documented_proof_script():
     assert "artifacts/proof/frontend.json" in workflow
 
 
+def test_frontend_runtime_validation_injects_yarn_user_agent(monkeypatch):
+    proof_frontend = import_module("scripts.proof_frontend")
+    stage_results = []
+    commands = []
+
+    def _fake_run_command(*, name, command, cwd, env=None):
+        commands.append(
+            {
+                "name": name,
+                "command": list(command),
+                "cwd": cwd,
+                "env": env,
+            }
+        )
+        if list(command) == ["node", "--version"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="v20.20.2\n",
+                stderr="",
+            )
+        if list(command) == ["yarn", "--version"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="1.22.22\n",
+                stderr="",
+            )
+        if list(command) == ["node", "./scripts/verify-runtime.js"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="",
+                stderr="",
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(proof_frontend, "_run_command", _fake_run_command)
+
+    node_version, yarn_version = proof_frontend._validate_runtime(stage_results)
+
+    assert node_version == "v20.20.2"
+    assert yarn_version == "1.22.22"
+    assert stage_results == [
+        {
+            "name": "runtime-verification",
+            "command": "node ./scripts/verify-runtime.js",
+            "returncode": 0,
+            "status": "passed",
+            "node_version": "v20.20.2",
+            "yarn_version": "1.22.22",
+            "stdout_tail": None,
+            "stderr_tail": None,
+        }
+    ]
+    runtime_command = commands[-1]
+    assert runtime_command["command"] == ["node", "./scripts/verify-runtime.js"]
+    assert runtime_command["cwd"] == proof_frontend.FRONTEND_ROOT
+    assert runtime_command["env"]["npm_config_user_agent"].startswith(
+        "yarn/1.22.22 "
+    )
+    assert "node/20.20.2" in runtime_command["env"]["npm_config_user_agent"]
+
+
+def test_frontend_parse_jest_counts_tracks_pending_and_todo_cases(tmp_path):
+    proof_frontend = import_module("scripts.proof_frontend")
+    report_path = tmp_path / "frontend-jest.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "numTotalTests": 4,
+                "numPassedTests": 2,
+                "numPendingTests": 1,
+                "numTodoTests": 1,
+                "numFailedTests": 0,
+                "numRuntimeErrorTestSuites": 0,
+                "numTotalTestSuites": 1,
+                "numPassedTestSuites": 1,
+                "numFailedTestSuites": 0,
+                "success": True,
+                "testResults": [
+                    {
+                        "name": "frontend-suite",
+                        "assertionResults": [
+                            {"status": "passed", "fullName": "passes"},
+                            {"status": "pending", "fullName": "pending case"},
+                            {"status": "todo", "title": "todo case"},
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    counts, skipped_cases, metadata = proof_frontend._parse_jest_counts(
+        report_path
+    )
+
+    assert counts == {
+        "total_test_count": 4,
+        "passed_test_count": 2,
+        "skipped_test_count": 2,
+        "failed_test_count": 0,
+        "error_test_count": 0,
+    }
+    assert skipped_cases == [
+        {
+            "classname": "frontend-suite",
+            "name": "pending case",
+            "message": "pending",
+        },
+        {
+            "classname": "frontend-suite",
+            "name": "todo case",
+            "message": "todo",
+        },
+    ]
+    assert metadata == {
+        "num_total_test_suites": 1,
+        "num_passed_test_suites": 1,
+        "num_failed_test_suites": 0,
+        "num_runtime_error_test_suites": 0,
+        "success": True,
+    }
+
+
 def test_fastapi_entrypoints_are_limited_to_authorized_surfaces():
     fastapi_apps = []
     for path in ROOT.rglob("*.py"):
@@ -885,6 +1013,101 @@ def test_runtime_state_paths_remain_gitignored():
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "storage/" in gitignore
     assert "data/" in gitignore
+
+
+def test_sidecar_proof_main_uses_isolated_temp_data_dir(
+    monkeypatch,
+    tmp_path,
+):
+    proof_sidecar = import_module("scripts.proof_sidecar")
+    log_path = tmp_path / "proof-sidecar.log"
+    isolated_root = tmp_path / "isolated-sidecar-root"
+    isolated_root.mkdir()
+    captured: dict[str, object] = {}
+
+    class _FakeTempDir:
+        def __init__(self, name: str):
+            self.name = name
+            self.cleaned = False
+
+        def cleanup(self):
+            self.cleaned = True
+
+    fake_temp_dir = _FakeTempDir(str(isolated_root))
+
+    class _FakeProcess:
+        def poll(self):
+            return 0
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            return None
+
+    monkeypatch.setattr(
+        proof_sidecar,
+        "_parse_args",
+        lambda: argparse.Namespace(
+            port=3032,
+            service_url="",
+            ready_timeout=1.0,
+            data_dir=None,
+            log_path=log_path,
+        ),
+    )
+    monkeypatch.setattr(proof_sidecar, "_check_health", lambda url: False)
+    monkeypatch.setattr(proof_sidecar, "_port_is_available", lambda port: True)
+    monkeypatch.setattr(
+        proof_sidecar,
+        "_wait_for_health",
+        lambda url, timeout_seconds: True,
+    )
+    monkeypatch.setattr(
+        proof_sidecar.tempfile,
+        "TemporaryDirectory",
+        lambda prefix: fake_temp_dir,
+    )
+
+    def _fake_popen(command, **kwargs):
+        captured["cargo_command"] = command
+        captured["cargo_env"] = kwargs["env"]
+        return _FakeProcess()
+
+    def _fake_run(command, **kwargs):
+        captured["proof_command"] = command
+        captured["proof_env"] = kwargs["env"]
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(proof_sidecar.subprocess, "Popen", _fake_popen)
+    monkeypatch.setattr(proof_sidecar.subprocess, "run", _fake_run)
+
+    result = proof_sidecar.main()
+
+    assert result == 0
+    assert captured["cargo_command"] == [
+        "cargo",
+        "run",
+        "--manifest-path",
+        "memvid_service/Cargo.toml",
+        "--release",
+    ]
+    assert captured["cargo_env"]["MEMORY_SERVICE_PORT"] == "3032"
+    assert captured["cargo_env"]["MEMORY_DATA_DIR"] == str(isolated_root)
+    assert captured["proof_command"] == [
+        sys.executable,
+        "scripts/run_tests.py",
+        "--sidecar",
+    ]
+    assert captured["proof_env"]["MEMORY_SERVICE_PORT"] == "3032"
+    assert captured["proof_env"]["MEMORY_SERVICE_URL"] == "http://localhost:3032"
+    assert captured["proof_env"]["MEMORY_DATA_DIR"] == str(isolated_root)
+    assert captured["proof_env"]["RUN_MEMVID_TESTS"] == "1"
+    assert captured["proof_env"]["MEMORY_BACKEND"] == "rust"
+    assert fake_temp_dir.cleaned is True
 
 
 @pytest.mark.fixture_drift

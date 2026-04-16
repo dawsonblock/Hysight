@@ -161,15 +161,20 @@ def _validate_runtime(stage_results: List[Dict[str, Any]]) -> tuple[str, str]:
             f"Detected Yarn {yarn_version}."
         )
 
+    runtime_env = dict(os.environ)
+    runtime_env["npm_config_user_agent"] = (
+        f"yarn/{yarn_version} npm/? node/{node_version.lstrip('v')} darwin arm64"
+    )
     runtime_check = _run_command(
         name="Frontend runtime verification",
-        command=["yarn", "node", "./scripts/verify-runtime.js"],
+        command=["node", "./scripts/verify-runtime.js"],
         cwd=FRONTEND_ROOT,
+        env=runtime_env,
     )
     stage_results.append(
         {
             "name": "runtime-verification",
-            "command": _command_string(["yarn", "node", "./scripts/verify-runtime.js"]),
+            "command": _command_string(["node", "./scripts/verify-runtime.js"]),
             "returncode": runtime_check.returncode,
             "status": "passed" if runtime_check.returncode == 0 else "failed",
             "node_version": node_version,

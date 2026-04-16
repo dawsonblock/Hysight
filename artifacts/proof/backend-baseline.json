@@ -1,0 +1,42 @@
+{
+  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline",
+  "commit_sha": "9fb634879697b7dcf546a3ce174097def8ca26b3",
+  "environment_mode": "repo_local_venv",
+  "error_test_count": 0,
+  "failed_test_count": 2,
+  "failure_reason": "[Backend baseline proof] exited with code 1",
+  "generated_at": "2026-04-16T22:08:19.999001+00:00",
+  "junit_xml": null,
+  "metadata": {
+    "steps": [
+      {
+        "collection_issues": [],
+        "counts": {
+          "error_test_count": 0,
+          "failed_test_count": 2,
+          "passed_test_count": 77,
+          "skipped_test_count": 0,
+          "total_test_count": 79
+        },
+        "id": "backend-baseline",
+        "junit_xml": "test_reports/pytest/backend-baseline-proof.xml",
+        "name": "Backend baseline proof",
+        "proof_failure_reason": null,
+        "proof_metadata": null,
+        "receipt_json": null,
+        "skipped_cases": []
+      }
+    ]
+  },
+  "outcome": "failed",
+  "passed_test_count": 77,
+  "platform": "macOS-26.2-arm64-arm-64bit",
+  "proof_tier": "backend-baseline",
+  "python_version": "3.9.7",
+  "schema_version": 2,
+  "service_connection_mode": "none",
+  "service_endpoint": "n/a",
+  "skipped_test_count": 0,
+  "timestamp": "2026-04-16T22:08:19.999001+00:00",
+  "total_test_count": 79
+}

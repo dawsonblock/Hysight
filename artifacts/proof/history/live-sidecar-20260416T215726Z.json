@@ -1,0 +1,52 @@
+{
+  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --sidecar",
+  "commit_sha": "9fb634879697b7dcf546a3ce174097def8ca26b3",
+  "environment_mode": "cargo_local_sidecar",
+  "error_test_count": 0,
+  "failed_test_count": 0,
+  "generated_at": "2026-04-16T21:57:26.025480+00:00",
+  "junit_xml": null,
+  "metadata": {
+    "steps": [
+      {
+        "collection_issues": [],
+        "counts": {
+          "error_test_count": 0,
+          "failed_test_count": 0,
+          "passed_test_count": 13,
+          "skipped_test_count": 2,
+          "total_test_count": 15
+        },
+        "id": "sidecar",
+        "junit_xml": "test_reports/pytest/backend-live-sidecar-proof.xml",
+        "name": "Backend live sidecar proof",
+        "proof_failure_reason": null,
+        "proof_metadata": null,
+        "receipt_json": null,
+        "skipped_cases": [
+          {
+            "classname": "backend.tests.test_memvid_sidecar.TestPersistence",
+            "message": "requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3032, and supervisorctl in PATH",
+            "name": "test_ingest_survives_restart"
+          },
+          {
+            "classname": "backend.tests.test_memvid_sidecar.TestPersistence",
+            "message": "requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3032, and supervisorctl in PATH",
+            "name": "test_delete_persists_across_restart"
+          }
+        ]
+      }
+    ]
+  },
+  "outcome": "passed",
+  "passed_test_count": 13,
+  "platform": "macOS-26.2-arm64-arm-64bit",
+  "proof_tier": "live-sidecar",
+  "python_version": "3.9.7",
+  "schema_version": 2,
+  "service_connection_mode": "cargo-run:memvid_service",
+  "service_endpoint": "http://localhost:3032",
+  "skipped_test_count": 2,
+  "timestamp": "2026-04-16T21:57:26.025480+00:00",
+  "total_test_count": 15
+}
