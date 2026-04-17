@@ -133,6 +133,32 @@ def test_run_investigates_workspace_issue(monkeypatch, tmp_path):
     )
 
 
+def test_run_investigates_generic_workspace_phrase(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    runtime = Runtime()
+    run_id = runtime.run(
+        "investigate RuntimeState in hca/src/hca/common/enums.py"
+    )
+
+    replay = reconstruct_state(run_id)
+    assert replay["state"] == RuntimeState.completed.value
+    assert replay["active_workflow"]["workflow_class"] == (
+        "investigation"
+    )
+    search_step = next(
+        step
+        for step in replay["workflow_step_history"]
+        if step["step_key"] == "search"
+    )
+    assert search_step["outputs"]["matches"][0]["path"] == (
+        "hca/src/hca/common/enums.py"
+    )
+
+
 def test_workflow_budget_exhaustion_fails_closed(
     monkeypatch,
     tmp_path,
@@ -380,6 +406,38 @@ def test_runtime_executes_mutation_verification_workflow(
     assert {"diff_report", "run_report", "command_result"}.issubset(
         artifact_types
     )
+
+
+def test_runtime_builds_unquoted_mutation_verification_workflow(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    tool_registry = import_module("hca.executor.tool_registry")
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    (notes_dir / "todo.txt").write_text("hello world\n", encoding="utf-8")
+    (tmp_path / "test_sample.py").write_text(
+        "def test_placeholder():\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+
+    runtime = Runtime()
+    run_id = runtime.run(
+        "replace world with mars in notes/todo.txt and verify with pytest test_sample.py"
+    )
+
+    replay = reconstruct_state(run_id)
+    assert replay["state"] == RuntimeState.awaiting_approval.value
+    assert replay["active_workflow"]["workflow_class"] == (
+        "mutation_with_verification"
+    )
+    pending = get_pending_requests(run_id)
+    assert len(pending) == 1
 
 
 def test_critic_broadcast_falls_back_without_optional_llm(monkeypatch):

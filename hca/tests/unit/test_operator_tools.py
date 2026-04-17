@@ -208,6 +208,40 @@ def test_search_workspace_enforces_file_budget(monkeypatch, tmp_path):
     assert receipt.outputs["truncation_reasons"] == ["max_files"]
 
 
+def test_search_workspace_recovers_from_natural_language_query(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    _write_file(tmp_path, "contract/api.py", "class RuntimeState: pass\n")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="search_workspace",
+            arguments={
+                "query": "search the repo for RuntimeState in contract/api.py",
+                "path_glob": "**/*",
+                "max_results": 5,
+                "max_files": 10,
+                "max_total_bytes": 100_000,
+            },
+        ),
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    assert receipt.outputs["returned"] == 1
+    assert receipt.outputs["matches"][0]["path"] == "contract/api.py"
+    assert receipt.outputs["recovered"] is True
+    assert receipt.outputs["effective_query"] == "RuntimeState"
+    assert receipt.outputs["effective_path_glob"] == "contract/api.py"
+    assert any(
+        attempt["query"] == "RuntimeState"
+        for attempt in receipt.outputs["search_attempts"]
+    )
+
+
 def test_patch_text_file_preview_and_apply(monkeypatch, tmp_path):
     monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
     monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
@@ -382,6 +416,36 @@ def test_investigate_workspace_issue_writes_report(monkeypatch, tmp_path):
     report_path = _artifact_full_path("test_run", receipt.outputs["path"])
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["query"] == "RuntimeState"
+    assert report["evidence"][0]["path"] == "contract/api.py"
+
+
+def test_investigate_workspace_issue_preserves_search_recovery(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(tool_registry, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+    _write_file(tmp_path, "contract/api.py", "class RuntimeState: pass\n")
+
+    executor = Executor()
+    receipt = executor.execute(
+        "test_run",
+        ActionCandidate(
+            kind="investigate_workspace_issue",
+            arguments={
+                "query": "search the repo for RuntimeState in contract/api.py",
+                "root": ".",
+                "path_glob": "**/*.py",
+                "max_matches": 4,
+            },
+        ),
+    )
+
+    assert receipt.status == ReceiptStatus.success
+    report_path = _artifact_full_path("test_run", receipt.outputs["path"])
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["search_summary"]["recovered"] is True
+    assert report["search_summary"]["effective_query"] == "RuntimeState"
     assert report["evidence"][0]["path"] == "contract/api.py"
 
 

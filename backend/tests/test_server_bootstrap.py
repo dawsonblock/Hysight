@@ -49,6 +49,30 @@ def _is_workspace_python_path(relative_path: str) -> bool:
     return not relative_path.startswith(".venv/")
 
 
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        ".venv/lib/python3.12/site-packages/pkg.py",
+        "__pycache__/module.py",
+        ".pytest_cache/module.py",
+        ".mypy_cache/module.py",
+        ".ruff_cache/module.py",
+        "node_modules/pkg/index.py",
+        "build/generated.py",
+        "dist/generated.py",
+        "target/release/generated.py",
+    ],
+)
+def test_is_workspace_python_path_rejects_transient_directories(
+    relative_path,
+):
+    assert _is_workspace_python_path(relative_path) is False
+
+
+def test_is_workspace_python_path_accepts_repo_source_files():
+    assert _is_workspace_python_path("backend/server.py") is True
+
+
 def _contains_frontend_compatibility_run_route(content: str) -> bool:
     return any(
         pattern.search(content)

@@ -4,8 +4,11 @@ All tests are self-contained: data is seeded directly via the MemoryController
 singleton (which is isolated to a tmp directory by the app_client fixture in
 conftest.py). No external service or pre-existing state is required.
 """
+from datetime import datetime, timedelta, timezone
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -187,3 +190,66 @@ def test_controller_retrieve_prefers_newest_on_tied_scores(
         "second",
         "first",
     ]
+
+
+def test_controller_ingest_rolls_back_on_disk_failure(
+    monkeypatch,
+    tmp_path,
+):
+    from memory_service import CandidateMemory
+    from memory_service.controller import MemoryController
+
+    storage_root = tmp_path / "storage"
+    memory_dir = storage_root / "memory"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(memory_dir))
+
+    controller = MemoryController(storage_dir=str(memory_dir))
+
+    def _explode(_record):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(controller, "_append_to_disk", _explode)
+
+    with pytest.raises(OSError, match="disk full"):
+        controller.ingest(CandidateMemory(raw_text="alpha record"))
+
+    records, total = controller.list_records(include_expired=True)
+
+    assert total == 0
+    assert records == []
+
+
+def test_controller_maintain_persists_expired_records_on_reload(
+    monkeypatch,
+    tmp_path,
+):
+    from memory_service import CandidateMemory
+    from memory_service.controller import MemoryController
+
+    storage_root = tmp_path / "storage"
+    memory_dir = storage_root / "memory"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(memory_dir))
+
+    controller = MemoryController(storage_dir=str(memory_dir))
+    memory_id = controller.ingest(
+        CandidateMemory(raw_text="stale fact", memory_type="fact")
+    )
+    controller._records[0]["stored_at"] = (
+        datetime.now(timezone.utc) - timedelta(days=8)
+    ).isoformat()
+    controller._rewrite_disk()
+
+    report = controller.maintain()
+    reloaded = MemoryController(storage_dir=str(memory_dir))
+    records, total = reloaded.list_records(include_expired=True)
+
+    assert report.expired_ids == [memory_id]
+    assert total == 1
+    assert records[0].memory_id == memory_id
+    assert records[0].expired is True
