@@ -1,0 +1,60 @@
+{
+  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --mongo-live",
+  "commit_sha": "c69e99182d0ac8f05928b1b23b3ac1ea20848f68",
+  "environment_mode": "docker_disposable_local",
+  "error_test_count": 0,
+  "failed_test_count": 0,
+  "generated_at": "2026-04-17T20:46:18.570510+00:00",
+  "junit_xml": null,
+  "metadata": {
+    "covered_proof_steps": [
+      "mongo-live"
+    ],
+    "failed_proof_steps": [],
+    "includes_optional_proof_steps": true,
+    "omitted_proof_steps": [
+      "pipeline",
+      "backend-baseline",
+      "contract",
+      "frontend",
+      "integration",
+      "sidecar"
+    ],
+    "passed_proof_steps": [
+      "mongo-live"
+    ],
+    "receipt_scope": "This receipt covers only the proof steps listed in covered_proof_steps.",
+    "steps": [
+      {
+        "collection_issues": [],
+        "counts": {
+          "error_test_count": 0,
+          "failed_test_count": 0,
+          "passed_test_count": 1,
+          "skipped_test_count": 0,
+          "total_test_count": 1
+        },
+        "id": "mongo-live",
+        "junit_xml": "test_reports/pytest/backend-live-mongo-proof.xml",
+        "name": "Backend live Mongo proof",
+        "outcome": "passed",
+        "proof_failure_reason": null,
+        "proof_metadata": null,
+        "receipt_json": null,
+        "returncode": 0,
+        "skipped_cases": []
+      }
+    ]
+  },
+  "outcome": "passed",
+  "passed_test_count": 1,
+  "platform": "macOS-26.2-arm64-arm-64bit",
+  "proof_tier": "live-mongo",
+  "python_version": "3.9.7",
+  "schema_version": 2,
+  "service_connection_mode": "docker:mongo:7",
+  "service_endpoint": "mongodb://127.0.0.1:27017",
+  "skipped_test_count": 0,
+  "timestamp": "2026-04-17T20:46:18.570510+00:00",
+  "total_test_count": 1
+}
