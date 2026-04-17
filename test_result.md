@@ -172,10 +172,13 @@ backend:
       - working: true
         agent: "testing"
         comment: "Retested the full optional live Mongo wrapper with make proof-mongo-live. Docker was available, the disposable mongo:7 container bound on mongodb://127.0.0.1:27017, and backend/tests/test_status_live_mongo.py passed (1 passed in 0.40s). Receipt: test_reports/proof_receipts/backend-live-mongo-proof.json. JUnit: test_reports/pytest/backend-live-mongo-proof.xml. The receipt outcome is passed, but its per-test count fields remained zero, so the authoritative counts are the pytest output and JUnit report."
+      - working: true
+        agent: "main"
+        comment: "Refreshed the optional live Mongo evidence on 2026-04-17 with docker desktop start and make proof-mongo-live. The disposable mongo:7 harness bound at mongodb://127.0.0.1:27017, backend/tests/test_status_live_mongo.py passed (1 passed), and refreshed receipts landed at artifacts/proof/live-mongo.json plus artifacts/proof/history/live-mongo-20260417T204618Z.json."
   - task: "Live sidecar proof automation"
     implemented: true
     working: true
-    file: "scripts/run_tests.py"
+    file: "scripts/proof_sidecar.py"
     stuck_count: 0
     priority: "medium"
     needs_retesting: false
@@ -195,6 +198,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Retested the full optional live sidecar wrapper with make proof-sidecar MEMORY_SERVICE_PORT=3032 after a preflight probe to http://127.0.0.1:3031/health returned connection reset by peer locally. The alternate-port live proof passed (13 passed, 2 skipped in 8.76s). Receipt: test_reports/proof_receipts/backend-live-sidecar-proof.json. JUnit: test_reports/pytest/backend-live-sidecar-proof.xml. Log: test_reports/proof-sidecar.log. The receipt outcome is passed, but its per-test count fields remained zero, so the authoritative counts are the pytest output and JUnit report."
+      - working: true
+        agent: "main"
+        comment: "Narrowed the macOS 3031 conflict to launchd's system/com.apple.AEServer job, which owns the eppc service name mapped to 3031/tcp. Updated scripts/proof_sidecar.py so plain make proof-sidecar auto-falls forward to the next free localhost port when the default http://localhost:3031 target is occupied or unhealthy, then re-verified the default command end to end. The harness printed the fallback to http://localhost:3032 and the live sidecar proof passed again (13 passed, 2 skipped); refreshed receipts landed at artifacts/proof/live-sidecar.json plus artifacts/proof/history/live-sidecar-20260417T205151Z.json."
   - task: "Release notes extraction"
     implemented: true
     working: true
@@ -209,6 +215,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Created RELEASE_NOTES.md with release-facing observability, subsystem health, deployment notes, proof commands, and current limitations derived from HARDENING_REPORT.md and REPAIR_REPORT.md."
+      - working: true
+        agent: "main"
+        comment: "Appended the exact successful optional proof-refresh commands to RELEASE_NOTES.md on 2026-04-17: make test-backend-integration, docker desktop start, make proof-mongo-live, and make proof-sidecar. Also documented that the sidecar harness now falls forward from an occupied or unhealthy default localhost:3031 target to the next free localhost port."
   - task: "Proof contract tier hardening"
     implemented: true
     working: true
@@ -229,6 +238,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Closed the remaining live-environment gap with a disposable Docker Mongo 7 instance and LIVE_MONGO_URL=mongodb://127.0.0.1:27017 LIVE_MONGO_DB_NAME=hysight_verify_live make test-mongo-live. The repo-supported live Mongo proof passed (1 passed), so the proof-tier hardening task no longer needs retesting."
+      - working: true
+        agent: "main"
+        comment: "Refreshed the optional proof tiers on 2026-04-17 with make test-bootstrap-integration, make test-backend-integration (12 passed), docker desktop start, make proof-mongo-live (1 passed), and make proof-sidecar (13 passed, 2 skipped via automatic fallback from 3031 to 3032). Current machine-readable receipts now live under artifacts/proof/integration.json, artifacts/proof/live-mongo.json, and artifacts/proof/live-sidecar.json."
   - task: "Subsystem authority wording hardening"
     implemented: true
     working: true
@@ -346,7 +358,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 11
+  test_sequence: 12
   run_ui: false
 test_plan:
   current_focus: []
@@ -388,4 +400,6 @@ agent_communication:
     message: "Requested live-harness reruns completed. make proof-mongo-live passed on the default 27017 disposable Docker Mongo path (1 passed). make proof-sidecar passed on port 3032 because the default 3031 health probe returned connection reset by peer during preflight (13 passed, 2 skipped). Receipts were written under test_reports/proof_receipts and JUnit artifacts under test_reports/pytest; the receipt outcome fields are correct, but the per-test counts remained zero, so pytest/JUnit are the authoritative counts for this rerun."
   - agent: "main"
     message: "Continuous proof drift enforcement is now implemented and verified on the supported bootstrap path. The repo-local .venv bootstrap, canonical baseline receipts under artifacts/proof, repo integrity sentinel, fixture-drift gate, per-step baseline entrypoints, and Node 20 frontend API boundary test all pass end to end on the current branch."
+  - agent: "main"
+    message: "Optional proof-refresh evidence is now folded into both RELEASE_NOTES.md and test_result.md. On macOS, localhost:3031 is owned by launchd's system/com.apple.AEServer job through the eppc service name, so scripts/proof_sidecar.py now auto-falls forward to the next free localhost port and plain make proof-sidecar succeeds again without a manual override."
 
