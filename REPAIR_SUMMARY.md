@@ -43,6 +43,7 @@ The goal was to make the default local proof surface honest and runnable from a 
 
 - Updated `README.md` to document the canonical baseline, frontend, integration, live Mongo, and live sidecar proof paths.
 - Updated `docs/deployment.md` to match the canonical bootstrap and proof commands.
+- Updated the proof documentation to note that receipts now declare covered and omitted proof steps, and that frontend receipts declare covered stage names.
 - Updated `.github/agents/backend-verification.agent.md` so verification guidance matches the implemented proof contract.
 
 ## Verified Results
@@ -54,7 +55,7 @@ Verified on the current proof contract and narrowed retests:
 - `./.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q`
   - `42 passed, 1 deselected`
 - `./.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline`
-  - `81 passed, 1 deselected`
+  - `84 passed, 1 deselected`
 - `./.venv/bin/python scripts/check_repo_integrity.py`
   - passed
 - `make proof-sidecar MEMORY_SERVICE_PORT=3032`

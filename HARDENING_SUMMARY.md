@@ -6,6 +6,7 @@ This pass tightened the repo's optional proof surfaces, runtime authority contra
 
 - Added `scripts/proof_mongo_live.py` and `scripts/proof_sidecar.py` as full local lifecycle harnesses for the opt-in live Mongo and memvid sidecar proofs.
 - Added `scripts/proof_receipt.py` so the canonical proof entrypoints and the matching CI jobs emit machine-readable receipts under `artifacts/proof/`, with timestamped live-proof history under `artifacts/proof/history/`.
+- Hardened aggregate receipts so they declare `covered_proof_steps` and `omitted_proof_steps`, and hardened frontend receipts so they declare the exact covered and passed stage names.
 - Updated `Makefile` and `.github/workflows/backend-proof.yml` so `make proof-mongo-live` and `make proof-sidecar` are the full-harness entrypoints, while `make test-mongo-live` and `make test-sidecar` remain the narrow already-running-service paths.
 
 ## Package and runtime truth
@@ -34,12 +35,12 @@ Recent verification on the supported bootstrap path:
   - build passed
   - receipt: `artifacts/proof/frontend.json`
 - `./.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline`
-  - `81 passed, 1 deselected`
+  - `84 passed, 1 deselected`
 - `./.venv/bin/python scripts/check_repo_integrity.py`
   - passed
 
 Current baseline contract enforced by `scripts/run_tests.py`:
 
 - HCA pipeline proof: `7 passed`
-- Backend baseline proof: `81 passed`
+- Backend baseline proof: `84 passed`
 - Contract conformance proof: `18 passed`

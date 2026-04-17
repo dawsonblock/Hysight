@@ -129,6 +129,11 @@ make test-mongo-live
 temporary `HCA_STORAGE_ROOT` and matching `MEMORY_STORAGE_DIR`, so proof does
 not rely on repo-default storage state.
 
+Generated receipts now declare exactly which proof steps they cover via
+`covered_proof_steps` and `omitted_proof_steps`. Frontend receipts also declare
+their covered stage names so lint, Jest, build, and fixture-drift claims stay
+explicit.
+
 The default local proof surface is `make test` / `python scripts/run_tests.py`.
 The frontend, backend integration, live Mongo, and live sidecar proofs are
 separate opt-in tiers.

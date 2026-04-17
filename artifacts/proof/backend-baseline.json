@@ -1,11 +1,10 @@
 {
-  "command": "/Users/dawsonblock/.pyenv/versions/3.9.7/bin/python scripts/run_tests.py --baseline-step backend-baseline",
-  "commit_sha": "7ad9c33abbc2bc6054af6d89f0edf6e109637a9e",
-  "environment_mode": "external_python",
+  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline",
+  "commit_sha": "ef0ddc5e0776bd25d4ae528f4a88bd2c489f5be1",
+  "environment_mode": "repo_local_venv",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "failure_reason": "Backend baseline proof: expected total_test_count=81, got 84 (delta +3).\nBackend baseline proof: expected passed_test_count=81, got 84 (delta +3).",
-  "generated_at": "2026-04-17T00:03:13.669603+00:00",
+  "generated_at": "2026-04-17T00:05:48.811643+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -47,7 +46,7 @@
       }
     ]
   },
-  "outcome": "failed",
+  "outcome": "passed",
   "passed_test_count": 84,
   "platform": "macOS-26.2-arm64-arm-64bit",
   "proof_tier": "backend-baseline",
@@ -56,6 +55,6 @@
   "service_connection_mode": "none",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-17T00:03:13.669603+00:00",
+  "timestamp": "2026-04-17T00:05:48.811643+00:00",
   "total_test_count": 84
 }

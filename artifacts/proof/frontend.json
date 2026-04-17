@@ -1,14 +1,41 @@
 {
   "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/proof_frontend.py",
-  "commit_sha": "9fb634879697b7dcf546a3ce174097def8ca26b3",
+  "commit_sha": "ef0ddc5e0776bd25d4ae528f4a88bd2c489f5be1",
   "environment_mode": "repo_local_venv+local_node",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-16T21:57:10.119800+00:00",
+  "generated_at": "2026-04-17T00:06:08.821920+00:00",
   "junit_xml": null,
   "metadata": {
+    "covered_proof_steps": [
+      "frontend"
+    ],
+    "covered_stage_names": [
+      "runtime-verification",
+      "fixture-drift",
+      "lint",
+      "jest",
+      "build"
+    ],
+    "failed_stage_names": [],
     "node_version": "v20.20.2",
+    "omitted_proof_steps": [
+      "pipeline",
+      "backend-baseline",
+      "contract",
+      "integration",
+      "mongo-live",
+      "sidecar"
+    ],
+    "passed_stage_names": [
+      "runtime-verification",
+      "fixture-drift",
+      "lint",
+      "jest",
+      "build"
+    ],
     "receipt_format": "frontend-proof-v1",
+    "receipt_scope": "This receipt covers only the frontend proof and the stages listed in covered_stage_names.",
     "skipped_cases": [],
     "stages": [
       {
@@ -36,7 +63,7 @@
         "returncode": 0,
         "status": "passed",
         "stderr_tail": null,
-        "stdout_tail": ".                                                                        [100%]\n- generated xml file: /Users/dawsonblock/Hysight/test_reports/frontend-fixture-drift.xml -\n1 passed, 37 deselected in 0.30s"
+        "stdout_tail": ".                                                                        [100%]\n- generated xml file: /Users/dawsonblock/Hysight/test_reports/frontend-fixture-drift.xml -\n1 passed, 43 deselected in 0.20s"
       },
       {
         "command": "yarn lint",
@@ -44,7 +71,7 @@
         "returncode": 0,
         "status": "passed",
         "stderr_tail": null,
-        "stdout_tail": "yarn run v1.22.22\n$ eslint .\nDone in 0.94s."
+        "stdout_tail": "yarn run v1.22.22\n$ eslint .\nDone in 0.88s."
       },
       {
         "command": "yarn test --watch=false --runInBand --json --outputFile=/Users/dawsonblock/Hysight/test_reports/frontend-jest.json",
@@ -66,8 +93,8 @@
         "report": "test_reports/frontend-jest.json",
         "returncode": 0,
         "status": "passed",
-        "stderr_tail": "PASS src/components/OperatorConsole.test.js\nPASS src/lib/api.test.js\nPASS src/components/HCAChat.test.js\nPASS src/components/MemoryBrowser.test.js\nPASS src/App.test.js\n\nTest Suites: 5 passed, 5 total\nTests:       19 passed, 19 total\nSnapshots:   0 total\nTime:        3.96 s\nRan all test suites.\nTest results written to: ../test_reports/frontend-jest.json",
-        "stdout_tail": "yarn run v1.22.22\n$ craco test --watch=false --runInBand --json --outputFile=/Users/dawsonblock/Hysight/test_reports/frontend-jest.json\nDone in 4.81s."
+        "stderr_tail": "PASS src/components/OperatorConsole.test.js\nPASS src/components/HCAChat.test.js\nPASS src/App.test.js\nPASS src/components/MemoryBrowser.test.js\nPASS src/lib/api.test.js\n\nTest Suites: 5 passed, 5 total\nTests:       19 passed, 19 total\nSnapshots:   0 total\nTime:        2.268 s\nRan all test suites.\nTest results written to: ../test_reports/frontend-jest.json",
+        "stdout_tail": "yarn run v1.22.22\n$ craco test --watch=false --runInBand --json --outputFile=/Users/dawsonblock/Hysight/test_reports/frontend-jest.json\nDone in 2.80s."
       },
       {
         "command": "yarn build",
@@ -75,7 +102,7 @@
         "returncode": 0,
         "status": "passed",
         "stderr_tail": null,
-        "stdout_tail": "\nFile sizes after gzip:\n\n  178.02 kB  build/static/js/main.2e27f740.js\n  12.26 kB   build/static/css/main.e3a07d3d.css\n\nThe project was built assuming it is hosted at /.\nYou can control this with the homepage field in your package.json.\n\nThe build folder is ready to be deployed.\nYou may serve it with a static server:\n\n  yarn global add serve\n  serve -s build\n\nFind out more about deployment here:\n\n  https://cra.link/deployment\n\nDone in 10.46s."
+        "stdout_tail": "\nFile sizes after gzip:\n\n  178.02 kB  build/static/js/main.2e27f740.js\n  12.26 kB   build/static/css/main.e3a07d3d.css\n\nThe project was built assuming it is hosted at /.\nYou can control this with the homepage field in your package.json.\n\nThe build folder is ready to be deployed.\nYou may serve it with a static server:\n\n  yarn global add serve\n  serve -s build\n\nFind out more about deployment here:\n\n  https://cra.link/deployment\n\nDone in 7.75s."
       }
     ],
     "yarn_version": "1.22.22"
@@ -89,6 +116,6 @@
   "service_connection_mode": "none",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-16T21:57:10.119800+00:00",
+  "timestamp": "2026-04-17T00:06:08.821920+00:00",
   "total_test_count": 20
 }

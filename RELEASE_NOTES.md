@@ -48,6 +48,9 @@ than coupling them to the default local proof surface.
 - Proof receipts now land under `artifacts/proof/`, with timestamped live
   history receipts under `artifacts/proof/history/` for the live Mongo and
   live sidecar harnesses.
+- Aggregate receipts now declare `covered_proof_steps` and
+  `omitted_proof_steps`, and frontend receipts declare the exact covered stage
+  names so proof claims stay scoped to what actually ran.
 
 ## Proof Commands
 
@@ -60,7 +63,7 @@ python scripts/run_tests.py
 Current enforced baseline contract in the runner:
 
 - HCA pipeline proof: `7 passed`
-- Backend baseline proof: `81 passed`
+- Backend baseline proof: `84 passed`
 - Contract conformance proof: `18 passed`
 
 - Optional frontend proof:

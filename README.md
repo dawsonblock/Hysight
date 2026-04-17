@@ -125,7 +125,7 @@ Current baseline expectations:
 | Step | Expected passing tests |
 | --- | --- |
 | HCA pipeline | 7 |
-| Backend baseline | 81 |
+| Backend baseline | 84 |
 | Contract conformance | 18 |
 
 Supported proof tiers:
@@ -149,6 +149,11 @@ Proof artifacts and generated evidence:
 | `artifacts/proof/history/` | Timestamped history receipts for live Mongo and live sidecar proofs |
 | `test_reports/pytest/` | JUnit XML output for proof steps |
 | `storage/` | Replay-backed runtime state, snapshots, approvals, artifacts, and event logs |
+
+Receipt honesty notes:
+
+- Aggregate receipts now declare `covered_proof_steps`, `omitted_proof_steps`, `passed_proof_steps`, and `failed_proof_steps` so a baseline receipt does not imply that frontend, integration, or live proofs ran.
+- Frontend receipts also declare `covered_stage_names`, `passed_stage_names`, and `failed_stage_names` so fixture drift, lint, Jest, and build coverage stay explicit.
 
 Frontend proof details:
 
