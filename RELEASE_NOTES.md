@@ -93,6 +93,20 @@ MEMORY_SERVICE_PORT=3032 make proof-sidecar
 make proof-mongo-live
 ```
 
+- Verified optional proof refresh commands on 2026-04-17:
+
+```bash
+make test-backend-integration
+docker desktop start
+make proof-mongo-live
+make proof-sidecar
+```
+
+- The sidecar harness now falls forward to the next free localhost port when
+  the default `http://localhost:3031` target is occupied or unhealthy, so the
+  default `make proof-sidecar` path can still complete on hosts where `3031`
+  is reserved by another local listener.
+
 Narrow already-running-Mongo path when you do not want the disposable harness:
 
 ```bash

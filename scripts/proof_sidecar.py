@@ -17,6 +17,62 @@ from urllib.request import urlopen
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_LOG_PATH = REPO_ROOT / "test_reports" / "proof-sidecar.log"
 BOOTSTRAP_HINT = "See BOOTSTRAP.md for the supported bootstrap path."
+DEFAULT_SIDECAR_PORT = 3031
+AUTO_FALLBACK_PORT_LIMIT = 10
+
+
+def _default_service_url(port: int) -> str:
+    return f"http://localhost:{port}"
+
+
+def _uses_default_local_target(service_url: str, port: int) -> bool:
+    normalized_url = service_url.rstrip("/")
+    if port != DEFAULT_SIDECAR_PORT:
+        return False
+    return normalized_url in {
+        _default_service_url(DEFAULT_SIDECAR_PORT),
+        f"http://127.0.0.1:{DEFAULT_SIDECAR_PORT}",
+    }
+
+
+def _next_available_port(start_port: int) -> int | None:
+    end_port = start_port + AUTO_FALLBACK_PORT_LIMIT
+    for candidate in range(start_port, end_port):
+        if _port_is_available(candidate):
+            return candidate
+    return None
+
+
+def _resolve_service_target(service_url: str, port: int) -> tuple[str, int, str | None, str | None]:
+    if not _uses_default_local_target(service_url, port):
+        return service_url, port, None, None
+
+    default_health_url = f"{service_url.rstrip('/')}/health"
+    if _check_health(service_url):
+        conflict_reason = (
+            f"Default proof endpoint {default_health_url} is already healthy and in use."
+        )
+    elif not _port_is_available(port):
+        conflict_reason = (
+            f"Default proof port {port} is already in use, and {default_health_url} is unhealthy."
+        )
+    else:
+        return service_url, port, None, None
+
+    fallback_port = _next_available_port(port + 1)
+    if fallback_port is None:
+        failure_reason = (
+            f"{conflict_reason} No free fallback localhost port was found in the range "
+            f"{port + 1}-{port + AUTO_FALLBACK_PORT_LIMIT}. Stop the conflicting service or rerun "
+            "with an explicit MEMORY_SERVICE_PORT."
+        )
+        return service_url, port, None, failure_reason
+
+    fallback_url = _default_service_url(fallback_port)
+    notice = (
+        f"{conflict_reason} Falling back to {fallback_url} for this proof run."
+    )
+    return fallback_url, fallback_port, notice, None
 
 
 def _check_health(url: str) -> bool:
@@ -71,7 +127,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("MEMORY_SERVICE_PORT", "3031")),
+        default=int(os.environ.get("MEMORY_SERVICE_PORT", str(DEFAULT_SIDECAR_PORT))),
     )
     parser.add_argument(
         "--service-url",
@@ -97,7 +153,11 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
-    service_url = args.service_url.strip() or f"http://localhost:{args.port}"
+    service_url = args.service_url.strip() or _default_service_url(args.port)
+    service_url, selected_port, fallback_notice, fallback_failure = _resolve_service_target(
+        service_url,
+        args.port,
+    )
     args.log_path.parent.mkdir(parents=True, exist_ok=True)
 
     sidecar_process: subprocess.Popen[str] | None = None
@@ -114,6 +174,13 @@ def main() -> int:
         data_dir = Path(data_dir_handle.name).resolve()
 
     try:
+        if fallback_failure is not None:
+            print(fallback_failure, file=sys.stderr)
+            return 1
+
+        if fallback_notice is not None:
+            print(fallback_notice, file=sys.stderr)
+
         if _check_health(service_url):
             failure_reason = (
                 f"Refusing to reuse an already-running memvid sidecar at {service_url}. "
@@ -122,9 +189,9 @@ def main() -> int:
             print(failure_reason, file=sys.stderr)
             return 1
 
-        if not _port_is_available(args.port):
+        if not _port_is_available(selected_port):
             failure_reason = (
-                f"Port {args.port} is already in use, but {service_url}/health is not healthy. "
+                f"Port {selected_port} is already in use, but {service_url}/health is not healthy. "
                 "Stop the conflicting process or rerun with a free port, for example "
                 "MEMORY_SERVICE_PORT=3032 make proof-sidecar."
             )
@@ -134,7 +201,7 @@ def main() -> int:
         args.log_path.unlink(missing_ok=True)
         log_handle = args.log_path.open("w", encoding="utf-8")
         env = dict(os.environ)
-        env["MEMORY_SERVICE_PORT"] = str(args.port)
+        env["MEMORY_SERVICE_PORT"] = str(selected_port)
         env["MEMORY_DATA_DIR"] = str(data_dir)
         sidecar_process = subprocess.Popen(
             [
@@ -162,7 +229,7 @@ def main() -> int:
 
         proof_env = dict(os.environ)
         proof_env["MEMORY_SERVICE_URL"] = service_url
-        proof_env["MEMORY_SERVICE_PORT"] = str(args.port)
+        proof_env["MEMORY_SERVICE_PORT"] = str(selected_port)
         proof_env["RUN_MEMVID_TESTS"] = "1"
         proof_env["MEMORY_BACKEND"] = "rust"
         proof_env["MEMORY_DATA_DIR"] = str(data_dir)
