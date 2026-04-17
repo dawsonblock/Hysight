@@ -224,6 +224,15 @@ def test_stream_endpoint_emits_done_event_for_successful_run(app_client):
     events = _parse_sse_events(response.text)
     assert events[0][0] == "status"
     assert any(name == "step" for name, _payload in events)
+    step_payloads = [
+        payload
+        for name, payload in events
+        if name == "step" and isinstance(payload, dict)
+    ]
+    event_ids = [payload.get("event_id") for payload in step_payloads]
+    assert step_payloads
+    assert all(event_ids)
+    assert len(set(event_ids)) == len(event_ids)
     assert any(
         name == "step" and payload.get("event_type") == "run_completed"
         for name, payload in events

@@ -106,3 +106,29 @@ def test_runtime_emits_external_memory_failure_event(monkeypatch, tmp_path):
     assert replay["memory_outcomes"]["external_memory_failure_details"][0][
         "status"
     ] == "failed"
+
+
+def test_runtime_fails_closed_when_memory_commit_raises(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    def _boom(self, context, candidate, receipt_payload):
+        raise RuntimeError("memory disk full")
+
+    monkeypatch.setattr(Runtime, "_record_execution_memory", _boom)
+
+    runtime = Runtime()
+    run_id = runtime.run("echo hello")
+
+    replay = reconstruct_state(run_id)
+    assert replay["state"] == "failed"
+
+    failure_event = next(
+        event
+        for event in iter_events(run_id)
+        if event["event_type"] == "run_failed"
+    )
+    assert failure_event["payload"]["reason"] == "memory_commit_failed"
+    assert failure_event["payload"]["error"] == "memory disk full"

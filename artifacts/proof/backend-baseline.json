@@ -1,35 +1,54 @@
 {
-  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline",
-  "commit_sha": "9fb634879697b7dcf546a3ce174097def8ca26b3",
-  "environment_mode": "repo_local_venv",
+  "command": "/Users/dawsonblock/.pyenv/versions/3.9.7/bin/python scripts/run_tests.py --baseline-step backend-baseline",
+  "commit_sha": "7ad9c33abbc2bc6054af6d89f0edf6e109637a9e",
+  "environment_mode": "external_python",
   "error_test_count": 0,
-  "failed_test_count": 2,
-  "failure_reason": "[Backend baseline proof] exited with code 1",
-  "generated_at": "2026-04-16T22:08:19.999001+00:00",
+  "failed_test_count": 0,
+  "failure_reason": "Backend baseline proof: expected total_test_count=81, got 84 (delta +3).\nBackend baseline proof: expected passed_test_count=81, got 84 (delta +3).",
+  "generated_at": "2026-04-17T00:03:13.669603+00:00",
   "junit_xml": null,
   "metadata": {
+    "covered_proof_steps": [
+      "backend-baseline"
+    ],
+    "failed_proof_steps": [],
+    "includes_optional_proof_steps": false,
+    "omitted_proof_steps": [
+      "pipeline",
+      "contract",
+      "frontend",
+      "integration",
+      "mongo-live",
+      "sidecar"
+    ],
+    "passed_proof_steps": [
+      "backend-baseline"
+    ],
+    "receipt_scope": "This receipt covers only the proof steps listed in covered_proof_steps.",
     "steps": [
       {
         "collection_issues": [],
         "counts": {
           "error_test_count": 0,
-          "failed_test_count": 2,
-          "passed_test_count": 77,
+          "failed_test_count": 0,
+          "passed_test_count": 84,
           "skipped_test_count": 0,
-          "total_test_count": 79
+          "total_test_count": 84
         },
         "id": "backend-baseline",
         "junit_xml": "test_reports/pytest/backend-baseline-proof.xml",
         "name": "Backend baseline proof",
+        "outcome": "passed",
         "proof_failure_reason": null,
         "proof_metadata": null,
         "receipt_json": null,
+        "returncode": 0,
         "skipped_cases": []
       }
     ]
   },
   "outcome": "failed",
-  "passed_test_count": 77,
+  "passed_test_count": 84,
   "platform": "macOS-26.2-arm64-arm-64bit",
   "proof_tier": "backend-baseline",
   "python_version": "3.9.7",
@@ -37,6 +56,6 @@
   "service_connection_mode": "none",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-16T22:08:19.999001+00:00",
-  "total_test_count": 79
+  "timestamp": "2026-04-17T00:03:13.669603+00:00",
+  "total_test_count": 84
 }

@@ -227,6 +227,23 @@ FRONTEND_STEP: Step = {
     "cmd": [sys.executable, "scripts/proof_frontend.py"],
 }
 
+ALL_PROOF_STEP_IDS = (
+    "pipeline",
+    "backend-baseline",
+    "contract",
+    "frontend",
+    "integration",
+    "mongo-live",
+    "sidecar",
+)
+
+OPTIONAL_PROOF_STEP_IDS = (
+    "frontend",
+    "integration",
+    "mongo-live",
+    "sidecar",
+)
+
 # ---------------------------------------------------------------------------
 # Dependency / environment checks
 # ---------------------------------------------------------------------------
@@ -551,6 +568,43 @@ def _service_endpoint(name: str) -> str:
     return "n/a"
 
 
+def _receipt_scope_metadata(
+    steps: Sequence[Step],
+    results: Sequence[StepResult],
+) -> Dict[str, Any]:
+    covered_step_ids = [str(step["id"]) for step in steps]
+    omitted_step_ids = [
+        step_id for step_id in ALL_PROOF_STEP_IDS if step_id not in covered_step_ids
+    ]
+    passed_step_ids = []
+    failed_step_ids = []
+
+    for result in results:
+        proof_outcome = result.get("proof_outcome")
+        passed = result.get("returncode") == 0 and proof_outcome in {
+            None,
+            "passed",
+        }
+        if passed:
+            passed_step_ids.append(str(result["id"]))
+        else:
+            failed_step_ids.append(str(result["id"]))
+
+    return {
+        "receipt_scope": (
+            "This receipt covers only the proof steps listed in "
+            "covered_proof_steps."
+        ),
+        "covered_proof_steps": covered_step_ids,
+        "omitted_proof_steps": omitted_step_ids,
+        "passed_proof_steps": passed_step_ids,
+        "failed_proof_steps": failed_step_ids,
+        "includes_optional_proof_steps": any(
+            step_id in OPTIONAL_PROOF_STEP_IDS for step_id in covered_step_ids
+        ),
+    }
+
+
 def _counts_delta_message(
     *,
     step_name: str,
@@ -622,10 +676,14 @@ def _write_invocation_receipt(
     failure_reason: str | None,
 ) -> None:
     metadata = {
+        **_receipt_scope_metadata(steps, results),
         "steps": [
             {
                 "id": result["id"],
                 "name": result["name"],
+                "returncode": result["returncode"],
+                "outcome": result.get("proof_outcome")
+                or ("passed" if result["returncode"] == 0 else "failed"),
                 "counts": result["counts"],
                 "junit_xml": (
                     str(result["junit_xml"].relative_to(REPO_ROOT))

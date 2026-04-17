@@ -4,6 +4,8 @@
 from importlib import import_module
 from pathlib import Path
 
+import pytest
+
 critic_module = import_module("hca.modules.critic")
 common_types = import_module("hca.common.types")
 common_enums = import_module("hca.common.enums")
@@ -184,6 +186,15 @@ def test_workflow_budget_exhaustion_fails_closed(
         event["event_type"] == "workflow_budget_exhausted"
         for event in events
     )
+    run_failed_event = next(
+        event for event in events if event["event_type"] == "run_failed"
+    )
+    assert run_failed_event["payload"]["reason"] == (
+        "workflow_budget_exhausted"
+    )
+    assert run_failed_event["payload"]["workflow_id"] == (
+        replay["active_workflow"]["workflow_id"]
+    )
     terminated_event = next(
         event
         for event in events
@@ -248,12 +259,55 @@ def test_workflow_next_step_unbuildable_fails_closed(
         for event in iter_events(run_id)
         if event["event_type"] == "workflow_terminated"
     )
+    run_failed_event = next(
+        event
+        for event in iter_events(run_id)
+        if event["event_type"] == "run_failed"
+    )
     assert terminated_event["payload"]["reason"] == (
         "next_step_unbuildable"
     )
     assert terminated_event["payload"]["workflow_step_id"] == (
         replay["workflow_checkpoint"]["current_step_id"]
     )
+    assert run_failed_event["payload"]["reason"] == (
+        "workflow_next_step_unbuildable"
+    )
+    assert run_failed_event["payload"]["workflow_step_id"] == (
+        replay["workflow_checkpoint"]["current_step_id"]
+    )
+
+
+def test_run_records_unhandled_exception_as_terminal_failure(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(tmp_path / "storage"))
+
+    captured: dict[str, str] = {}
+
+    def _boom(self, context):
+        captured["run_id"] = context.run_id
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(Runtime, "_step", _boom)
+
+    runtime = Runtime()
+    with pytest.raises(RuntimeError, match="boom"):
+        runtime.run("explode")
+
+    replay = reconstruct_state(captured["run_id"])
+    assert replay["state"] == RuntimeState.failed.value
+
+    failed_event = next(
+        event
+        for event in iter_events(captured["run_id"])
+        if event["event_type"] == "run_failed"
+    )
+    assert failed_event["payload"]["reason"] == (
+        "unhandled_runtime_exception"
+    )
+    assert failed_event["payload"]["error_type"] == "RuntimeError"
 
 
 def test_runtime_executes_mutation_verification_workflow(

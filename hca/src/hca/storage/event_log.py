@@ -1,5 +1,6 @@
 """Append-only event log for runs."""
 
+import os
 from pathlib import Path
 from typing import Dict, Iterator, Optional, Any
 

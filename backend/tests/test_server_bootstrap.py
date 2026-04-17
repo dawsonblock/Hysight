@@ -726,6 +726,36 @@ def test_run_tests_external_receipt_step_surfaces_failed_receipt_outcome(
     ]
 
 
+def test_run_tests_receipt_scope_metadata_tracks_covered_steps():
+    run_tests = import_module("scripts.run_tests")
+
+    metadata = run_tests._receipt_scope_metadata(
+        [run_tests.BASELINE_STEPS[0], run_tests.FRONTEND_STEP],
+        [
+            {"id": "pipeline", "returncode": 0, "proof_outcome": None},
+            {"id": "frontend", "returncode": 0, "proof_outcome": "passed"},
+        ],
+    )
+
+    assert metadata == {
+        "receipt_scope": (
+            "This receipt covers only the proof steps listed in "
+            "covered_proof_steps."
+        ),
+        "covered_proof_steps": ["pipeline", "frontend"],
+        "omitted_proof_steps": [
+            "backend-baseline",
+            "contract",
+            "integration",
+            "mongo-live",
+            "sidecar",
+        ],
+        "passed_proof_steps": ["pipeline", "frontend"],
+        "failed_proof_steps": [],
+        "includes_optional_proof_steps": True,
+    }
+
+
 def test_fastapi_entrypoints_are_limited_to_authorized_surfaces():
     fastapi_apps = []
     for path in ROOT.rglob("*.py"):
@@ -1089,6 +1119,11 @@ def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract()
     assert '"stages"' in frontend_harness
     assert '"skipped_cases"' in frontend_harness
     assert '"receipt_format"' in frontend_harness
+    assert '"covered_proof_steps"' in frontend_harness
+    assert '"omitted_proof_steps"' in frontend_harness
+    assert '"covered_stage_names"' in frontend_harness
+    assert '"passed_stage_names"' in frontend_harness
+    assert '"failed_stage_names"' in frontend_harness
     assert "runtime-verification" in frontend_harness
     assert "fixture-drift" in frontend_harness
     assert 'name="Frontend tests"' in frontend_harness
@@ -1123,6 +1158,9 @@ def test_optional_proof_harnesses_and_receipts_are_documented_in_repo_contract()
     assert '"environment_mode"' in receipt_helper
     assert '"passed_test_count"' in receipt_helper
     assert '"skipped_test_count"' in receipt_helper
+    assert '"covered_proof_steps"' in (ROOT / "scripts" / "run_tests.py").read_text(
+        encoding="utf-8"
+    )
     assert '"service_endpoint"' in receipt_helper
 
 

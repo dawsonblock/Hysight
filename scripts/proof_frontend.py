@@ -36,6 +36,15 @@ FIXTURE_JUNIT_PATH = REPO_ROOT / "test_reports" / "frontend-fixture-drift.xml"
 EXPECTED_NODE_MAJOR = 20
 EXPECTED_YARN_VERSION = "1.22.22"
 REPO_VENV_DIR = (REPO_ROOT / ".venv").resolve()
+ALL_PROOF_STEP_IDS = (
+    "pipeline",
+    "backend-baseline",
+    "contract",
+    "frontend",
+    "integration",
+    "mongo-live",
+    "sidecar",
+)
 
 
 class FrontendProofError(RuntimeError):
@@ -196,6 +205,45 @@ def _validate_runtime(stage_results: List[Dict[str, Any]]) -> tuple[str, str]:
             "Frontend runtime verification failed. Use Node 20.20.2 and Yarn 1.22.22."
         )
     return node_version, yarn_version
+
+
+def _proof_scope_metadata(
+    stage_results: List[Dict[str, Any]],
+    skipped_cases: List[Dict[str, str]],
+    *,
+    node_version: str,
+    yarn_version: str,
+) -> Dict[str, Any]:
+    covered_stage_names = [str(stage.get("name", "")) for stage in stage_results]
+    passed_stage_names = [
+        str(stage.get("name", ""))
+        for stage in stage_results
+        if stage.get("status") == "passed"
+    ]
+    failed_stage_names = [
+        str(stage.get("name", ""))
+        for stage in stage_results
+        if stage.get("status") == "failed"
+    ]
+
+    return {
+        "receipt_scope": (
+            "This receipt covers only the frontend proof and the stages "
+            "listed in covered_stage_names."
+        ),
+        "covered_proof_steps": ["frontend"],
+        "omitted_proof_steps": [
+            step_id for step_id in ALL_PROOF_STEP_IDS if step_id != "frontend"
+        ],
+        "covered_stage_names": covered_stage_names,
+        "passed_stage_names": passed_stage_names,
+        "failed_stage_names": failed_stage_names,
+        "node_version": node_version,
+        "yarn_version": yarn_version,
+        "stages": stage_results,
+        "receipt_format": "frontend-proof-v1",
+        "skipped_cases": skipped_cases,
+    }
 
 
 def _require_installed_dependencies() -> None:
@@ -423,13 +471,12 @@ def main() -> int:
             counts=counts,
             outcome=outcome,
             failure_reason=failure_reason,
-            metadata={
-                "node_version": node_version,
-                "yarn_version": yarn_version,
-                "stages": stage_results,
-                "receipt_format": "frontend-proof-v1",
-                "skipped_cases": skipped_cases,
-            },
+            metadata=_proof_scope_metadata(
+                stage_results,
+                skipped_cases,
+                node_version=node_version,
+                yarn_version=yarn_version,
+            ),
         )
 
 

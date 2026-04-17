@@ -122,3 +122,68 @@ def test_delete_removes_record(app_client):
     # Verify gone
     r2 = app_client.get("/api/hca/memory/list")
     assert r2.json()["total"] == 0
+
+
+def test_controller_reload_ignores_truncated_final_record(
+    monkeypatch,
+    tmp_path,
+):
+    from memory_service import CandidateMemory
+    from memory_service.controller import MemoryController
+
+    storage_root = tmp_path / "storage"
+    memory_dir = storage_root / "memory"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(memory_dir))
+
+    controller = MemoryController(storage_dir=str(memory_dir))
+    memory_id = controller.ingest(CandidateMemory(raw_text="alpha record"))
+
+    with open(memory_dir / "memories.jsonl", "ab") as handle:
+        handle.write(b'{"memory_id":"truncated"')
+
+    reloaded = MemoryController(storage_dir=str(memory_dir))
+    records, total = reloaded.list_records()
+
+    assert total == 1
+    assert [record.memory_id for record in records] == [memory_id]
+
+
+def test_controller_retrieve_prefers_newest_on_tied_scores(
+    monkeypatch,
+    tmp_path,
+):
+    from memory_service import CandidateMemory, RetrievalQuery
+    from memory_service.controller import MemoryController
+
+    storage_root = tmp_path / "storage"
+    memory_dir = storage_root / "memory"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(memory_dir))
+
+    controller = MemoryController(storage_dir=str(memory_dir))
+    controller.ingest(
+        CandidateMemory(
+            raw_text="alpha beta",
+            metadata={"ordinal": "first"},
+        )
+    )
+    controller.ingest(
+        CandidateMemory(
+            raw_text="alpha beta",
+            metadata={"ordinal": "second"},
+        )
+    )
+
+    hits = controller.retrieve(
+        RetrievalQuery(query_text="alpha beta", top_k=2)
+    )
+
+    assert [hit.metadata["ordinal"] for hit in hits] == [
+        "second",
+        "first",
+    ]

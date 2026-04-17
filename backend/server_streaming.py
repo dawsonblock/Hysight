@@ -169,6 +169,9 @@ async def stream_hca_run(body: CreateRunRequest, extract_run_summary) -> Streami
                 yield _sse("done", extract_run_summary(run_id))
             else:
                 yield _sse("error", {"label": "Run failed to start."})
+        finally:
+            if not future.done():
+                await asyncio.wrap_future(future)
 
     return StreamingResponse(
         generate(),
