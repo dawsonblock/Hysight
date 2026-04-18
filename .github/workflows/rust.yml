@@ -16,7 +16,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build
+    - name: Build memvid
+      working-directory: memvid
       run: cargo build --verbose
-    - name: Run tests
+    - name: Build memvid_service
+      working-directory: memvid_service
+      run: cargo build --verbose
+    - name: Test memvid
+      working-directory: memvid
+      run: cargo test --verbose
+    - name: Test memvid_service
+      working-directory: memvid_service
       run: cargo test --verbose
