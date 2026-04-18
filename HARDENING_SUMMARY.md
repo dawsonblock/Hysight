@@ -35,12 +35,12 @@ Recent verification on the supported bootstrap path:
   - build passed
   - receipt: `artifacts/proof/frontend.json`
 - `./.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline`
-  - `84 passed, 1 deselected`
+  - `96 passed, 1 deselected`
 - `./.venv/bin/python scripts/check_repo_integrity.py`
   - passed
 
 Current baseline contract enforced by `scripts/run_tests.py`:
 
 - HCA pipeline proof: `7 passed`
-- Backend baseline proof: `84 passed`
+- Backend baseline proof: `96 passed`
 - Contract conformance proof: `18 passed`

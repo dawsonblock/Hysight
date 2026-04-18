@@ -259,8 +259,11 @@ class MemoryController:
             "stored_at": datetime.now(timezone.utc).isoformat(),
             "expired": False,
         }
-        self._records.append(record)
-        self._append_to_disk(record)
+        with self._records_lock:
+            # Persist to disk first so a disk failure leaves the in-memory
+            # state untouched. _append_to_disk re-enters the RLock safely.
+            self._append_to_disk(record)
+            self._records.append(record)
         return memory_id
 
     def retrieve(self, query: RetrievalQuery) -> List[RetrievalHit]:
@@ -369,6 +372,7 @@ class MemoryController:
         now = datetime.now(timezone.utc)
         expired_ids: List[str] = []
         durable = 0
+        mutated = False
         with self._records_lock:
             for rec in self._records:
                 if rec.get("expired"):
@@ -380,6 +384,7 @@ class MemoryController:
                         age = now - datetime.fromisoformat(stored_raw)
                         if age > timedelta(days=7):
                             rec["expired"] = True
+                            mutated = True
                             expired_ids.append(rec["memory_id"])
                             continue
                     except (TypeError, ValueError):
@@ -392,6 +397,8 @@ class MemoryController:
                     "procedure",
                 }:
                     durable += 1
+            if mutated and self._storage_dir:
+                self._rewrite_disk()
         return MaintenanceReport(
             durable_memory_count=durable,
             expired_count=len(expired_ids),

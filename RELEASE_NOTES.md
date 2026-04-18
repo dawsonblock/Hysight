@@ -63,7 +63,7 @@ python scripts/run_tests.py
 Current enforced baseline contract in the runner:
 
 - HCA pipeline proof: `7 passed`
-- Backend baseline proof: `84 passed`
+- Backend baseline proof: `96 passed`
 - Contract conformance proof: `18 passed`
 
 - Optional frontend proof:

@@ -53,9 +53,9 @@ The goal was to make the default local proof surface honest and runnable from a 
 Verified on the current proof contract and narrowed retests:
 
 - `./.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q`
-  - `42 passed, 1 deselected`
+  - `53 passed, 1 deselected`
 - `./.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline`
-  - `84 passed, 1 deselected`
+  - `96 passed, 1 deselected`
 - `./.venv/bin/python scripts/check_repo_integrity.py`
   - passed
 - `make proof-sidecar MEMORY_SERVICE_PORT=3032`
