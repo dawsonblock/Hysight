@@ -45,6 +45,9 @@ than coupling them to the default local proof surface.
 - Credentialed browser access remains fail-closed.
   - `CORS_ORIGINS` must be an explicit comma-separated allowlist of absolute
     origins.
+- The repo root is now an honest workspace/meta-project.
+  - `python -m pip install -e '.[dev]'` at the root installs tooling only.
+  - The supported runtime/bootstrap path remains `make venv`, which installs editable `./hca` through `backend/requirements-test.txt`.
 - Proof receipts now land under `artifacts/proof/`, with timestamped live
   history receipts under `artifacts/proof/history/` for the live Mongo and
   live sidecar harnesses.

@@ -113,6 +113,7 @@ Important bootstrap facts:
 
 - The Python runtime package lives under `./hca`.
 - `make venv` installs `backend/requirements-test.txt`, which installs editable `./hca`.
+- The repo root is a workspace/meta-project; `python -m pip install -e '.[dev]'` at the root installs tooling only and does not install the runtime package surface.
 - The default proof surface does not require MongoDB or a running sidecar.
 - The frontend is pinned to Node 20 and Yarn 1.22.22 and validates its runtime on install.
 
