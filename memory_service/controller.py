@@ -409,7 +409,14 @@ class MemoryController:
 
     # Rust HTTP delegation.
 
-    def _request(self, method: str, path: str, **kwargs: Any):
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        allowed_status_codes: tuple[int, ...] = (),
+        **kwargs: Any,
+    ):
         try:
             import httpx
         except ImportError as exc:  # pragma: no cover - dependency validation
@@ -424,6 +431,8 @@ class MemoryController:
                 timeout=10,
                 **kwargs,
             )
+            if response.status_code in allowed_status_codes:
+                return response
             response.raise_for_status()
             return response
         except httpx.HTTPError as exc:
@@ -508,7 +517,13 @@ class MemoryController:
         return list_response.records, list_response.total
 
     def _rust_delete(self, memory_id: str) -> bool:
-        response = self._request("DELETE", f"/memory/{memory_id}")
+        response = self._request(
+            "DELETE",
+            f"/memory/{memory_id}",
+            allowed_status_codes=(404,),
+        )
+        if response.status_code == 404:
+            return False
         payload = self._parse_json_response(response)
         try:
             return DeleteMemoryResponse.model_validate(payload).deleted
