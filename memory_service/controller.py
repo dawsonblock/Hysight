@@ -259,10 +259,10 @@ class MemoryController:
             "stored_at": datetime.now(timezone.utc).isoformat(),
             "expired": False,
         }
+        # Persist to disk first so a disk failure leaves the in-memory
+        # state untouched.
+        self._append_to_disk(record)
         with self._records_lock:
-            # Persist to disk first so a disk failure leaves the in-memory
-            # state untouched. _append_to_disk re-enters the RLock safely.
-            self._append_to_disk(record)
             self._records.append(record)
         return memory_id
 
