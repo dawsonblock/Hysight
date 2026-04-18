@@ -49,6 +49,9 @@ class RunContext(BaseModel):
     workflow_artifacts: List["ArtifactSummary"] = Field(
         default_factory=list
     )
+    autonomy_agent_id: Optional[str] = None
+    autonomy_trigger_id: Optional[str] = None
+    autonomy_mode: Optional[str] = None
 
 
 class WorkspaceItem(BaseModel):

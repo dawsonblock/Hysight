@@ -56,6 +56,60 @@ class EventType(str, Enum):
     workflow_step_finished = "workflow_step_finished"
     workflow_budget_exhausted = "workflow_budget_exhausted"
     workflow_terminated = "workflow_terminated"
+    autonomy_trigger_received = "autonomy_trigger_received"
+    autonomy_trigger_accepted = "autonomy_trigger_accepted"
+    autonomy_trigger_rejected = "autonomy_trigger_rejected"
+    autonomy_run_launched = "autonomy_run_launched"
+    autonomy_run_observed = "autonomy_run_observed"
+    autonomy_checkpoint_written = "autonomy_checkpoint_written"
+    autonomy_retry_scheduled = "autonomy_retry_scheduled"
+    autonomy_escalation_requested = "autonomy_escalation_requested"
+    autonomy_budget_exceeded = "autonomy_budget_exceeded"
+    autonomy_stopped = "autonomy_stopped"
+
+
+class AutonomyMode(str, Enum):
+    manual = "manual"
+    bounded = "bounded"
+    supervised = "supervised"
+
+
+class TriggerType(str, Enum):
+    schedule = "schedule"
+    inbox = "inbox"
+    run_state_change = "run_state_change"
+    memory_maintenance = "memory_maintenance"
+
+
+class TriggerStatus(str, Enum):
+    pending = "pending"
+    accepted = "accepted"
+    rejected = "rejected"
+    completed = "completed"
+    failed = "failed"
+
+
+class InboxStatus(str, Enum):
+    pending = "pending"
+    claimed = "claimed"
+    cancelled = "cancelled"
+    completed = "completed"
+
+
+class AgentStatus(str, Enum):
+    active = "active"
+    paused = "paused"
+    stopped = "stopped"
+
+
+class CheckpointStatus(str, Enum):
+    launched = "launched"
+    observing = "observing"
+    awaiting_approval = "awaiting_approval"
+    completed = "completed"
+    failed = "failed"
+    stopped = "stopped"
+    retry_scheduled = "retry_scheduled"
 
 
 class MemoryType(str, Enum):
