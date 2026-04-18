@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 
 from backend.server_models import (
+    AutonomySubsystemStatus,
     DatabaseSubsystemStatus,
     LLMSubsystemStatus,
     MemorySubsystemStatus,
@@ -14,6 +15,7 @@ from backend.server_persistence import (
     get_db,
     load_backend_settings,
 )
+from hca.autonomy.supervisor import get_supervisor
 from hca.paths import storage_root  # noqa: E402
 from memory_service.config import (
     MemoryConfigurationError,
@@ -271,4 +273,30 @@ async def get_subsystems() -> SubsystemsResponse:
         memory=memory_status,
         storage=storage_status,
         llm=llm_status,
+        autonomy=_autonomy_status(),
     )
+
+
+def _autonomy_status() -> AutonomySubsystemStatus:
+    try:
+        supervisor = get_supervisor()
+        status = supervisor.status()
+        return AutonomySubsystemStatus(
+            enabled=status.enabled,
+            running=status.running,
+            active_agents=status.active_agents,
+            active_runs=status.active_runs,
+            pending_triggers=status.pending_triggers,
+            last_tick_at=status.last_tick_at,
+            last_error=status.last_error,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        return AutonomySubsystemStatus(
+            enabled=False,
+            running=False,
+            active_agents=0,
+            active_runs=0,
+            pending_triggers=0,
+            last_tick_at=None,
+            last_error=f"{exc.__class__.__name__}: {exc}",
+        )

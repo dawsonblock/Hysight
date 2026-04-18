@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -64,3 +64,148 @@ class SubsystemsResponse(BackendModel):
     memory: MemorySubsystemStatus
     storage: StorageSubsystemStatus
     llm: LLMSubsystemStatus
+    autonomy: "AutonomySubsystemStatus"
+
+
+class AutonomySubsystemStatus(BackendModel):
+    enabled: bool
+    running: bool
+    active_agents: int
+    active_runs: int
+    pending_triggers: int
+    last_tick_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+
+
+class AutonomyBudgetModel(BackendModel):
+    max_steps_per_run: int = 50
+    max_runs_per_agent: int = 25
+    max_parallel_runs: int = 1
+    max_retries_per_step: int = 2
+    max_run_duration_seconds: int = 900
+    deadman_timeout_seconds: int = 1800
+
+
+class AutonomyPolicyModel(BackendModel):
+    mode: str = "bounded"
+    enabled: bool = True
+    budget: AutonomyBudgetModel = Field(default_factory=AutonomyBudgetModel)
+    approval_required_action_classes: List[str] = Field(default_factory=list)
+    allowed_tool_names: List[str] = Field(default_factory=list)
+    allowed_network_domains: List[str] = Field(default_factory=list)
+    allowed_workspace_roots: List[str] = Field(default_factory=list)
+    allow_memory_writes: bool = True
+    allow_external_writes: bool = False
+    auto_resume_after_approval: bool = False
+
+
+class CreateAutonomyAgentRequest(BackendModel):
+    name: str
+    description: Optional[str] = None
+    mode: str = "bounded"
+    policy: Optional[AutonomyPolicyModel] = None
+
+
+class AutonomyAgentResponse(BackendModel):
+    agent_id: str
+    name: str
+    description: Optional[str] = None
+    mode: str
+    status: str
+    policy: AutonomyPolicyModel
+    created_at: datetime
+    updated_at: datetime
+
+
+class AutonomyAgentListResponse(BackendModel):
+    agents: List[AutonomyAgentResponse] = Field(default_factory=list)
+
+
+class CreateAutonomyScheduleRequest(BackendModel):
+    agent_id: str
+    interval_seconds: int
+    goal_override: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class AutonomyScheduleResponse(BackendModel):
+    schedule_id: str
+    agent_id: str
+    interval_seconds: int
+    goal_override: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    enabled: bool
+    last_fired_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AutonomyScheduleListResponse(BackendModel):
+    schedules: List[AutonomyScheduleResponse] = Field(default_factory=list)
+
+
+class CreateAutonomyInboxItemRequest(BackendModel):
+    agent_id: str
+    goal: str
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AutonomyInboxItemResponse(BackendModel):
+    item_id: str
+    agent_id: str
+    goal: str
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    status: str
+    created_at: datetime
+    claimed_at: Optional[datetime] = None
+
+
+class AutonomyInboxListResponse(BackendModel):
+    items: List[AutonomyInboxItemResponse] = Field(default_factory=list)
+
+
+class AutonomyCheckpointResponse(BackendModel):
+    agent_id: str
+    trigger_id: str
+    run_id: Optional[str] = None
+    status: str
+    attempt: int
+    last_event_id: Optional[str] = None
+    last_state: Optional[str] = None
+    last_decision: Optional[str] = None
+    resume_allowed: bool
+    checkpointed_at: datetime
+    budget_snapshot: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AutonomyCheckpointListResponse(BackendModel):
+    checkpoints: List[AutonomyCheckpointResponse] = Field(default_factory=list)
+
+
+class AutonomyRunLinkResponse(BackendModel):
+    agent_id: str
+    trigger_id: str
+    run_id: str
+
+
+class AutonomyRunListResponse(BackendModel):
+    runs: List[AutonomyRunLinkResponse] = Field(default_factory=list)
+
+
+class AutonomyStatusResponse(BackendModel):
+    enabled: bool
+    running: bool
+    active_agents: int
+    active_runs: int
+    pending_triggers: int
+    last_tick_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+
+
+class AutonomyControlResponse(BackendModel):
+    agent_id: str
+    status: str
+
+
+SubsystemsResponse.model_rebuild()

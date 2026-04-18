@@ -1,0 +1,440 @@
+"""Backend routes exposing the bounded autonomy subsystem."""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
+
+from backend.server_models import (
+    AutonomyAgentListResponse,
+    AutonomyAgentResponse,
+    AutonomyBudgetModel,
+    AutonomyCheckpointListResponse,
+    AutonomyCheckpointResponse,
+    AutonomyControlResponse,
+    AutonomyInboxItemResponse,
+    AutonomyInboxListResponse,
+    AutonomyPolicyModel,
+    AutonomyRunLinkResponse,
+    AutonomyRunListResponse,
+    AutonomyScheduleListResponse,
+    AutonomyScheduleResponse,
+    AutonomyStatusResponse,
+    CreateAutonomyAgentRequest,
+    CreateAutonomyInboxItemRequest,
+    CreateAutonomyScheduleRequest,
+)
+from hca.autonomy import storage as autonomy_storage
+from hca.autonomy.policy import AutonomyBudget, AutonomyPolicy
+from hca.autonomy.supervisor import get_supervisor
+from hca.autonomy.triggers import (
+    AutonomyAgent,
+    AutonomyInboxItem,
+    AutonomySchedule,
+)
+from hca.common.enums import AgentStatus, AutonomyMode, InboxStatus
+
+
+def _agent_to_response(agent: AutonomyAgent) -> AutonomyAgentResponse:
+    budget = AutonomyBudgetModel(**agent.policy.budget.model_dump())
+    policy = AutonomyPolicyModel(
+        mode=agent.policy.mode.value,
+        enabled=agent.policy.enabled,
+        budget=budget,
+        approval_required_action_classes=list(
+            agent.policy.approval_required_action_classes
+        ),
+        allowed_tool_names=list(agent.policy.allowed_tool_names),
+        allowed_network_domains=list(agent.policy.allowed_network_domains),
+        allowed_workspace_roots=list(agent.policy.allowed_workspace_roots),
+        allow_memory_writes=agent.policy.allow_memory_writes,
+        allow_external_writes=agent.policy.allow_external_writes,
+        auto_resume_after_approval=agent.policy.auto_resume_after_approval,
+    )
+    return AutonomyAgentResponse(
+        agent_id=agent.agent_id,
+        name=agent.name,
+        description=agent.description,
+        mode=agent.mode.value,
+        status=agent.status.value,
+        policy=policy,
+        created_at=agent.created_at,
+        updated_at=agent.updated_at,
+    )
+
+
+def _schedule_to_response(
+    schedule: AutonomySchedule,
+) -> AutonomyScheduleResponse:
+    return AutonomyScheduleResponse(
+        schedule_id=schedule.schedule_id,
+        agent_id=schedule.agent_id,
+        interval_seconds=schedule.interval_seconds,
+        goal_override=schedule.goal_override,
+        payload=dict(schedule.payload),
+        enabled=schedule.enabled,
+        last_fired_at=schedule.last_fired_at,
+        created_at=schedule.created_at,
+        updated_at=schedule.updated_at,
+    )
+
+
+def _inbox_to_response(item: AutonomyInboxItem) -> AutonomyInboxItemResponse:
+    return AutonomyInboxItemResponse(
+        item_id=item.item_id,
+        agent_id=item.agent_id,
+        goal=item.goal,
+        payload=dict(item.payload),
+        status=item.status.value,
+        created_at=item.created_at,
+        claimed_at=item.claimed_at,
+    )
+
+
+def register_autonomy_routes(router: APIRouter) -> None:
+    @router.get(
+        "/hca/autonomy/status", response_model=AutonomyStatusResponse
+    )
+    async def autonomy_status():
+        supervisor = get_supervisor()
+        status = await asyncio.to_thread(supervisor.status)
+        return AutonomyStatusResponse(
+            enabled=status.enabled,
+            running=status.running,
+            active_agents=status.active_agents,
+            active_runs=status.active_runs,
+            pending_triggers=status.pending_triggers,
+            last_tick_at=status.last_tick_at,
+            last_error=status.last_error,
+        )
+
+    @router.get(
+        "/hca/autonomy/agents", response_model=AutonomyAgentListResponse
+    )
+    async def list_autonomy_agents():
+        agents = await asyncio.to_thread(autonomy_storage.list_agents)
+        return AutonomyAgentListResponse(
+            agents=[_agent_to_response(a) for a in agents]
+        )
+
+    @router.post(
+        "/hca/autonomy/agents", response_model=AutonomyAgentResponse
+    )
+    async def create_autonomy_agent(body: CreateAutonomyAgentRequest):
+        try:
+            mode = AutonomyMode(body.mode)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail=f"invalid mode: {body.mode}"
+            ) from exc
+
+        if body.policy is not None:
+            policy = AutonomyPolicy(
+                mode=mode,
+                enabled=body.policy.enabled,
+                budget=AutonomyBudget(**body.policy.budget.model_dump()),
+                approval_required_action_classes=list(
+                    body.policy.approval_required_action_classes
+                ),
+                allowed_tool_names=list(body.policy.allowed_tool_names),
+                allowed_network_domains=list(
+                    body.policy.allowed_network_domains
+                ),
+                allowed_workspace_roots=list(
+                    body.policy.allowed_workspace_roots
+                ),
+                allow_memory_writes=body.policy.allow_memory_writes,
+                allow_external_writes=body.policy.allow_external_writes,
+                auto_resume_after_approval=(
+                    body.policy.auto_resume_after_approval
+                ),
+            )
+        else:
+            policy = AutonomyPolicy(mode=mode)
+
+        agent = AutonomyAgent(
+            name=body.name,
+            description=body.description,
+            mode=mode,
+            policy=policy,
+        )
+        saved = await asyncio.to_thread(autonomy_storage.save_agent, agent)
+        return _agent_to_response(saved)
+
+    @router.get(
+        "/hca/autonomy/agents/{agent_id}",
+        response_model=AutonomyAgentResponse,
+    )
+    async def get_autonomy_agent(agent_id: str):
+        agent = await asyncio.to_thread(
+            autonomy_storage.get_agent, agent_id
+        )
+        if agent is None:
+            raise HTTPException(status_code=404, detail="agent not found")
+        return _agent_to_response(agent)
+
+    async def _set_status(
+        agent_id: str, status: AgentStatus
+    ) -> AutonomyControlResponse:
+        def _apply():
+            supervisor = get_supervisor()
+            if status == AgentStatus.paused:
+                return supervisor.pause_agent(agent_id)
+            if status == AgentStatus.active:
+                return supervisor.resume_agent(agent_id)
+            return supervisor.stop_agent(agent_id)
+
+        try:
+            agent = await asyncio.to_thread(_apply)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return AutonomyControlResponse(
+            agent_id=agent.agent_id, status=agent.status.value
+        )
+
+    @router.post(
+        "/hca/autonomy/agents/{agent_id}/pause",
+        response_model=AutonomyControlResponse,
+    )
+    async def pause_autonomy_agent(agent_id: str):
+        return await _set_status(agent_id, AgentStatus.paused)
+
+    @router.post(
+        "/hca/autonomy/agents/{agent_id}/resume",
+        response_model=AutonomyControlResponse,
+    )
+    async def resume_autonomy_agent(agent_id: str):
+        return await _set_status(agent_id, AgentStatus.active)
+
+    @router.post(
+        "/hca/autonomy/agents/{agent_id}/stop",
+        response_model=AutonomyControlResponse,
+    )
+    async def stop_autonomy_agent(agent_id: str):
+        return await _set_status(agent_id, AgentStatus.stopped)
+
+    @router.get(
+        "/hca/autonomy/schedules",
+        response_model=AutonomyScheduleListResponse,
+    )
+    async def list_autonomy_schedules():
+        schedules = await asyncio.to_thread(autonomy_storage.list_schedules)
+        return AutonomyScheduleListResponse(
+            schedules=[_schedule_to_response(s) for s in schedules]
+        )
+
+    @router.post(
+        "/hca/autonomy/schedules",
+        response_model=AutonomyScheduleResponse,
+    )
+    async def create_autonomy_schedule(body: CreateAutonomyScheduleRequest):
+        agent = await asyncio.to_thread(
+            autonomy_storage.get_agent, body.agent_id
+        )
+        if agent is None:
+            raise HTTPException(status_code=404, detail="agent not found")
+        if body.interval_seconds <= 0:
+            raise HTTPException(
+                status_code=400, detail="interval_seconds must be positive"
+            )
+        schedule = AutonomySchedule(
+            agent_id=body.agent_id,
+            interval_seconds=body.interval_seconds,
+            goal_override=body.goal_override,
+            payload=dict(body.payload),
+            enabled=body.enabled,
+        )
+        saved = await asyncio.to_thread(
+            autonomy_storage.save_schedule, schedule
+        )
+        return _schedule_to_response(saved)
+
+    @router.post(
+        "/hca/autonomy/schedules/{schedule_id}/disable",
+        response_model=AutonomyScheduleResponse,
+    )
+    async def disable_autonomy_schedule(schedule_id: str):
+        def _apply():
+            schedule = autonomy_storage.get_schedule(schedule_id)
+            if schedule is None:
+                return None
+            schedule.enabled = False
+            return autonomy_storage.save_schedule(schedule)
+
+        schedule = await asyncio.to_thread(_apply)
+        if schedule is None:
+            raise HTTPException(status_code=404, detail="schedule not found")
+        return _schedule_to_response(schedule)
+
+    @router.post(
+        "/hca/autonomy/schedules/{schedule_id}/enable",
+        response_model=AutonomyScheduleResponse,
+    )
+    async def enable_autonomy_schedule(schedule_id: str):
+        def _apply():
+            schedule = autonomy_storage.get_schedule(schedule_id)
+            if schedule is None:
+                return None
+            schedule.enabled = True
+            return autonomy_storage.save_schedule(schedule)
+
+        schedule = await asyncio.to_thread(_apply)
+        if schedule is None:
+            raise HTTPException(status_code=404, detail="schedule not found")
+        return _schedule_to_response(schedule)
+
+    @router.get(
+        "/hca/autonomy/inbox",
+        response_model=AutonomyInboxListResponse,
+    )
+    async def list_autonomy_inbox(
+        agent_id: Optional[str] = Query(default=None),
+        status: Optional[str] = Query(default=None),
+    ):
+        status_filter: Optional[InboxStatus] = None
+        if status is not None:
+            try:
+                status_filter = InboxStatus(status)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"invalid inbox status: {status}",
+                ) from exc
+        items = await asyncio.to_thread(
+            autonomy_storage.list_inbox_items, agent_id, status_filter
+        )
+        return AutonomyInboxListResponse(
+            items=[_inbox_to_response(i) for i in items]
+        )
+
+    @router.post(
+        "/hca/autonomy/inbox",
+        response_model=AutonomyInboxItemResponse,
+    )
+    async def create_autonomy_inbox_item(
+        body: CreateAutonomyInboxItemRequest,
+    ):
+        agent = await asyncio.to_thread(
+            autonomy_storage.get_agent, body.agent_id
+        )
+        if agent is None:
+            raise HTTPException(status_code=404, detail="agent not found")
+        item = AutonomyInboxItem(
+            agent_id=body.agent_id,
+            goal=body.goal,
+            payload=dict(body.payload),
+        )
+        saved = await asyncio.to_thread(
+            autonomy_storage.enqueue_inbox_item, item
+        )
+        return _inbox_to_response(saved)
+
+    @router.post(
+        "/hca/autonomy/inbox/{item_id}/cancel",
+        response_model=AutonomyInboxItemResponse,
+    )
+    async def cancel_autonomy_inbox_item(item_id: str):
+        item = await asyncio.to_thread(
+            autonomy_storage.cancel_inbox_item, item_id
+        )
+        if item is None:
+            raise HTTPException(
+                status_code=404, detail="inbox item not found"
+            )
+        return _inbox_to_response(item)
+
+    @router.get(
+        "/hca/autonomy/checkpoints",
+        response_model=AutonomyCheckpointListResponse,
+    )
+    async def list_autonomy_checkpoints_all():
+        checkpoints = await asyncio.to_thread(autonomy_storage.list_checkpoints)
+        return AutonomyCheckpointListResponse(
+            checkpoints=[
+                AutonomyCheckpointResponse(
+                    agent_id=c.agent_id,
+                    trigger_id=c.trigger_id,
+                    run_id=c.run_id,
+                    status=c.status.value,
+                    attempt=c.attempt,
+                    last_event_id=c.last_event_id,
+                    last_state=c.last_state,
+                    last_decision=c.last_decision,
+                    resume_allowed=c.resume_allowed,
+                    checkpointed_at=c.checkpointed_at,
+                    budget_snapshot=dict(c.budget_snapshot),
+                )
+                for c in checkpoints
+            ]
+        )
+
+    @router.get(
+        "/hca/autonomy/checkpoints/{agent_id}",
+        response_model=AutonomyCheckpointListResponse,
+    )
+    async def list_autonomy_checkpoints_for_agent(agent_id: str):
+        checkpoints = await asyncio.to_thread(
+            autonomy_storage.list_checkpoints, agent_id
+        )
+        return AutonomyCheckpointListResponse(
+            checkpoints=[
+                AutonomyCheckpointResponse(
+                    agent_id=c.agent_id,
+                    trigger_id=c.trigger_id,
+                    run_id=c.run_id,
+                    status=c.status.value,
+                    attempt=c.attempt,
+                    last_event_id=c.last_event_id,
+                    last_state=c.last_state,
+                    last_decision=c.last_decision,
+                    resume_allowed=c.resume_allowed,
+                    checkpointed_at=c.checkpointed_at,
+                    budget_snapshot=dict(c.budget_snapshot),
+                )
+                for c in checkpoints
+            ]
+        )
+
+    @router.get(
+        "/hca/autonomy/runs",
+        response_model=AutonomyRunListResponse,
+    )
+    async def list_autonomy_runs():
+        checkpoints = await asyncio.to_thread(
+            autonomy_storage.list_active_autonomy_runs
+        )
+        return AutonomyRunListResponse(
+            runs=[
+                AutonomyRunLinkResponse(
+                    agent_id=c.agent_id,
+                    trigger_id=c.trigger_id,
+                    run_id=c.run_id or "",
+                )
+                for c in checkpoints
+                if c.run_id
+            ]
+        )
+
+    @router.post(
+        "/hca/autonomy/tick",
+        response_model=AutonomyStatusResponse,
+    )
+    async def tick_autonomy():
+        supervisor = get_supervisor()
+
+        def _run_tick():
+            supervisor.tick()
+            return supervisor.status()
+
+        status = await asyncio.to_thread(_run_tick)
+        return AutonomyStatusResponse(
+            enabled=status.enabled,
+            running=status.running,
+            active_agents=status.active_agents,
+            active_runs=status.active_runs,
+            pending_triggers=status.pending_triggers,
+            last_tick_at=status.last_tick_at,
+            last_error=status.last_error,
+        )

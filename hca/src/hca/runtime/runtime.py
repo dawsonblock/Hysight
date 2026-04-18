@@ -1019,6 +1019,41 @@ class Runtime:
         )
         return context
 
+    def create_autonomous_run(
+        self,
+        goal: str,
+        *,
+        user_id: str | None = None,
+        autonomy_agent_id: str,
+        autonomy_trigger_id: str,
+        autonomy_mode: str,
+    ) -> RunContext:
+        """Create a run carrying autonomy metadata.
+
+        This wrapper exists solely so the autonomy supervisor can launch runs
+        through the ordinary runtime path. No autonomy-specific branching is
+        introduced inside core execution logic.
+        """
+        context = RunContext(goal=goal, user_id=user_id)
+        context.active_environment = "default"
+        context.state = RuntimeState.created
+        context.autonomy_agent_id = autonomy_agent_id
+        context.autonomy_trigger_id = autonomy_trigger_id
+        context.autonomy_mode = autonomy_mode
+        self._persist_context(context)
+        append_event(
+            context,
+            EventType.run_created,
+            "runtime",
+            {
+                "goal": goal,
+                "autonomy_agent_id": autonomy_agent_id,
+                "autonomy_trigger_id": autonomy_trigger_id,
+                "autonomy_mode": autonomy_mode,
+            },
+        )
+        return context
+
     def run(self, goal: str, user_id: str | None = None) -> str:
         context = self.create_run(goal, user_id)
         self._current_state = RuntimeState.created
