@@ -30,6 +30,7 @@ Observed result highlights:
 - The repo-local `.venv` bootstrap is reproducible from a fresh clone.
 - The documented baseline proof command produces fresh receipts from the documented path.
 - The published bootstrap instructions are sufficient for the default local proof surface.
+- Root `python -m pip install -e '.[dev]'` is a tooling-only workspace install and is not part of the supported runtime bootstrap path, which remains `make venv` plus editable `./hca`.
 
 ## Undocumented manual steps
 
