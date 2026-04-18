@@ -125,7 +125,7 @@ Current baseline expectations:
 | Step | Expected passing tests |
 | --- | --- |
 | HCA pipeline | 7 |
-| Backend baseline | 84 |
+| Backend baseline | 96 |
 | Contract conformance | 18 |
 
 Supported proof tiers:

@@ -1,7 +1,7 @@
 import argparse
 import sys
 from importlib import import_module
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import json
 import re
 
@@ -45,8 +45,27 @@ _FRONTEND_COMPATIBILITY_ROUTE_PATTERNS = (
 )
 
 
+_BLOCKED_WORKSPACE_PATH_COMPONENTS = frozenset(
+    {
+        ".venv",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        "node_modules",
+        "build",
+        "dist",
+        "target",
+    }
+)
+
+
 def _is_workspace_python_path(relative_path: str) -> bool:
-    return not relative_path.startswith(".venv/")
+    normalized = relative_path.replace("\\", "/")
+    parts = PurePosixPath(normalized).parts
+    return not any(
+        part in _BLOCKED_WORKSPACE_PATH_COMPONENTS for part in parts
+    )
 
 
 @pytest.mark.parametrize(
