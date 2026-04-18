@@ -397,8 +397,8 @@ class MemoryController:
                     "procedure",
                 }:
                     durable += 1
-            if mutated and self._storage_dir:
-                self._rewrite_disk()
+        if mutated and self._storage_dir:
+            self._rewrite_disk()
         return MaintenanceReport(
             durable_memory_count=durable,
             expired_count=len(expired_ids),
