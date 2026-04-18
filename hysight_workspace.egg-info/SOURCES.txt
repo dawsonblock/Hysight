@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+hysight_workspace.egg-info/PKG-INFO
+hysight_workspace.egg-info/SOURCES.txt
+hysight_workspace.egg-info/dependency_links.txt
+hysight_workspace.egg-info/requires.txt
+hysight_workspace.egg-info/top_level.txt
+tests/test_hca_pipeline.py
