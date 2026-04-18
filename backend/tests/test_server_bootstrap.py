@@ -47,6 +47,7 @@ _FRONTEND_COMPATIBILITY_ROUTE_PATTERNS = (
 
 _BLOCKED_WORKSPACE_PATH_COMPONENTS = frozenset(
     {
+        ".pkg-venv",
         ".venv",
         "__pycache__",
         ".pytest_cache",
@@ -71,6 +72,7 @@ def _is_workspace_python_path(relative_path: str) -> bool:
 @pytest.mark.parametrize(
     "relative_path",
     [
+        ".pkg-venv/lib/python3.13/site-packages/example/__init__.py",
         ".venv/lib/python3.12/site-packages/pkg.py",
         "__pycache__/module.py",
         ".pytest_cache/module.py",
