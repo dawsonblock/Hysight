@@ -11,20 +11,24 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     steps:
-    - uses: actions/checkout@v4
-    - name: Build memvid
-      working-directory: memvid
-      run: cargo build --verbose
-    - name: Build memvid_service
-      working-directory: memvid_service
-      run: cargo build --verbose
-    - name: Test memvid
-      working-directory: memvid
-      run: cargo test --verbose
-    - name: Test memvid_service
-      working-directory: memvid_service
-      run: cargo test --verbose
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.85.0"
+      - name: Build memvid
+        working-directory: memvid
+        run: cargo build --verbose
+      - name: Build memvid_service
+        working-directory: memvid_service
+        run: cargo build --verbose
+      - name: Test memvid
+        working-directory: memvid
+        run: cargo test --verbose
+      - name: Test memvid_service
+        working-directory: memvid_service
+        run: cargo test --verbose
