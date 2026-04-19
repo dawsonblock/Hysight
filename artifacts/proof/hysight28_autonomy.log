@@ -1,0 +1,9 @@
+Running 1 proof step(s).
+
+==> [Bounded autonomy proof (optional)]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-sp7y43me MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-sp7y43me/memory /private/tmp/hysight-main-28-verify2.HX9G0r/.venv/bin/python -m pytest backend/tests/test_autonomy_policy.py backend/tests/test_autonomy_supervisor.py backend/tests/test_autonomy_routes.py backend/tests/test_autonomy_resume.py backend/tests/test_autonomy_budgets.py backend/tests/test_autonomy_events.py backend/tests/test_autonomy_kill_switch.py backend/tests/test_autonomy_dedupe.py backend/tests/test_autonomy_lifecycle.py -q -ra --strict-markers --junitxml=/private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/pytest/backend-autonomy-optional-proof.xml
+..................................................                       [100%]
+- generated xml file: /private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/pytest/backend-autonomy-optional-proof.xml -
+50 passed in 0.51s
+
+All 1 proof step(s) passed (50 passed, 0 skipped).

@@ -1,20 +1,20 @@
 {
-  "command": "/private/tmp/hysight-main-28-verify2.HX9G0r/.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline",
+  "command": "/private/tmp/hysight-main-28-verify2.HX9G0r/.venv/bin/python scripts/run_tests.py --baseline-step contract",
   "commit_sha": "local-worktree",
   "environment_mode": "repo_local_venv",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-19T07:58:03.919978+00:00",
+  "generated_at": "2026-04-19T07:58:05.112384+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
-      "backend-baseline"
+      "contract"
     ],
     "failed_proof_steps": [],
     "includes_optional_proof_steps": false,
     "omitted_proof_steps": [
       "pipeline",
-      "contract",
+      "backend-baseline",
       "frontend",
       "integration",
       "mongo-live",
@@ -22,7 +22,7 @@
       "autonomy-optional"
     ],
     "passed_proof_steps": [
-      "backend-baseline"
+      "contract"
     ],
     "receipt_scope": "This receipt covers only the proof steps listed in covered_proof_steps.",
     "steps": [
@@ -31,13 +31,13 @@
         "counts": {
           "error_test_count": 0,
           "failed_test_count": 0,
-          "passed_test_count": 98,
+          "passed_test_count": 18,
           "skipped_test_count": 0,
-          "total_test_count": 98
+          "total_test_count": 18
         },
-        "id": "backend-baseline",
-        "junit_xml": "test_reports/pytest/backend-baseline-proof.xml",
-        "name": "Backend baseline proof",
+        "id": "contract",
+        "junit_xml": "test_reports/pytest/contract-conformance-proof.xml",
+        "name": "Contract conformance proof",
         "outcome": "passed",
         "proof_failure_reason": null,
         "proof_metadata": null,
@@ -48,14 +48,14 @@
     ]
   },
   "outcome": "passed",
-  "passed_test_count": 98,
+  "passed_test_count": 18,
   "platform": "macOS-26.2-arm64-arm-64bit",
-  "proof_tier": "backend-baseline",
+  "proof_tier": "contract",
   "python_version": "3.9.7",
   "schema_version": 2,
   "service_connection_mode": "none",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-19T07:58:03.919978+00:00",
-  "total_test_count": 98
+  "timestamp": "2026-04-19T07:58:05.112384+00:00",
+  "total_test_count": 18
 }

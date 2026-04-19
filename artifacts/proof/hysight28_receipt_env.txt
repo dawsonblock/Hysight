@@ -1,0 +1,23 @@
+# Hysight-main 28 receipt reconciliation
+# generated: 2026-04-19T07:56:46Z
+# source workspace: /Users/dawsonblock/Hysight
+# clean copy path: /tmp/hysight-main-28-verify2.HX9G0r
+
+## uname
+Darwin Mac.gateway.sasktel.net 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:07:05 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6020 arm64
+
+## sw_vers
+ProductName:		macOS
+ProductVersion:		26.2
+BuildVersion:		25C56
+
+## arch: arm64
+## python3: Python 3.9.7
+## rustc: rustc 1.94.0 (4a4ef493e 2026-03-02)
+## cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+## node: v20.20.2
+## yarn: 1.22.22
+## absolute_repo_path: /tmp/hysight-main-28-verify2.HX9G0r
+
+## repo fingerprint
+97ebe1a1cb1b35990a5b19d8373e329eae1d6ba7  -

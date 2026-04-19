@@ -1,0 +1,58 @@
+
+==> [Node version]
+    node --version
+v20.20.2
+
+==> [Yarn version]
+    yarn --version
+1.22.22
+
+==> [Frontend runtime verification]
+    node ./scripts/verify-runtime.js
+
+==> [Frontend fixture drift gate]
+    /private/tmp/hysight-main-28-verify2.HX9G0r/.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q --check-fixture-drift -k generated_frontend_api_fixtures_match_backend_export -ra --strict-markers --junitxml=/private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/frontend-fixture-drift.xml
+.                                                                        [100%]
+- generated xml file: /private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/frontend-fixture-drift.xml -
+1 passed, 55 deselected in 0.20s
+
+==> [Frontend lint]
+    yarn lint
+yarn run v1.22.22
+$ eslint .
+Done in 0.77s.
+
+==> [Frontend tests]
+    yarn test --watch=false --runInBand --json --outputFile=/private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/frontend-jest.json
+yarn run v1.22.22
+$ craco test --watch=false --runInBand --json --outputFile=/private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/frontend-jest.json
+Done in 4.21s.
+
+==> [Frontend build]
+    yarn build
+yarn run v1.22.22
+$ craco build
+Creating an optimized production build...
+Compiled successfully.
+
+File sizes after gzip:
+
+  178.45 kB  build/static/js/main.2e27f740.js
+  12.28 kB   build/static/css/main.e3a07d3d.css
+
+The project was built assuming it is hosted at /.
+You can control this with the homepage field in your package.json.
+
+The build folder is ready to be deployed.
+You may serve it with a static server:
+
+  yarn global add serve
+  serve -s build
+
+Find out more about deployment here:
+
+  https://cra.link/deployment
+
+Done in 9.88s.
+
+Frontend proof passed (20 passed, 0 skipped).

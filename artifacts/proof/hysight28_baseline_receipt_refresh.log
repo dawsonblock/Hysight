@@ -1,0 +1,32 @@
+old_bundled_backend_baseline_count=96
+===== refresh pipeline receipt =====
+Running 1 proof step(s).
+
+==> [HCA pipeline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-0tbtlnj4 MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-0tbtlnj4/memory /private/tmp/hysight-main-28-verify2.HX9G0r/.venv/bin/python -m pytest tests/test_hca_pipeline.py -q -ra --strict-markers --junitxml=/private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/pytest/hca-pipeline-proof.xml
+.......                                                                  [100%]
+- generated xml file: /private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/pytest/hca-pipeline-proof.xml -
+7 passed in 0.19s
+
+All 1 proof step(s) passed (7 passed, 0 skipped).
+===== refresh backend-baseline receipt =====
+Running 1 proof step(s).
+
+==> [Backend baseline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-ja663ucb MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-ja663ucb/memory /private/tmp/hysight-main-28-verify2.HX9G0r/.venv/bin/python -m pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q -ra --strict-markers --junitxml=/private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/pytest/backend-baseline-proof.xml
+........................................................................ [ 73%]
+..........................                                               [100%]
+- generated xml file: /private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/pytest/backend-baseline-proof.xml -
+98 passed, 1 deselected in 2.63s
+
+All 1 proof step(s) passed (98 passed, 0 skipped).
+===== refresh contract receipt =====
+Running 1 proof step(s).
+
+==> [Contract conformance proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-5kr5xpzm MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-5kr5xpzm/memory /private/tmp/hysight-main-28-verify2.HX9G0r/.venv/bin/python -m pytest backend/tests/test_contract_conformance.py -q -ra --strict-markers --junitxml=/private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/pytest/contract-conformance-proof.xml
+..................                                                       [100%]
+- generated xml file: /private/tmp/hysight-main-28-verify2.HX9G0r/test_reports/pytest/contract-conformance-proof.xml -
+18 passed in 0.46s
+
+All 1 proof step(s) passed (18 passed, 0 skipped).
