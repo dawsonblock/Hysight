@@ -379,7 +379,7 @@
     "SubsystemsResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "consistency_check_passed", "replay_authority", "hca_runtime_authority", "database", "memory", "storage", "llm"],
+      "required": ["status", "consistency_check_passed", "replay_authority", "hca_runtime_authority", "database", "memory", "storage", "llm", "autonomy"],
       "properties": {
         "status": { "type": "string" },
         "consistency_check_passed": { "type": "boolean" },
@@ -388,7 +388,22 @@
         "database": { "$ref": "#/definitions/DatabaseSubsystemStatus" },
         "memory": { "$ref": "#/definitions/MemorySubsystemStatus" },
         "storage": { "$ref": "#/definitions/StorageSubsystemStatus" },
-        "llm": { "$ref": "#/definitions/LLMSubsystemStatus" }
+        "llm": { "$ref": "#/definitions/LLMSubsystemStatus" },
+        "autonomy": { "$ref": "#/definitions/AutonomySubsystemStatus" }
+      }
+    },
+    "AutonomySubsystemStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "running", "active_agents", "active_runs", "pending_triggers"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "running": { "type": "boolean" },
+        "active_agents": { "type": "integer" },
+        "active_runs": { "type": "integer" },
+        "pending_triggers": { "type": "integer" },
+        "last_tick_at": { "type": ["string", "null"], "format": "date-time" },
+        "last_error": { "type": ["string", "null"] }
       }
     },
     "HCARunRequest": {

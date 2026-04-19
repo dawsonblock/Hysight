@@ -1,10 +1,10 @@
 {
   "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py",
-  "commit_sha": "7fe0c4d8d7fbd9637bf29314dda296df51dc0679",
+  "commit_sha": "6e609b1f2c36dea413e60f8134d1bc85d57f59a8",
   "environment_mode": "repo_local_venv",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-18T22:34:14.309436+00:00",
+  "generated_at": "2026-04-19T05:46:17.056806+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -18,7 +18,8 @@
       "frontend",
       "integration",
       "mongo-live",
-      "sidecar"
+      "sidecar",
+      "autonomy-optional"
     ],
     "passed_proof_steps": [
       "pipeline",
@@ -51,9 +52,9 @@
         "counts": {
           "error_test_count": 0,
           "failed_test_count": 0,
-          "passed_test_count": 96,
+          "passed_test_count": 98,
           "skipped_test_count": 0,
-          "total_test_count": 96
+          "total_test_count": 98
         },
         "id": "backend-baseline",
         "junit_xml": "test_reports/pytest/backend-baseline-proof.xml",
@@ -87,7 +88,7 @@
     ]
   },
   "outcome": "passed",
-  "passed_test_count": 121,
+  "passed_test_count": 123,
   "platform": "macOS-26.2-arm64-arm-64bit",
   "proof_tier": "baseline",
   "python_version": "3.9.7",
@@ -95,6 +96,6 @@
   "service_connection_mode": "none",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-18T22:34:14.309436+00:00",
-  "total_test_count": 121
+  "timestamp": "2026-04-19T05:46:17.056806+00:00",
+  "total_test_count": 123
 }

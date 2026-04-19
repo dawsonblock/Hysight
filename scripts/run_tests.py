@@ -105,6 +105,7 @@ STEP_JUNIT_FILENAMES = {
     "integration": "backend-integration-proof.xml",
     "mongo-live": "backend-live-mongo-proof.xml",
     "sidecar": "backend-live-sidecar-proof.xml",
+    "autonomy-optional": "backend-autonomy-optional-proof.xml",
 }
 
 FRONTEND_PROOF_RECEIPT_PATH = PROOF_ARTIFACT_DIR / "frontend.json"
@@ -118,8 +119,8 @@ EXPECTED_BASELINE_STEP_COUNTS = {
         "error_test_count": 0,
     },
     "backend-baseline": {
-        "total_test_count": 96,
-        "passed_test_count": 96,
+        "total_test_count": 98,
+        "passed_test_count": 98,
         "skipped_test_count": 0,
         "failed_test_count": 0,
         "error_test_count": 0,
@@ -227,6 +228,23 @@ FRONTEND_STEP: Step = {
     "cmd": [sys.executable, "scripts/proof_frontend.py"],
 }
 
+AUTONOMY_OPTIONAL_STEP: Step = {
+    "id": "autonomy-optional",
+    "name": "Bounded autonomy proof (optional)",
+    "receipt_name": "autonomy-optional",
+    "isolated_storage": True,
+    "cmd": [
+        sys.executable, "-m", "pytest",
+        "backend/tests/test_autonomy_policy.py",
+        "backend/tests/test_autonomy_supervisor.py",
+        "backend/tests/test_autonomy_routes.py",
+        "backend/tests/test_autonomy_resume.py",
+        "backend/tests/test_autonomy_budgets.py",
+        "backend/tests/test_autonomy_events.py",
+        "-q",
+    ],
+}
+
 ALL_PROOF_STEP_IDS = (
     "pipeline",
     "backend-baseline",
@@ -235,6 +253,7 @@ ALL_PROOF_STEP_IDS = (
     "integration",
     "mongo-live",
     "sidecar",
+    "autonomy-optional",
 )
 
 OPTIONAL_PROOF_STEP_IDS = (
@@ -242,6 +261,7 @@ OPTIONAL_PROOF_STEP_IDS = (
     "integration",
     "mongo-live",
     "sidecar",
+    "autonomy-optional",
 )
 
 # ---------------------------------------------------------------------------
@@ -521,7 +541,9 @@ def _invocation_receipt_name(
 ) -> str:
     if args.baseline_step:
         return args.baseline_step
-    if not any((args.frontend, args.integration, args.mongo_live, args.sidecar)):
+    if not any(
+        (args.frontend, args.integration, args.mongo_live, args.sidecar, args.autonomy)
+    ):
         return "baseline"
     if len(steps) == 1:
         return str(steps[0]["receipt_name"])
@@ -911,6 +933,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--autonomy",
+        action="store_true",
+        help=(
+            "Run the opt-in bounded autonomy proof. Exercises the autonomy "
+            "policy, supervisor, routes, resume safety, budgets, and event "
+            "log integration tests. Not part of the baseline contract."
+        ),
+    )
+    parser.add_argument(
         "--strict-venv",
         action="store_true",
         help=(
@@ -920,7 +951,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if args.baseline_step and any((args.frontend, args.integration, args.mongo_live, args.sidecar)):
+    if args.baseline_step and any(
+        (args.frontend, args.integration, args.mongo_live, args.sidecar, args.autonomy)
+    ):
         print(
             "--baseline-step cannot be combined with optional proof flags.",
             file=sys.stderr,
@@ -968,7 +1001,9 @@ def main() -> int:
         steps = [
             next(step for step in BASELINE_STEPS if step["id"] == args.baseline_step)
         ]
-    elif not any((args.frontend, args.integration, args.mongo_live, args.sidecar)):
+    elif not any(
+        (args.frontend, args.integration, args.mongo_live, args.sidecar, args.autonomy)
+    ):
         steps = list(BASELINE_STEPS)
     else:
         steps = []
@@ -980,6 +1015,8 @@ def main() -> int:
             steps.append(MONGO_LIVE_STEP)
         if args.sidecar:
             steps.append(SIDECAR_STEP)
+        if args.autonomy:
+            steps.append(AUTONOMY_OPTIONAL_STEP)
 
     receipt_name = _invocation_receipt_name(args, steps)
     latest_receipt_path = _receipt_path_for_name(receipt_name)

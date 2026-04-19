@@ -46,18 +46,7 @@ _FRONTEND_COMPATIBILITY_ROUTE_PATTERNS = (
 
 
 _BLOCKED_WORKSPACE_PATH_COMPONENTS = frozenset(
-    {
-        ".pkg-venv",
-        ".venv",
-        "__pycache__",
-        ".pytest_cache",
-        ".mypy_cache",
-        ".ruff_cache",
-        "node_modules",
-        "build",
-        "dist",
-        "target",
-    }
+    import_module("hca.executor.tool_registry").WORKSPACE_IGNORED_DIR_NAMES
 )
 
 
@@ -92,6 +81,32 @@ def test_is_workspace_python_path_rejects_transient_directories(
 
 def test_is_workspace_python_path_accepts_repo_source_files():
     assert _is_workspace_python_path("backend/server.py") is True
+
+
+def test_blocked_workspace_path_components_superset_of_production():
+    """Fail loudly if the production ignore list drifts from the test list.
+
+    The production discovery blocklist lives in
+    ``hca.executor.tool_registry.WORKSPACE_IGNORED_DIR_NAMES`` and is imported
+    above to seed ``_BLOCKED_WORKSPACE_PATH_COMPONENTS``. This test asserts the
+    invariant that the test blocklist is always a superset of production. The
+    original ``.pkg-venv`` drift (commit 422155d added it to tests only) is
+    now prevented by construction plus this explicit check.
+    """
+    production = set(
+        import_module("hca.executor.tool_registry").WORKSPACE_IGNORED_DIR_NAMES
+    )
+    assert production, "production blocklist is empty — unexpected"
+    assert production.issubset(_BLOCKED_WORKSPACE_PATH_COMPONENTS), (
+        "production WORKSPACE_IGNORED_DIR_NAMES has drifted from the test "
+        "blocklist: "
+        f"missing from tests = {production - _BLOCKED_WORKSPACE_PATH_COMPONENTS}"
+    )
+    assert ".pkg-venv" in production, (
+        ".pkg-venv must remain in the production blocklist so workspace "
+        "discovery never leaks transient install directories into proof "
+        "evidence."
+    )
 
 
 def _contains_frontend_compatibility_run_route(content: str) -> bool:
@@ -794,6 +809,7 @@ def test_run_tests_receipt_scope_metadata_tracks_covered_steps():
             "integration",
             "mongo-live",
             "sidecar",
+            "autonomy-optional",
         ],
         "passed_proof_steps": ["pipeline", "frontend"],
         "failed_proof_steps": [],

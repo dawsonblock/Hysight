@@ -27,6 +27,7 @@ from backend.server_models import (
     CreateAutonomyScheduleRequest,
 )
 from hca.autonomy import storage as autonomy_storage
+from hca.autonomy.checkpoint import AutonomyCheckpoint
 from hca.autonomy.policy import AutonomyBudget, AutonomyPolicy
 from hca.autonomy.supervisor import get_supervisor
 from hca.autonomy.triggers import (
@@ -90,6 +91,22 @@ def _inbox_to_response(item: AutonomyInboxItem) -> AutonomyInboxItemResponse:
         status=item.status.value,
         created_at=item.created_at,
         claimed_at=item.claimed_at,
+    )
+
+
+def _checkpoint_to_response(c: AutonomyCheckpoint) -> AutonomyCheckpointResponse:
+    return AutonomyCheckpointResponse(
+        agent_id=c.agent_id,
+        trigger_id=c.trigger_id,
+        run_id=c.run_id,
+        status=c.status.value,
+        attempt=c.attempt,
+        last_event_id=c.last_event_id,
+        last_state=c.last_state,
+        last_decision=c.last_decision,
+        resume_allowed=c.resume_allowed,
+        checkpointed_at=c.checkpointed_at,
+        budget_snapshot=dict(c.budget_snapshot),
     )
 
 
@@ -352,22 +369,7 @@ def register_autonomy_routes(router: APIRouter) -> None:
     async def list_autonomy_checkpoints_all():
         checkpoints = await asyncio.to_thread(autonomy_storage.list_checkpoints)
         return AutonomyCheckpointListResponse(
-            checkpoints=[
-                AutonomyCheckpointResponse(
-                    agent_id=c.agent_id,
-                    trigger_id=c.trigger_id,
-                    run_id=c.run_id,
-                    status=c.status.value,
-                    attempt=c.attempt,
-                    last_event_id=c.last_event_id,
-                    last_state=c.last_state,
-                    last_decision=c.last_decision,
-                    resume_allowed=c.resume_allowed,
-                    checkpointed_at=c.checkpointed_at,
-                    budget_snapshot=dict(c.budget_snapshot),
-                )
-                for c in checkpoints
-            ]
+            checkpoints=[_checkpoint_to_response(c) for c in checkpoints]
         )
 
     @router.get(
@@ -379,22 +381,7 @@ def register_autonomy_routes(router: APIRouter) -> None:
             autonomy_storage.list_checkpoints, agent_id
         )
         return AutonomyCheckpointListResponse(
-            checkpoints=[
-                AutonomyCheckpointResponse(
-                    agent_id=c.agent_id,
-                    trigger_id=c.trigger_id,
-                    run_id=c.run_id,
-                    status=c.status.value,
-                    attempt=c.attempt,
-                    last_event_id=c.last_event_id,
-                    last_state=c.last_state,
-                    last_decision=c.last_decision,
-                    resume_allowed=c.resume_allowed,
-                    checkpointed_at=c.checkpointed_at,
-                    budget_snapshot=dict(c.budget_snapshot),
-                )
-                for c in checkpoints
-            ]
+            checkpoints=[_checkpoint_to_response(c) for c in checkpoints]
         )
 
     @router.get(

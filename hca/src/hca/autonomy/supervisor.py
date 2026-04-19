@@ -34,6 +34,7 @@ from hca.common.enums import (
     AgentStatus,
     CheckpointStatus,
     EventType,
+    InboxStatus,
     RuntimeState,
     TriggerStatus,
     TriggerType,
@@ -123,16 +124,7 @@ class AutonomySupervisor:
                 1 for agent in agents if agent.status == AgentStatus.active
             )
             active_runs = len(storage.list_active_autonomy_runs())
-            pending_inbox = len(
-                storage.list_inbox_items(
-                    status=None,
-                )
-            )
-            pending = sum(
-                1
-                for item in storage.list_inbox_items()
-                if item.status.value == "pending"
-            )
+            pending = len(storage.list_inbox_items(status=InboxStatus.pending))
             return SupervisorStatus(
                 enabled=self._enabled,
                 running=self._running,
@@ -449,9 +441,14 @@ class AutonomySupervisor:
                 (utc_now() - context.created_at).total_seconds(),
             )
 
+        # Observation re-checks only the per-run budgets (steps, retries,
+        # deadman). runs_launched / parallel_runs are launch-time gates that
+        # were already enforced when this run was created; re-applying them
+        # here would cause the first observation of an in-flight autonomy
+        # run to always trip ``max_parallel_runs`` and falsely stop the run.
         budget_decision = agent.policy.check_budget(
-            runs_launched=1,
-            parallel_runs=1,
+            runs_launched=0,
+            parallel_runs=0,
             steps_in_current_run=step_events,
             retries_for_current_step=retry_events,
             run_duration_seconds=run_duration,

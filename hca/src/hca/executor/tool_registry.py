@@ -66,6 +66,7 @@ _SEARCH_IGNORED_PREFIXES = (
 )
 _SEARCH_IGNORED_DIR_NAMES = {
     "__pycache__",
+    ".pkg-venv",
     ".pytest_cache",
     ".mypy_cache",
     ".ruff_cache",
@@ -76,6 +77,11 @@ _SEARCH_IGNORED_DIR_NAMES = {
     "build",
     "target",
 }
+
+# Public alias — single source of truth for the workspace-discovery blocklist.
+# Tests import this to guarantee production and test-side blocklists can never
+# drift silently (see test_server_bootstrap.py drift-guard test).
+WORKSPACE_IGNORED_DIR_NAMES = _SEARCH_IGNORED_DIR_NAMES
 
 
 def _dedupe(values: list[str]) -> list[str]:

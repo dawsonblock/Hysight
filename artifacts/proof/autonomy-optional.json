@@ -1,0 +1,61 @@
+{
+  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --autonomy",
+  "commit_sha": "6e609b1f2c36dea413e60f8134d1bc85d57f59a8",
+  "environment_mode": "repo_local_venv",
+  "error_test_count": 0,
+  "failed_test_count": 0,
+  "generated_at": "2026-04-19T05:46:18.108783+00:00",
+  "junit_xml": null,
+  "metadata": {
+    "covered_proof_steps": [
+      "autonomy-optional"
+    ],
+    "failed_proof_steps": [],
+    "includes_optional_proof_steps": true,
+    "omitted_proof_steps": [
+      "pipeline",
+      "backend-baseline",
+      "contract",
+      "frontend",
+      "integration",
+      "mongo-live",
+      "sidecar"
+    ],
+    "passed_proof_steps": [
+      "autonomy-optional"
+    ],
+    "receipt_scope": "This receipt covers only the proof steps listed in covered_proof_steps.",
+    "steps": [
+      {
+        "collection_issues": [],
+        "counts": {
+          "error_test_count": 0,
+          "failed_test_count": 0,
+          "passed_test_count": 41,
+          "skipped_test_count": 0,
+          "total_test_count": 41
+        },
+        "id": "autonomy-optional",
+        "junit_xml": "test_reports/pytest/backend-autonomy-optional-proof.xml",
+        "name": "Bounded autonomy proof (optional)",
+        "outcome": "passed",
+        "proof_failure_reason": null,
+        "proof_metadata": null,
+        "receipt_json": null,
+        "returncode": 0,
+        "skipped_cases": []
+      }
+    ]
+  },
+  "outcome": "passed",
+  "passed_test_count": 41,
+  "platform": "macOS-26.2-arm64-arm-64bit",
+  "proof_tier": "autonomy-optional",
+  "python_version": "3.9.7",
+  "schema_version": 2,
+  "service_connection_mode": "none",
+  "service_endpoint": "n/a",
+  "skipped_test_count": 0,
+  "timestamp": "2026-04-19T05:46:18.108783+00:00",
+  "total_test_count": 41
+}
