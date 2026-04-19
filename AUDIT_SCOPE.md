@@ -59,6 +59,20 @@ If the evaluator, a proof step, or the report claims a run succeeded because an 
 - The file must be referenced from the run's event log or the corresponding storage index, not merely implied by a success event.
 - An implied-but-missing artifact counts as a failed run even if all events look green.
 
+## Rollback rule
+
+If any release-seal edits to receipts, summaries, docs, or proof wiring cause:
+- `./.venv/bin/python scripts/run_tests.py` to fail
+or
+- `./.venv/bin/python scripts/run_tests.py --autonomy` to fail
+then:
+1. revert the release-seal edits that introduced the regression
+2. preserve the failing logs under `artifacts/proof/`
+3. classify the result as `release not sealed`
+4. report the exact file(s) whose release-seal changes caused the regression
+
+Do not leave the repo in a state where the certification pass broke the certified build.
+
 ## Docs mismatch ledger
 
 Every discrepancy between documentation and the fresh reality of this run must be recorded in this ledger so the final verdict is auditable rather than descriptive. Each row must be classified as either harmless drift or classification-changing drift; classification-changing drift blocks the hardened label.

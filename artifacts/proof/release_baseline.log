@@ -1,0 +1,22 @@
+Running 3 proof step(s).
+
+==> [HCA pipeline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-__rus_ce MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-__rus_ce/memory /private/tmp/hysight29-release-seal/.venv/bin/python -m pytest tests/test_hca_pipeline.py -q -ra --strict-markers --junitxml=/private/tmp/hysight29-release-seal/test_reports/pytest/hca-pipeline-proof.xml
+.......                                                                  [100%]
+- generated xml file: /private/tmp/hysight29-release-seal/test_reports/pytest/hca-pipeline-proof.xml -
+7 passed in 0.25s
+
+==> [Backend baseline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-tfrjekqf MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-tfrjekqf/memory /private/tmp/hysight29-release-seal/.venv/bin/python -m pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q -ra --strict-markers --junitxml=/private/tmp/hysight29-release-seal/test_reports/pytest/backend-baseline-proof.xml
+........................................................................ [ 73%]
+..........................                                               [100%]
+- generated xml file: /private/tmp/hysight29-release-seal/test_reports/pytest/backend-baseline-proof.xml -
+98 passed, 1 deselected in 2.69s
+
+==> [Contract conformance proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-0cj0w8ae MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-0cj0w8ae/memory /private/tmp/hysight29-release-seal/.venv/bin/python -m pytest backend/tests/test_contract_conformance.py -q -ra --strict-markers --junitxml=/private/tmp/hysight29-release-seal/test_reports/pytest/contract-conformance-proof.xml
+..................                                                       [100%]
+- generated xml file: /private/tmp/hysight29-release-seal/test_reports/pytest/contract-conformance-proof.xml -
+18 passed in 0.46s
+
+All 3 proof step(s) passed (123 passed, 0 skipped).

@@ -75,6 +75,15 @@ Current enforced baseline contract in the runner:
 - Overall baseline proof: `123 passed, 0 skipped`
 - Autonomy optional proof: `50 passed, 0 skipped`
 
+## Release Seal Status (2026-04-19)
+
+- Release verdict: `sealed full-proof release`
+- Packaging install passed fresh from a clean copied tree.
+- `make venv` passed fresh from the same clean tree.
+- `.pkg-venv` did not contaminate the supported proof path.
+- Fresh optional evidence counted in this seal: live Rust sidecar, fail-closed no-fallback check, and frontend proof on Node 20.20.2 / Yarn 1.22.22.
+- Live Mongo was not rerun in this seal and remains historical only.
+
 - Optional frontend proof:
 
 ```bash
@@ -102,19 +111,20 @@ MEMORY_SERVICE_PORT=3032 make proof-sidecar
 make proof-mongo-live
 ```
 
-- Verified optional proof refresh commands on 2026-04-19:
+- Release-seal optional evidence on 2026-04-19 was refreshed with:
 
 ```bash
-make test-backend-integration
-docker desktop start
-make proof-mongo-live
 make proof-sidecar
+python scripts/proof_frontend.py
 ```
 
 - The sidecar harness now falls forward to the next free localhost port when
   the default `http://localhost:3031` target is occupied or unhealthy, so the
   default `make proof-sidecar` path can still complete on hosts where `3031`
   is reserved by another local listener.
+
+- Live Mongo support remains available, but Mongo receipts were not regenerated
+  during this seal pass and are therefore historical only.
 
 Narrow already-running-Mongo path when you do not want the disposable harness:
 

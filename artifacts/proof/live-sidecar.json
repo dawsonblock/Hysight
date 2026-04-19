@@ -1,10 +1,10 @@
 {
-  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --sidecar",
-  "commit_sha": "3ef6e33507cf2b4a4011016aa1cf1609b5f703a8",
+  "command": "/private/tmp/hysight29-release-seal/.venv/bin/python scripts/run_tests.py --sidecar",
+  "commit_sha": "local-worktree",
   "environment_mode": "cargo_local_sidecar",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-19T08:45:23.926456+00:00",
+  "generated_at": "2026-04-19T21:05:54.684683+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -46,12 +46,12 @@
         "skipped_cases": [
           {
             "classname": "backend.tests.test_memvid_sidecar.TestPersistence",
-            "message": "requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3045, and supervisorctl in PATH",
+            "message": "requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3032, and supervisorctl in PATH",
             "name": "test_ingest_survives_restart"
           },
           {
             "classname": "backend.tests.test_memvid_sidecar.TestPersistence",
-            "message": "requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3045, and supervisorctl in PATH",
+            "message": "requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3032, and supervisorctl in PATH",
             "name": "test_delete_persists_across_restart"
           }
         ]
@@ -65,8 +65,8 @@
   "python_version": "3.9.7",
   "schema_version": 2,
   "service_connection_mode": "cargo-run:memvid_service",
-  "service_endpoint": "http://localhost:3045",
+  "service_endpoint": "http://localhost:3032",
   "skipped_test_count": 2,
-  "timestamp": "2026-04-19T08:45:23.926456+00:00",
+  "timestamp": "2026-04-19T21:05:54.684683+00:00",
   "total_test_count": 15
 }

@@ -166,6 +166,22 @@ Frontend proof details:
 - Jest
 - Production build
 
+## Release Seal Status
+
+The current Hysight-main 29 release candidate was freshly sealed on 2026-04-19 from a clean copied tree rather than from historical receipts.
+
+- Packaging install: PASS via `python -m pip install -e '.[dev]'`
+- Supported bootstrap: PASS via `make venv`
+- `.pkg-venv` contamination check: PASS
+- Baseline proof: 123 passed, 0 skipped
+- Autonomy optional proof: 50 passed, 0 skipped
+- Live Rust sidecar proof: 13 passed, 2 skipped
+- Sidecar no-fallback check: PASS with explicit `MemoryConfigurationError`
+- Frontend proof: 20 passed, 0 skipped on Node 20.20.2 and Yarn 1.22.22
+- Live Mongo proof was not rerun in this release seal and is not counted as fresh evidence
+
+Authoritative release-seal evidence now lives in `artifacts/proof/release_env.txt`, `artifacts/proof/release_receipt_quarantine.md`, and `RELEASE_SEAL_HYSIGHT29.md`.
+
 ## Run Modes
 
 ### 1. Default backend-only mode

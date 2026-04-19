@@ -1,0 +1,16 @@
+release_timestamp_utc=2026-04-19T21:03:04Z
+source_repo_path=/Users/dawsonblock/Hysight
+clean_release_tree=/tmp/hysight29-release-seal
+os=macOS 26.2 (25C56)
+kernel=Darwin 25.2.0
+architecture=arm64
+python=Python 3.9.7
+rustc=rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo=cargo 1.94.0 (85eff7c80 2026-01-15)
+host_node=v25.9.0
+host_yarn=1.22.22
+repo_branch=main
+repo_head_sha=519889213d3310828ba8229d83d4ffd4e5fa1702
+repo_tracked_tree_sha256=7d8d8cddd3f267325a2ca247348ed2a1058c112831c4b41ac1f9b2f1b3f5c9df
+frontend_node=v20.20.2
+frontend_yarn=1.22.22
