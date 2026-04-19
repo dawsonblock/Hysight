@@ -1,0 +1,2 @@
+hca_import=/private/tmp/hysight32-release-seal/hca/src/hca/__init__.py
+pkg_venv_in_hca_import=False

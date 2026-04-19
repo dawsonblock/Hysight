@@ -1,10 +1,10 @@
 {
-  "command": "/private/tmp/hysight31-release-seal/.venv/bin/python scripts/run_tests.py --baseline-step pipeline",
+  "command": "/private/tmp/hysight32-release-seal/.venv/bin/python scripts/run_tests.py --baseline-step pipeline",
   "commit_sha": "local-worktree",
   "environment_mode": "repo_local_venv",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-19T21:30:35.462376+00:00",
+  "generated_at": "2026-04-19T22:49:19.329707+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -56,6 +56,6 @@
   "service_connection_mode": "none",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-19T21:30:35.462376+00:00",
+  "timestamp": "2026-04-19T22:49:19.329707+00:00",
   "total_test_count": 7
 }

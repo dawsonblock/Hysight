@@ -75,7 +75,7 @@ Current enforced baseline contract in the runner:
 - Overall baseline proof: `123 passed, 0 skipped`
 - Autonomy optional proof: `50 passed, 0 skipped`
 
-## Release Seal Status for Hysight-main 31 (2026-04-19)
+## Release Seal Status for Hysight-main 32 (2026-04-19)
 
 - Release verdict: `sealed full-proof release`
 - Packaging install passed fresh from a clean copied tree for this exact revision.
@@ -83,7 +83,7 @@ Current enforced baseline contract in the runner:
 - `.pkg-venv` did not contaminate the supported proof path.
 - Fresh optional evidence counted in this seal: live Rust sidecar, live parity, fail-closed no-fallback behavior, and frontend proof on Node 20.20.2 / Yarn 1.22.22.
 - Live Mongo was not rerun in this seal and remains historical only.
-- Historical Hysight 28 and 29 summary files remain in the tree for audit context only and are not proof for 31.
+- Historical Hysight 28, 29, and 31 summary files remain in the tree for audit context only and are not proof for 32.
 
 - Optional frontend proof:
 
@@ -112,7 +112,7 @@ MEMORY_SERVICE_PORT=3032 make proof-sidecar
 make proof-mongo-live
 ```
 
-- Release-seal optional evidence for Hysight-main 31 on 2026-04-19 was refreshed with:
+- Release-seal optional evidence for Hysight-main 32 on 2026-04-19 was refreshed with:
 
 ```bash
 make proof-sidecar

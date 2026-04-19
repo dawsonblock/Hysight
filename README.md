@@ -168,7 +168,7 @@ Frontend proof details:
 
 ## Release Seal Status
 
-The current Hysight-main 31 release candidate was freshly sealed on 2026-04-19 from a clean copied tree for this exact ZIP, not from historical receipts.
+The current Hysight-main 32 release candidate was freshly sealed on 2026-04-19 from a clean copied tree for this exact ZIP, not from historical receipts.
 
 - Packaging install: PASS via `python -m pip install -e '.[dev]'`
 - Supported bootstrap: PASS via `make venv`
@@ -181,9 +181,9 @@ The current Hysight-main 31 release candidate was freshly sealed on 2026-04-19 f
 - Frontend proof: 20 passed, 0 skipped on Node 20.20.2 and Yarn 1.22.22
 - Live Mongo proof was not rerun in this release seal and is not counted as fresh evidence
 
-Older Hysight 28 and 29 summary files remain in the repository as audit history only and are not proof for 31.
+Older Hysight 28, 29, and 31 summary files remain in the repository as audit history only and are not proof for 32.
 
-Authoritative 31 release-seal evidence now lives in `artifacts/proof/release_env_hysight31.txt`, `artifacts/proof/release_quarantine_hysight31.md`, and `RELEASE_SEAL_HYSIGHT31.md`.
+Authoritative 32 release-seal evidence now lives in `artifacts/proof/release_env_hysight32.txt`, `artifacts/proof/release_quarantine_hysight32.md`, and `RELEASE_SEAL_HYSIGHT32.md`.
 
 ## Run Modes
 

@@ -1,0 +1,31 @@
+Running 3 proof step(s).
+
+==> [HCA pipeline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-zsrsok3f MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-zsrsok3f/memory /private/tmp/hysight32-release-seal/.venv/bin/python -m pytest tests/test_hca_pipeline.py -q -ra --strict-markers --junitxml=/private/tmp/hysight32-release-seal/test_reports/pytest/hca-pipeline-proof.xml
+.......                                                                  [100%]
+- generated xml file: /private/tmp/hysight32-release-seal/test_reports/pytest/hca-pipeline-proof.xml -
+7 passed in 0.22s
+
+==> [Backend baseline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-__wummoq MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-__wummoq/memory /private/tmp/hysight32-release-seal/.venv/bin/python -m pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q -ra --strict-markers --junitxml=/private/tmp/hysight32-release-seal/test_reports/pytest/backend-baseline-proof.xml
+........................................................................ [ 73%]
+..........................                                               [100%]
+- generated xml file: /private/tmp/hysight32-release-seal/test_reports/pytest/backend-baseline-proof.xml -
+98 passed, 1 deselected in 2.85s
+
+==> [Contract conformance proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-_rdj3ere MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-_rdj3ere/memory /private/tmp/hysight32-release-seal/.venv/bin/python -m pytest backend/tests/test_contract_conformance.py -q -ra --strict-markers --junitxml=/private/tmp/hysight32-release-seal/test_reports/pytest/contract-conformance-proof.xml
+..................                                                       [100%]
+- generated xml file: /private/tmp/hysight32-release-seal/test_reports/pytest/contract-conformance-proof.xml -
+18 passed in 0.49s
+
+All 3 proof step(s) passed (123 passed, 0 skipped).
+Running 1 proof step(s).
+
+==> [Bounded autonomy proof (optional)]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-bj076ssp MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-bj076ssp/memory /private/tmp/hysight32-release-seal/.venv/bin/python -m pytest backend/tests/test_autonomy_policy.py backend/tests/test_autonomy_supervisor.py backend/tests/test_autonomy_routes.py backend/tests/test_autonomy_resume.py backend/tests/test_autonomy_budgets.py backend/tests/test_autonomy_events.py backend/tests/test_autonomy_kill_switch.py backend/tests/test_autonomy_dedupe.py backend/tests/test_autonomy_lifecycle.py -q -ra --strict-markers --junitxml=/private/tmp/hysight32-release-seal/test_reports/pytest/backend-autonomy-optional-proof.xml
+..................................................                       [100%]
+- generated xml file: /private/tmp/hysight32-release-seal/test_reports/pytest/backend-autonomy-optional-proof.xml -
+50 passed in 0.57s
+
+All 1 proof step(s) passed (50 passed, 0 skipped).

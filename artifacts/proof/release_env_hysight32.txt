@@ -1,0 +1,11 @@
+release_timestamp_utc=2026-04-19T22:48:40Z
+repo_path=/tmp/hysight32-release-seal
+uname=Darwin Mac.gateway.sasktel.net 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:07:05 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6020 arm64
+sw_vers=ProductName:		macOS;ProductVersion:		26.2;BuildVersion:		25C56;
+python=Python 3.9.7
+rustc=rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo=cargo 1.94.0 (85eff7c80 2026-01-15)
+node=v25.9.0
+yarn=1.22.22
+workspace_head_sha=61182bb045e948c3b190ba9904111b204efd3f7c
+repo_fingerprint_sha1=239d5ca45d4af85156ce51c00b13711fcd09ffda
