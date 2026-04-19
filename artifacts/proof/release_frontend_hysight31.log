@@ -1,0 +1,93 @@
+yarn install v1.22.22
+$ node ./scripts/verify-runtime.js
+[1/5] Validating package.json...
+[2/5] Resolving packages...
+[3/5] Fetching packages...
+[4/5] Linking dependencies...
+warning " > react-day-picker@8.10.1" has incorrect peer dependency "date-fns@^2.28.0 || ^3.0.0".
+warning " > react-day-picker@8.10.1" has incorrect peer dependency "react@^16.8.0 || ^17.0.0 || ^18.0.0".
+warning " > react-markdown@10.1.0" has unmet peer dependency "@types/react@>=18".
+warning " > @babel/plugin-proposal-private-property-in-object@7.21.11" has unmet peer dependency "@babel/core@^7.0.0-0".
+warning "react-scripts > eslint-config-react-app > eslint-plugin-flowtype@8.0.3" has unmet peer dependency "@babel/plugin-syntax-flow@^7.14.5".
+warning "react-scripts > eslint-config-react-app > eslint-plugin-flowtype@8.0.3" has unmet peer dependency "@babel/plugin-transform-react-jsx@^7.14.9".
+warning "react-scripts > react-dev-utils > fork-ts-checker-webpack-plugin@6.5.3" has unmet peer dependency "typescript@>= 2.7".
+warning "react-scripts > eslint-config-react-app > @typescript-eslint/eslint-plugin > tsutils@3.21.0" has unmet peer dependency "typescript@>=2.8.0 || >= 3.2.0-dev || >= 3.3.0-dev || >= 3.4.0-dev || >= 3.5.0-dev || >= 3.6.0-dev || >= 3.6.0-beta || >= 3.7.0-dev || >= 3.7.0-beta".
+warning " > recharts@3.8.1" has unmet peer dependency "react-is@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0".
+warning "@craco/craco > cosmiconfig-typescript-loader@1.0.9" has unmet peer dependency "@types/node@*".
+warning "@craco/craco > cosmiconfig-typescript-loader@1.0.9" has unmet peer dependency "typescript@>=3".
+warning "@craco/craco > cosmiconfig-typescript-loader > ts-node@10.9.2" has unmet peer dependency "@types/node@*".
+warning "@craco/craco > cosmiconfig-typescript-loader > ts-node@10.9.2" has unmet peer dependency "typescript@>=2.7".
+warning Workspaces can only be enabled in private projects.
+warning Workspaces can only be enabled in private projects.
+[5/5] Building fresh packages...
+Done in 8.23s.
+PASS src/components/OperatorConsole.test.js
+PASS src/lib/api.test.js
+PASS src/components/HCAChat.test.js
+PASS src/App.test.js
+PASS src/components/MemoryBrowser.test.js
+
+Test Suites: 5 passed, 5 total
+Tests:       19 passed, 19 total
+Snapshots:   0 total
+Time:        3.155 s
+Ran all test suites.
+Test results written to: ../test_reports/frontend-jest.json
+
+==> [Node version]
+    node --version
+v20.20.2
+
+==> [Yarn version]
+    yarn --version
+1.22.22
+
+==> [Frontend runtime verification]
+    node ./scripts/verify-runtime.js
+
+==> [Frontend fixture drift gate]
+    /private/tmp/hysight31-release-seal/.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q --check-fixture-drift -k generated_frontend_api_fixtures_match_backend_export -ra --strict-markers --junitxml=/private/tmp/hysight31-release-seal/test_reports/frontend-fixture-drift.xml
+.                                                                        [100%]
+- generated xml file: /private/tmp/hysight31-release-seal/test_reports/frontend-fixture-drift.xml -
+1 passed, 55 deselected in 0.19s
+
+==> [Frontend lint]
+    yarn lint
+yarn run v1.22.22
+$ eslint .
+Done in 0.73s.
+
+==> [Frontend tests]
+    yarn test --watch=false --runInBand --json --outputFile=/private/tmp/hysight31-release-seal/test_reports/frontend-jest.json
+yarn run v1.22.22
+$ craco test --watch=false --runInBand --json --outputFile=/private/tmp/hysight31-release-seal/test_reports/frontend-jest.json
+Done in 3.72s.
+
+==> [Frontend build]
+    yarn build
+yarn run v1.22.22
+$ craco build
+Creating an optimized production build...
+Compiled successfully.
+
+File sizes after gzip:
+
+  179.35 kB  build/static/js/main.28a63002.js
+  12.28 kB   build/static/css/main.e3a07d3d.css
+
+The project was built assuming it is hosted at /.
+You can control this with the homepage field in your package.json.
+
+The build folder is ready to be deployed.
+You may serve it with a static server:
+
+  yarn global add serve
+  serve -s build
+
+Find out more about deployment here:
+
+  https://cra.link/deployment
+
+Done in 9.39s.
+
+Frontend proof passed (20 passed, 0 skipped).

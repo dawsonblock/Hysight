@@ -1,0 +1,16 @@
+release_timestamp_utc=2026-04-19T21:27:45Z
+workspace_head_sha=a1abb10a609d488f4541b3f4553feab041bf94e0
+clean_release_tree=/tmp/hysight31-release-seal
+repo_fingerprint_sha1=878d7cbe2b473c93ef15063c2509f89205cd7074
+packaging_result=PASS
+bootstrap_result=PASS
+clean_import_check=pkg_venv_in_hca_import=False
+baseline_result=PASS
+pipeline_passed=7
+backend_baseline_passed=98
+contract_passed=18
+overall_baseline_passed=123
+overall_baseline_skipped=0
+autonomy_result=PASS
+autonomy_passed=50
+autonomy_skipped=0

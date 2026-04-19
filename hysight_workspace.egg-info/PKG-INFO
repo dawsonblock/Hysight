@@ -146,8 +146,10 @@ Current baseline expectations:
 | Step | Expected passing tests |
 | --- | --- |
 | HCA pipeline | 7 |
-| Backend baseline | 96 |
+| Backend baseline | 98 |
 | Contract conformance | 18 |
+| Overall baseline | 123 |
+| Autonomy optional | 50 |
 
 Supported proof tiers:
 
@@ -184,6 +186,22 @@ Frontend proof details:
 - Jest
 - Production build
 
+## Release Seal Status
+
+The current Hysight-main 29 release candidate was freshly sealed on 2026-04-19 from a clean copied tree rather than from historical receipts.
+
+- Packaging install: PASS via `python -m pip install -e '.[dev]'`
+- Supported bootstrap: PASS via `make venv`
+- `.pkg-venv` contamination check: PASS
+- Baseline proof: 123 passed, 0 skipped
+- Autonomy optional proof: 50 passed, 0 skipped
+- Live Rust sidecar proof: 13 passed, 2 skipped
+- Sidecar no-fallback check: PASS with explicit `MemoryConfigurationError`
+- Frontend proof: 20 passed, 0 skipped on Node 20.20.2 and Yarn 1.22.22
+- Live Mongo proof was not rerun in this release seal and is not counted as fresh evidence
+
+Authoritative release-seal evidence now lives in `artifacts/proof/release_env.txt`, `artifacts/proof/release_receipt_quarantine.md`, and `RELEASE_SEAL_HYSIGHT29.md`.
+
 ## Run Modes
 
 ### 1. Default backend-only mode
@@ -208,6 +226,7 @@ Notes:
 - `MEMORY_BACKEND=python` is the default.
 - `MEMORY_SERVICE_URL` must be unset in python mode.
 - If `MONGO_URL` and `DB_NAME` are both unset, the backend still serves the HCA and memory routes; Mongo-backed `/api/status` persistence remains disabled.
+- `GET /api/subsystems` now also surfaces the bounded autonomy control plane: kill switch state, pending escalations, recent active runs, per-agent budget ledgers, last evaluator decision, and the latest checkpoint summary.
 
 ### 2. Frontend plus backend
 
@@ -300,7 +319,11 @@ The frontend and the operator workflows use the same replay-backed backend surfa
 | Method | Path | What it does |
 | --- | --- | --- |
 | `GET` | `/api/` | Backend root health message |
-| `GET` | `/api/subsystems` | Database, memory, storage, and LLM readiness |
+| `GET` | `/api/subsystems` | Database, memory, storage, LLM, and bounded autonomy readiness |
+| `GET` | `/api/hca/autonomy/status` | Kill switch state, pending escalations, budget ledgers, recent runs, and latest checkpoint summary |
+| `GET` | `/api/hca/autonomy/budgets` | Per-agent durable autonomy budget ledgers |
+| `GET` | `/api/hca/autonomy/escalations` | Pending approval/escalation checkpoints |
+| `GET` | `/api/hca/autonomy/runs` | Active autonomous run links on the shared HCA run spine |
 | `POST` | `/api/status` | Persist a status check when Mongo is configured |
 | `GET` | `/api/status` | List persisted status checks when Mongo is configured |
 | `POST` | `/api/hca/run` | Create and execute a run |
