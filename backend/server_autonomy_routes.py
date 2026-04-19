@@ -10,12 +10,17 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.server_models import (
     AutonomyAgentListResponse,
     AutonomyAgentResponse,
+    AutonomyBudgetLedgerListResponse,
+    AutonomyBudgetLedgerResponse,
     AutonomyBudgetModel,
     AutonomyCheckpointListResponse,
     AutonomyCheckpointResponse,
     AutonomyControlResponse,
+    AutonomyEscalationListResponse,
+    AutonomyEscalationResponse,
     AutonomyInboxItemResponse,
     AutonomyInboxListResponse,
+    AutonomyKillSwitchResponse,
     AutonomyPolicyModel,
     AutonomyRunLinkResponse,
     AutonomyRunListResponse,
@@ -25,6 +30,7 @@ from backend.server_models import (
     CreateAutonomyAgentRequest,
     CreateAutonomyInboxItemRequest,
     CreateAutonomyScheduleRequest,
+    SetKillSwitchRequest,
 )
 from hca.autonomy import storage as autonomy_storage
 from hca.autonomy.checkpoint import AutonomyCheckpoint
@@ -123,8 +129,75 @@ def register_autonomy_routes(router: APIRouter) -> None:
             active_agents=status.active_agents,
             active_runs=status.active_runs,
             pending_triggers=status.pending_triggers,
+            loop_running=status.loop_running,
+            kill_switch_active=status.kill_switch_active,
+            kill_switch_reason=status.kill_switch_reason,
+            kill_switch_set_at=status.kill_switch_set_at,
             last_tick_at=status.last_tick_at,
             last_error=status.last_error,
+        )
+
+    @router.post(
+        "/hca/autonomy/kill", response_model=AutonomyKillSwitchResponse
+    )
+    async def enable_kill_switch(payload: SetKillSwitchRequest):
+        supervisor = get_supervisor()
+        record = await asyncio.to_thread(
+            supervisor.set_kill_switch,
+            active=True,
+            reason=payload.reason,
+            set_by=payload.set_by,
+        )
+        return AutonomyKillSwitchResponse(**record.model_dump(mode="json"))
+
+    @router.post(
+        "/hca/autonomy/unkill", response_model=AutonomyKillSwitchResponse
+    )
+    async def clear_kill_switch(payload: SetKillSwitchRequest):
+        supervisor = get_supervisor()
+        record = await asyncio.to_thread(
+            supervisor.set_kill_switch,
+            active=False,
+            reason=None,
+            set_by=payload.set_by,
+        )
+        return AutonomyKillSwitchResponse(**record.model_dump(mode="json"))
+
+    @router.get(
+        "/hca/autonomy/budgets",
+        response_model=AutonomyBudgetLedgerListResponse,
+    )
+    async def list_autonomy_budgets():
+        ledgers = await asyncio.to_thread(autonomy_storage.list_budget_ledgers)
+        return AutonomyBudgetLedgerListResponse(
+            ledgers=[
+                AutonomyBudgetLedgerResponse(**ledger.model_dump(mode="json"))
+                for ledger in ledgers
+            ]
+        )
+
+    @router.get(
+        "/hca/autonomy/escalations",
+        response_model=AutonomyEscalationListResponse,
+    )
+    async def list_autonomy_escalations():
+        checkpoints = await asyncio.to_thread(autonomy_storage.list_checkpoints)
+        escalated = [
+            cp for cp in checkpoints if cp.status.value == "awaiting_approval"
+        ]
+        return AutonomyEscalationListResponse(
+            escalations=[
+                AutonomyEscalationResponse(
+                    agent_id=cp.agent_id,
+                    trigger_id=cp.trigger_id,
+                    run_id=cp.run_id,
+                    status=cp.status.value,
+                    last_state=cp.last_state,
+                    last_decision=cp.last_decision,
+                    checkpointed_at=cp.checkpointed_at,
+                )
+                for cp in escalated
+            ]
         )
 
     @router.get(

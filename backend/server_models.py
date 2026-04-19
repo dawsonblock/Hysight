@@ -73,6 +73,10 @@ class AutonomySubsystemStatus(BackendModel):
     active_agents: int
     active_runs: int
     pending_triggers: int
+    loop_running: bool = False
+    kill_switch_active: bool = False
+    kill_switch_reason: Optional[str] = None
+    kill_switch_set_at: Optional[datetime] = None
     last_tick_at: Optional[datetime] = None
     last_error: Optional[str] = None
 
@@ -199,6 +203,10 @@ class AutonomyStatusResponse(BackendModel):
     active_agents: int
     active_runs: int
     pending_triggers: int
+    loop_running: bool = False
+    kill_switch_active: bool = False
+    kill_switch_reason: Optional[str] = None
+    kill_switch_set_at: Optional[datetime] = None
     last_tick_at: Optional[datetime] = None
     last_error: Optional[str] = None
 
@@ -206,6 +214,50 @@ class AutonomyStatusResponse(BackendModel):
 class AutonomyControlResponse(BackendModel):
     agent_id: str
     status: str
+
+
+class SetKillSwitchRequest(BackendModel):
+    active: bool
+    reason: Optional[str] = None
+    set_by: Optional[str] = None
+
+
+class AutonomyKillSwitchResponse(BackendModel):
+    active: bool
+    reason: Optional[str] = None
+    set_at: Optional[datetime] = None
+    cleared_at: Optional[datetime] = None
+    set_by: Optional[str] = None
+
+
+class AutonomyBudgetLedgerResponse(BackendModel):
+    agent_id: str
+    launched_runs_total: int = 0
+    active_runs: int = 0
+    total_steps_observed: int = 0
+    total_retries_used: int = 0
+    last_run_started_at: Optional[datetime] = None
+    last_run_completed_at: Optional[datetime] = None
+    last_budget_breach_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class AutonomyBudgetLedgerListResponse(BackendModel):
+    ledgers: List[AutonomyBudgetLedgerResponse] = Field(default_factory=list)
+
+
+class AutonomyEscalationResponse(BackendModel):
+    agent_id: str
+    trigger_id: str
+    run_id: Optional[str] = None
+    status: str
+    last_state: Optional[str] = None
+    last_decision: Optional[str] = None
+    checkpointed_at: datetime
+
+
+class AutonomyEscalationListResponse(BackendModel):
+    escalations: List[AutonomyEscalationResponse] = Field(default_factory=list)
 
 
 SubsystemsResponse.model_rebuild()

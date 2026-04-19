@@ -14,7 +14,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from hca.autonomy.checkpoint import AutonomyCheckpoint
+from hca.autonomy.checkpoint import (
+    AutonomyBudgetLedger,
+    AutonomyCheckpoint,
+    AutonomyKillSwitch,
+)
 from hca.autonomy.triggers import (
     AutonomyAgent,
     AutonomyInboxItem,
@@ -38,6 +42,9 @@ SCHEDULES_FILE = "autonomy_schedules.jsonl"
 INBOX_FILE = "autonomy_inbox.jsonl"
 CHECKPOINTS_FILE = "autonomy_checkpoints.jsonl"
 AUDIT_FILE = "audit.jsonl"
+KILL_SWITCH_FILE = "autonomy_kill_switch.jsonl"
+BUDGET_LEDGER_FILE = "autonomy_budget_ledger.jsonl"
+DEDUPE_FILE = "autonomy_dedupe.jsonl"
 
 
 def _autonomy_root() -> Path:
@@ -327,3 +334,129 @@ def append_autonomy_audit(record: Dict[str, Any]) -> None:
 
 def read_autonomy_audit() -> List[Dict[str, Any]]:
     return _read_all(_path(AUDIT_FILE))
+
+
+# ---------------------------------------------------------------------------
+# Kill switch (single global record; latest wins)
+# ---------------------------------------------------------------------------
+
+
+def load_kill_switch() -> AutonomyKillSwitch:
+    records = _read_all(_path(KILL_SWITCH_FILE))
+    if not records:
+        return AutonomyKillSwitch()
+    return AutonomyKillSwitch.model_validate(records[-1])
+
+
+def set_kill_switch(
+    *,
+    active: bool,
+    reason: Optional[str] = None,
+    set_by: Optional[str] = None,
+) -> AutonomyKillSwitch:
+    current = load_kill_switch()
+    now = utc_now()
+    record = AutonomyKillSwitch(
+        active=active,
+        reason=reason if active else None,
+        set_at=now if active else current.set_at,
+        cleared_at=None if active else now,
+        set_by=set_by if active else current.set_by,
+    )
+    _append(_path(KILL_SWITCH_FILE), record.model_dump(mode="json"))
+    return record
+
+
+# ---------------------------------------------------------------------------
+# Budget ledger (durable per-agent counters)
+# ---------------------------------------------------------------------------
+
+
+def _latest_ledgers() -> Dict[str, Dict[str, Any]]:
+    return _latest_by_key(_read_all(_path(BUDGET_LEDGER_FILE)), "agent_id")
+
+
+def get_budget_ledger(agent_id: str) -> AutonomyBudgetLedger:
+    record = _latest_ledgers().get(agent_id)
+    if record is None:
+        return AutonomyBudgetLedger(agent_id=agent_id)
+    return AutonomyBudgetLedger.model_validate(record)
+
+
+def list_budget_ledgers() -> List[AutonomyBudgetLedger]:
+    return [
+        AutonomyBudgetLedger.model_validate(r)
+        for r in _latest_ledgers().values()
+    ]
+
+
+def update_budget_ledger(
+    agent_id: str,
+    *,
+    launched_runs_delta: int = 0,
+    active_runs_delta: int = 0,
+    steps_delta: int = 0,
+    retries_delta: int = 0,
+    run_started: bool = False,
+    run_completed: bool = False,
+    budget_breach: bool = False,
+) -> AutonomyBudgetLedger:
+    path = _path(BUDGET_LEDGER_FILE)
+    with _file_lock(path):
+        ledger = get_budget_ledger(agent_id)
+        ledger.launched_runs_total = max(
+            0, ledger.launched_runs_total + launched_runs_delta
+        )
+        ledger.active_runs = max(0, ledger.active_runs + active_runs_delta)
+        ledger.total_steps_observed = max(
+            0, ledger.total_steps_observed + steps_delta
+        )
+        ledger.total_retries_used = max(
+            0, ledger.total_retries_used + retries_delta
+        )
+        now = utc_now()
+        if run_started:
+            ledger.last_run_started_at = now
+        if run_completed:
+            ledger.last_run_completed_at = now
+        if budget_breach:
+            ledger.last_budget_breach_at = now
+        ledger.updated_at = now
+        _append(path, ledger.model_dump(mode="json"))
+        return ledger
+
+
+# ---------------------------------------------------------------------------
+# Trigger dedupe (durable dedupe_key → (trigger_id, run_id) mapping)
+# ---------------------------------------------------------------------------
+
+
+def _latest_dedupe() -> Dict[str, Dict[str, Any]]:
+    return _latest_by_key(_read_all(_path(DEDUPE_FILE)), "dedupe_key")
+
+
+def find_dedupe(dedupe_key: str) -> Optional[Dict[str, Any]]:
+    if not dedupe_key:
+        return None
+    return _latest_dedupe().get(dedupe_key)
+
+
+def record_dedupe(
+    *,
+    dedupe_key: str,
+    trigger_id: str,
+    agent_id: str,
+    run_id: Optional[str] = None,
+) -> None:
+    if not dedupe_key:
+        return
+    _append(
+        _path(DEDUPE_FILE),
+        {
+            "dedupe_key": dedupe_key,
+            "trigger_id": trigger_id,
+            "agent_id": agent_id,
+            "run_id": run_id,
+            "recorded_at": utc_now().isoformat(),
+        },
+    )

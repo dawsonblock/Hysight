@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
-from hca.common.enums import CheckpointStatus
+from hca.common.enums import CheckpointStatus, Idempotency
 from hca.common.time import utc_now
 
 
@@ -35,5 +35,51 @@ class AutonomyCheckpoint(BaseModel):
     last_state: Optional[str] = None
     last_decision: Optional[str] = None
     resume_allowed: bool = False
+    # Set at checkpoint time. False means continuation after restart is not
+    # safe without operator review (e.g. non-idempotent side-effect
+    # in-flight, kill switch active at last observation).
+    safe_to_continue: bool = True
+    # Kill-switch state observed at checkpoint time. Persisted so a restart
+    # can see the supervisor's prior view without reloading global state.
+    kill_switch_observed: bool = False
+    # Idempotency hint of the most recent side-effecting action, when known.
+    idempotency: Idempotency = Idempotency.unknown
+    # Persisted dedupe key for the trigger that produced this checkpoint.
+    # None for historical records.
+    dedupe_key: Optional[str] = None
     checkpointed_at: datetime = Field(default_factory=utc_now)
     budget_snapshot: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AutonomyBudgetLedger(BaseModel):
+    """Durable per-agent budget ledger.
+
+    Reloaded on supervisor restart so budgets never rely on in-memory
+    counters. Append-only updates; latest record wins.
+    """
+
+    agent_id: str
+    launched_runs_total: int = 0
+    active_runs: int = 0
+    total_steps_observed: int = 0
+    total_retries_used: int = 0
+    last_run_started_at: Optional[datetime] = None
+    last_run_completed_at: Optional[datetime] = None
+    last_budget_breach_at: Optional[datetime] = None
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class AutonomyKillSwitch(BaseModel):
+    """Durable global autonomy kill switch.
+
+    When ``active`` is true:
+    - ``accept_trigger`` rejects all new triggers with ``kill_switch_active``.
+    - ``observe_run`` stops continuation of existing autonomous runs.
+    - Manual HCA runs are unaffected (supervisor never touches them).
+    """
+
+    active: bool = False
+    reason: Optional[str] = None
+    set_at: Optional[datetime] = None
+    cleared_at: Optional[datetime] = None
+    set_by: Optional[str] = None

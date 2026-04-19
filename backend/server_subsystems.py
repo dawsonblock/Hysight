@@ -287,6 +287,10 @@ def _autonomy_status() -> AutonomySubsystemStatus:
             active_agents=status.active_agents,
             active_runs=status.active_runs,
             pending_triggers=status.pending_triggers,
+            loop_running=status.loop_running,
+            kill_switch_active=status.kill_switch_active,
+            kill_switch_reason=status.kill_switch_reason,
+            kill_switch_set_at=status.kill_switch_set_at,
             last_tick_at=status.last_tick_at,
             last_error=status.last_error,
         )
@@ -297,6 +301,10 @@ def _autonomy_status() -> AutonomySubsystemStatus:
             active_agents=0,
             active_runs=0,
             pending_triggers=0,
+            loop_running=False,
+            kill_switch_active=False,
+            kill_switch_reason=None,
+            kill_switch_set_at=None,
             last_tick_at=None,
             last_error=f"{exc.__class__.__name__}: {exc}",
         )

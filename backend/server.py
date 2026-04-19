@@ -75,9 +75,33 @@ async def _lifespan(app: FastAPI):
         storage_root(),
     )
     await server_persistence.initialize_database(settings)
+    # Optional background supervisor loop. Disabled by default so tests and
+    # ephemeral dev processes never spawn a thread. Enable with
+    # AUTONOMY_LOOP_ENABLED=1 plus an optional AUTONOMY_LOOP_INTERVAL=<secs>.
+    loop_started = False
+    if os.getenv("AUTONOMY_LOOP_ENABLED") == "1":
+        try:
+            from hca.autonomy.supervisor import get_supervisor
+
+            interval = float(os.getenv("AUTONOMY_LOOP_INTERVAL", "5.0"))
+            loop_started = get_supervisor().start_loop(interval_seconds=interval)
+            if loop_started:
+                logger.info(
+                    "Autonomy supervisor loop started (interval=%.1fs)", interval
+                )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Autonomy supervisor loop failed to start: %s", exc)
     try:
         yield
     finally:
+        if loop_started:
+            try:
+                from hca.autonomy.supervisor import get_supervisor
+
+                get_supervisor().stop_loop(timeout_seconds=5.0)
+                logger.info("Autonomy supervisor loop stopped")
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("Autonomy supervisor loop stop failed: %s", exc)
         server_persistence.close_database()
 
 

@@ -59,13 +59,23 @@ class EventType(str, Enum):
     autonomy_trigger_received = "autonomy_trigger_received"
     autonomy_trigger_accepted = "autonomy_trigger_accepted"
     autonomy_trigger_rejected = "autonomy_trigger_rejected"
+    autonomy_trigger_deduped = "autonomy_trigger_deduped"
     autonomy_run_launched = "autonomy_run_launched"
     autonomy_run_observed = "autonomy_run_observed"
     autonomy_checkpoint_written = "autonomy_checkpoint_written"
     autonomy_retry_scheduled = "autonomy_retry_scheduled"
     autonomy_escalation_requested = "autonomy_escalation_requested"
     autonomy_budget_exceeded = "autonomy_budget_exceeded"
+    autonomy_budget_updated = "autonomy_budget_updated"
     autonomy_stopped = "autonomy_stopped"
+    autonomy_kill_switch_enabled = "autonomy_kill_switch_enabled"
+    autonomy_kill_switch_cleared = "autonomy_kill_switch_cleared"
+    autonomy_evaluator_decided = "autonomy_evaluator_decided"
+    autonomy_continuation_blocked_non_idempotent = (
+        "autonomy_continuation_blocked_non_idempotent"
+    )
+    autonomy_supervisor_started = "autonomy_supervisor_started"
+    autonomy_supervisor_stopped = "autonomy_supervisor_stopped"
 
 
 class AutonomyMode(str, Enum):
@@ -123,6 +133,30 @@ class ActionClass(str, Enum):
     low = "low"
     medium = "medium"
     high = "high"
+
+
+class Idempotency(str, Enum):
+    """Idempotency classification for side-effecting actions.
+
+    Autonomy continuation uses this to decide whether a retry after restart
+    is safe. ``unknown`` is treated as ``non_idempotent`` for safety gates.
+    """
+
+    idempotent = "idempotent"
+    non_idempotent = "non_idempotent"
+    unknown = "unknown"
+
+
+class EvaluatorDecision(str, Enum):
+    """Structured decisions returned by the post-step evaluator."""
+
+    complete = "complete"
+    continue_observe = "continue"
+    retry = "retry"
+    escalate = "escalate"
+    stop_budget = "stop_budget"
+    stop_deadman = "stop_deadman"
+    stop_killed = "stop_killed"
 
 
 class ApprovalDecision(str, Enum):

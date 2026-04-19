@@ -21,8 +21,10 @@ from hca.autonomy import storage
 from hca.autonomy.checkpoint import (
     AutonomyBudgetState,
     AutonomyCheckpoint,
+    AutonomyKillSwitch,
     AutonomyRunLink,
 )
+from hca.autonomy.evaluator import EvaluatorReport, evaluate as evaluator_evaluate
 from hca.autonomy.policy import AutonomyPolicy, PolicyDecision
 from hca.autonomy.triggers import (
     AutonomyAgent,
@@ -33,7 +35,9 @@ from hca.autonomy.triggers import (
 from hca.common.enums import (
     AgentStatus,
     CheckpointStatus,
+    EvaluatorDecision,
     EventType,
+    Idempotency,
     InboxStatus,
     RuntimeState,
     TriggerStatus,
@@ -61,9 +65,13 @@ class _RuntimeProtocol(Protocol):
 class SupervisorStatus(BaseModel):
     enabled: bool
     running: bool
+    loop_running: bool = False
     active_agents: int
     active_runs: int
     pending_triggers: int
+    kill_switch_active: bool = False
+    kill_switch_reason: Optional[str] = None
+    kill_switch_set_at: Optional[datetime] = None
     last_tick_at: Optional[datetime] = None
     last_error: Optional[str] = None
 
@@ -94,6 +102,10 @@ class AutonomySupervisor:
         self._last_tick_at: Optional[datetime] = None
         self._last_error: Optional[str] = None
         self._lock = threading.RLock()
+        # Background loop (optional; tests drive via tick() directly).
+        self._loop_thread: Optional[threading.Thread] = None
+        self._loop_stop: Optional[threading.Event] = None
+        self._loop_interval_seconds: float = 5.0
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -104,6 +116,70 @@ class AutonomySupervisor:
 
     def stop(self) -> None:
         self._running = False
+
+    def start_loop(self, *, interval_seconds: float = 5.0) -> bool:
+        """Start a single background polling loop.
+
+        Returns True if a new loop was started, False if one was already
+        running. Safe to call repeatedly — single-instance guarded.
+        """
+        with self._lock:
+            if self._loop_thread is not None and self._loop_thread.is_alive():
+                return False
+            self._loop_interval_seconds = max(0.1, float(interval_seconds))
+            self._loop_stop = threading.Event()
+            self._running = True
+            thread = threading.Thread(
+                target=self._run_loop,
+                name="autonomy-supervisor-loop",
+                daemon=True,
+            )
+            self._loop_thread = thread
+            thread.start()
+            storage.append_autonomy_audit(
+                {
+                    "event": EventType.autonomy_supervisor_started.value,
+                    "interval_seconds": self._loop_interval_seconds,
+                }
+            )
+            return True
+
+    def stop_loop(self, *, timeout_seconds: float = 5.0) -> bool:
+        """Stop the background loop (if running). Returns True if stopped."""
+        with self._lock:
+            thread = self._loop_thread
+            stop_event = self._loop_stop
+            self._loop_thread = None
+            self._loop_stop = None
+        if thread is None or stop_event is None:
+            return False
+        stop_event.set()
+        thread.join(timeout=timeout_seconds)
+        storage.append_autonomy_audit(
+            {
+                "event": EventType.autonomy_supervisor_stopped.value,
+                "joined_cleanly": not thread.is_alive(),
+            }
+        )
+        self._running = False
+        return not thread.is_alive()
+
+    def _run_loop(self) -> None:
+        stop_event = self._loop_stop
+        if stop_event is None:
+            return
+        while not stop_event.is_set():
+            try:
+                self.tick()
+            except Exception as exc:  # pragma: no cover - defensive
+                self._last_error = f"{exc.__class__.__name__}: {exc}"
+            # Sleep in small slices so stop_loop returns promptly.
+            stop_event.wait(timeout=self._loop_interval_seconds)
+
+    @property
+    def loop_running(self) -> bool:
+        thread = self._loop_thread
+        return bool(thread is not None and thread.is_alive())
 
     def _get_runtime(self) -> _RuntimeProtocol:
         if self._runtime_factory is not None:
@@ -125,15 +201,48 @@ class AutonomySupervisor:
             )
             active_runs = len(storage.list_active_autonomy_runs())
             pending = len(storage.list_inbox_items(status=InboxStatus.pending))
+            kill_switch = storage.load_kill_switch()
             return SupervisorStatus(
                 enabled=self._enabled,
                 running=self._running,
+                loop_running=self.loop_running,
                 active_agents=active_agents,
                 active_runs=active_runs,
                 pending_triggers=pending,
+                kill_switch_active=kill_switch.active,
+                kill_switch_reason=kill_switch.reason,
+                kill_switch_set_at=kill_switch.set_at,
                 last_tick_at=self._last_tick_at,
                 last_error=self._last_error,
             )
+
+    # ------------------------------------------------------------------
+    # Kill switch
+    # ------------------------------------------------------------------
+
+    def set_kill_switch(
+        self,
+        *,
+        active: bool,
+        reason: Optional[str] = None,
+        set_by: Optional[str] = None,
+    ) -> AutonomyKillSwitch:
+        record = storage.set_kill_switch(
+            active=active, reason=reason, set_by=set_by
+        )
+        audit_event = (
+            EventType.autonomy_kill_switch_enabled.value
+            if active
+            else EventType.autonomy_kill_switch_cleared.value
+        )
+        storage.append_autonomy_audit(
+            {
+                "event": audit_event,
+                "reason": reason,
+                "set_by": set_by,
+            }
+        )
+        return record
 
     # ------------------------------------------------------------------
     # Agent controls
@@ -210,6 +319,53 @@ class AutonomySupervisor:
                 "dedupe_key": trigger.dedupe_key,
             }
         )
+
+        # Hard gate 1: kill switch blocks all new autonomy.
+        kill_switch = storage.load_kill_switch()
+        if kill_switch.active:
+            decision = PolicyDecision(
+                allowed=False,
+                reason="kill_switch_active",
+                evidence={"kill_switch_reason": kill_switch.reason},
+            )
+            storage.append_autonomy_audit(
+                {
+                    "event": EventType.autonomy_trigger_rejected.value,
+                    "trigger_id": trigger.trigger_id,
+                    "agent_id": trigger.agent_id,
+                    "reason": decision.reason,
+                    "evidence": decision.evidence,
+                }
+            )
+            return decision
+
+        # Hard gate 2: dedupe — if the same dedupe_key already produced a
+        # linked run, reject. Survives restart because dedupe state is
+        # file-backed.
+        if trigger.dedupe_key:
+            existing = storage.find_dedupe(trigger.dedupe_key)
+            if existing is not None:
+                decision = PolicyDecision(
+                    allowed=False,
+                    reason="duplicate_dedupe_key",
+                    evidence={
+                        "dedupe_key": trigger.dedupe_key,
+                        "existing_trigger_id": existing.get("trigger_id"),
+                        "existing_run_id": existing.get("run_id"),
+                    },
+                )
+                storage.append_autonomy_audit(
+                    {
+                        "event": EventType.autonomy_trigger_deduped.value,
+                        "trigger_id": trigger.trigger_id,
+                        "agent_id": trigger.agent_id,
+                        "dedupe_key": trigger.dedupe_key,
+                        "existing_trigger_id": existing.get("trigger_id"),
+                        "existing_run_id": existing.get("run_id"),
+                    }
+                )
+                return decision
+
         if agent is None:
             decision = PolicyDecision(
                 allowed=False,
@@ -263,15 +419,34 @@ class AutonomySupervisor:
                 "trigger_type": trigger.trigger_type.value,
                 "agent_id": agent.agent_id,
                 "autonomy_mode": agent.mode.value,
+                "dedupe_key": trigger.dedupe_key,
+            },
+        )
+
+        # Durable ledger update: +1 launched, +1 active, run started.
+        ledger = storage.update_budget_ledger(
+            agent.agent_id,
+            launched_runs_delta=1,
+            active_runs_delta=1,
+            run_started=True,
+        )
+        append_event(
+            context,
+            EventType.autonomy_budget_updated,
+            "autonomy",
+            {
+                "launched_runs_total": ledger.launched_runs_total,
+                "active_runs": ledger.active_runs,
             },
         )
 
         budget_snapshot = AutonomyBudgetState(
-            runs_launched=1,
-            parallel_runs=1,
+            runs_launched=ledger.launched_runs_total,
+            parallel_runs=ledger.active_runs,
             run_started_at=utc_now(),
         ).model_dump(mode="json")
 
+        kill_switch = storage.load_kill_switch()
         checkpoint = AutonomyCheckpoint(
             agent_id=agent.agent_id,
             trigger_id=trigger.trigger_id,
@@ -280,6 +455,10 @@ class AutonomySupervisor:
             attempt=1,
             last_state=context.state.value,
             resume_allowed=True,
+            safe_to_continue=True,
+            kill_switch_observed=kill_switch.active,
+            idempotency=Idempotency.unknown,
+            dedupe_key=trigger.dedupe_key,
             budget_snapshot=budget_snapshot,
         )
         storage.save_checkpoint(checkpoint)
@@ -291,8 +470,19 @@ class AutonomySupervisor:
                 "trigger_id": trigger.trigger_id,
                 "status": checkpoint.status.value,
                 "attempt": checkpoint.attempt,
+                "safe_to_continue": checkpoint.safe_to_continue,
             },
         )
+
+        # Durable dedupe record: survives restart so the same trigger cannot
+        # be relaunched by a later tick or a restarted supervisor.
+        if trigger.dedupe_key:
+            storage.record_dedupe(
+                dedupe_key=trigger.dedupe_key,
+                trigger_id=trigger.trigger_id,
+                agent_id=agent.agent_id,
+                run_id=context.run_id,
+            )
 
         inbox_item_id = trigger.payload.get("inbox_item_id")
         if isinstance(inbox_item_id, str):
@@ -322,23 +512,77 @@ class AutonomySupervisor:
             return None
 
         events, _ = read_events(run_id)
-        decision = self.decide_next_action(context, events)
+        agent = storage.get_agent(context.autonomy_agent_id)
+        policy = agent.policy if agent is not None else AutonomyPolicy()
+        ledger = storage.get_budget_ledger(context.autonomy_agent_id)
+        kill_switch = storage.load_kill_switch()
 
-        new_status = existing.status
-        if decision.decision == "escalate_approval":
+        report = evaluator_evaluate(
+            context=context,
+            events=events,
+            policy=policy,
+            ledger=ledger,
+            kill_switch=kill_switch,
+            idempotency=existing.idempotency,
+        )
+
+        decision_value = report.decision.value
+        append_event(
+            context,
+            EventType.autonomy_evaluator_decided,
+            "autonomy",
+            {
+                "decision": decision_value,
+                "reason": report.reason,
+                "safe_to_continue": report.safe_to_continue,
+                "idempotency": report.idempotency.value,
+            },
+        )
+
+        # Map evaluator decision → checkpoint status.
+        if report.decision == EvaluatorDecision.escalate:
             new_status = CheckpointStatus.awaiting_approval
-        elif decision.decision == "stop_budget_exceeded":
+        elif report.decision in (
+            EvaluatorDecision.stop_budget,
+            EvaluatorDecision.stop_deadman,
+            EvaluatorDecision.stop_killed,
+        ):
             new_status = CheckpointStatus.stopped
-        elif decision.decision == "stop_deadman":
-            new_status = CheckpointStatus.stopped
-        elif decision.decision == "schedule_retry":
+        elif report.decision == EvaluatorDecision.retry:
             new_status = CheckpointStatus.retry_scheduled
-        elif context.state == RuntimeState.completed:
+        elif report.decision == EvaluatorDecision.complete:
             new_status = CheckpointStatus.completed
         elif context.state == RuntimeState.failed:
             new_status = CheckpointStatus.failed
         else:
             new_status = CheckpointStatus.observing
+
+        # Durable ledger update on terminal transitions.
+        if new_status in (
+            CheckpointStatus.completed,
+            CheckpointStatus.failed,
+            CheckpointStatus.stopped,
+        ) and existing.status not in (
+            CheckpointStatus.completed,
+            CheckpointStatus.failed,
+            CheckpointStatus.stopped,
+        ):
+            storage.update_budget_ledger(
+                context.autonomy_agent_id,
+                active_runs_delta=-1,
+                run_completed=True,
+                budget_breach=report.decision == EvaluatorDecision.stop_budget,
+            )
+
+        resume_allowed = (
+            report.decision
+            not in (
+                EvaluatorDecision.stop_budget,
+                EvaluatorDecision.stop_deadman,
+                EvaluatorDecision.stop_killed,
+            )
+            and report.safe_to_continue
+        )
 
         updated = AutonomyCheckpoint(
             agent_id=existing.agent_id,
@@ -346,10 +590,16 @@ class AutonomySupervisor:
             run_id=existing.run_id,
             status=new_status,
             attempt=existing.attempt,
-            last_event_id=events[-1].get("event_id") if events else existing.last_event_id,
+            last_event_id=(
+                events[-1].get("event_id") if events else existing.last_event_id
+            ),
             last_state=context.state.value,
-            last_decision=decision.decision,
-            resume_allowed=decision.decision != "stop_budget_exceeded",
+            last_decision=decision_value,
+            resume_allowed=resume_allowed,
+            safe_to_continue=report.safe_to_continue,
+            kill_switch_observed=kill_switch.active,
+            idempotency=report.idempotency,
+            dedupe_key=existing.dedupe_key,
             budget_snapshot=existing.budget_snapshot,
         )
         storage.save_checkpoint(updated)
@@ -359,49 +609,72 @@ class AutonomySupervisor:
             EventType.autonomy_run_observed,
             "autonomy",
             {
-                "decision": decision.decision,
-                "reason": decision.reason,
+                "decision": decision_value,
+                "reason": report.reason,
                 "run_state": context.state.value,
             },
         )
 
-        if decision.decision == "escalate_approval":
+        if report.decision == EvaluatorDecision.escalate:
             append_event(
                 context,
                 EventType.autonomy_escalation_requested,
                 "autonomy",
                 {
-                    "reason": decision.reason,
+                    "reason": report.reason,
                     "run_state": context.state.value,
+                    "evidence": report.evidence,
                 },
             )
-        elif decision.decision == "stop_budget_exceeded":
+        elif report.decision == EvaluatorDecision.stop_budget:
             append_event(
                 context,
                 EventType.autonomy_budget_exceeded,
                 "autonomy",
-                {"reason": decision.reason, "evidence": decision.evidence},
+                {"reason": report.reason, "evidence": report.evidence},
             )
             append_event(
                 context,
                 EventType.autonomy_stopped,
                 "autonomy",
-                {"reason": decision.reason},
+                {"reason": report.reason},
             )
-        elif decision.decision == "stop_deadman":
+        elif report.decision == EvaluatorDecision.stop_deadman:
             append_event(
                 context,
                 EventType.autonomy_stopped,
                 "autonomy",
-                {"reason": decision.reason, "evidence": decision.evidence},
+                {"reason": report.reason, "evidence": report.evidence},
             )
-        elif decision.decision == "schedule_retry":
+        elif report.decision == EvaluatorDecision.stop_killed:
             append_event(
                 context,
-                EventType.autonomy_retry_scheduled,
+                EventType.autonomy_stopped,
                 "autonomy",
-                {"reason": decision.reason, "evidence": decision.evidence},
+                {"reason": report.reason, "evidence": report.evidence},
             )
+        elif report.decision == EvaluatorDecision.retry:
+            # Block retry if non-idempotent and not safe.
+            if (
+                report.idempotency == Idempotency.non_idempotent
+                or not report.safe_to_continue
+            ):
+                append_event(
+                    context,
+                    EventType.autonomy_continuation_blocked_non_idempotent,
+                    "autonomy",
+                    {
+                        "reason": "non_idempotent_retry_blocked",
+                        "idempotency": report.idempotency.value,
+                    },
+                )
+            else:
+                append_event(
+                    context,
+                    EventType.autonomy_retry_scheduled,
+                    "autonomy",
+                    {"reason": report.reason, "evidence": report.evidence},
+                )
 
         return updated
 

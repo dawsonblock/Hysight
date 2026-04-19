@@ -241,6 +241,9 @@ AUTONOMY_OPTIONAL_STEP: Step = {
         "backend/tests/test_autonomy_resume.py",
         "backend/tests/test_autonomy_budgets.py",
         "backend/tests/test_autonomy_events.py",
+        "backend/tests/test_autonomy_kill_switch.py",
+        "backend/tests/test_autonomy_dedupe.py",
+        "backend/tests/test_autonomy_lifecycle.py",
         "-q",
     ],
 }

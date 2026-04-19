@@ -402,6 +402,10 @@
         "active_agents": { "type": "integer" },
         "active_runs": { "type": "integer" },
         "pending_triggers": { "type": "integer" },
+        "loop_running": { "type": "boolean" },
+        "kill_switch_active": { "type": "boolean" },
+        "kill_switch_reason": { "type": ["string", "null"] },
+        "kill_switch_set_at": { "type": ["string", "null"], "format": "date-time" },
         "last_tick_at": { "type": ["string", "null"], "format": "date-time" },
         "last_error": { "type": ["string", "null"] }
       }
