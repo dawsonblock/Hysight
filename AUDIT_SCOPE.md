@@ -8,10 +8,10 @@
 
 ## Proven by current receipts
 
-- Running `./.venv/bin/python scripts/run_tests.py` on 2026-04-18 refreshed `artifacts/proof/baseline.json` and passed the declared local baseline.
+- Running `./.venv/bin/python scripts/run_tests.py` on 2026-04-19 refreshed `artifacts/proof/baseline.json` and passed the declared local baseline.
 - The current baseline receipt proves the supported service-free authority path only:
   - HCA pipeline proof: 7 passed.
-  - Backend baseline proof: 96 passed.
+  - Backend baseline proof: 98 passed, 1 deselected.
   - Contract conformance proof: 18 passed.
 - That proves the local python-backed memory mode, the repo-local backend runtime surface exercised by `scripts/run_tests.py`, and contract-shape conformance for the declared backend endpoints.
 - The baseline receipt is honest about scope. It explicitly omits `frontend`, `integration`, `mongo-live`, and `sidecar`.

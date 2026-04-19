@@ -55,7 +55,7 @@ Verified on the current proof contract and narrowed retests:
 - `./.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q`
   - `53 passed, 1 deselected`
 - `./.venv/bin/python scripts/run_tests.py --baseline-step backend-baseline`
-  - `96 passed, 1 deselected`
+  - `98 passed, 1 deselected`
 - `./.venv/bin/python scripts/check_repo_integrity.py`
   - passed
 - `make proof-sidecar MEMORY_SERVICE_PORT=3032`
