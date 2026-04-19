@@ -964,6 +964,62 @@ class AutonomySupervisor:
         updated_budget_snapshot["retries_for_current_step"] = max(
             previous_retries, observed_retries
         )
+        updated_budget_snapshot["style_novelty_budget"] = (
+            style_profile.novelty_exploration_budget
+        )
+        updated_budget_snapshot["style_reanchor_interval_steps"] = (
+            style_profile.reanchor_interval_steps
+        )
+
+        previous_mode = (
+            existing.current_attention_mode
+            or style_profile.default_attention_mode.value
+        )
+        next_mode = str(
+            report.evidence.get("next_attention_mode") or previous_mode
+        )
+        current_subgoal = existing.current_subgoal or context.goal
+        queued_interrupts = list(existing.queued_interrupts)
+        queued_branches = list(existing.queued_branches)
+        hyperfocus_steps_used = existing.hyperfocus_steps_used
+        novelty_budget_used = existing.novelty_budget_used
+        reanchor_due_at_step = (
+            existing.reanchor_due_at_step
+            or style_profile.reanchor_interval_steps
+        )
+        last_reanchor_summary = existing.last_reanchor_summary
+
+        if next_mode == AttentionMode.hyperfocus.value:
+            hyperfocus_steps_used += 1
+        elif (
+            previous_mode == AttentionMode.hyperfocus.value
+            and next_mode != AttentionMode.hyperfocus.value
+        ):
+            hyperfocus_steps_used = 0
+
+        if report.decision == EvaluatorDecision.reanchor:
+            next_mode = AttentionMode.reanchor.value
+            reanchor_due_at_step = observed_steps + style_profile.reanchor_interval_steps
+        elif report.decision == EvaluatorDecision.switch_branch and queued_interrupts:
+            next_interrupt = queued_interrupts.pop(0)
+            prior_subgoal = current_subgoal
+            current_subgoal = str(
+                next_interrupt.get("goal") or prior_subgoal or context.goal
+            )
+            if prior_subgoal and prior_subgoal != current_subgoal:
+                queued_branches.append(
+                    {
+                        "goal": prior_subgoal,
+                        "reason": "deferred_for_interrupt",
+                    }
+                )
+            novelty_budget_used = min(
+                style_profile.novelty_exploration_budget,
+                novelty_budget_used + 1,
+            )
+            next_mode = AttentionMode.exploratory.value
+        elif report.decision == EvaluatorDecision.complete:
+            queued_interrupts = []
 
         updated = AutonomyCheckpoint(
             agent_id=existing.agent_id,
@@ -981,9 +1037,24 @@ class AutonomySupervisor:
             kill_switch_observed=kill_switch.active,
             idempotency=report.idempotency,
             dedupe_key=existing.dedupe_key,
+            style_profile_id=existing.style_profile_id,
+            current_attention_mode=next_mode,
+            current_subgoal=current_subgoal,
+            queued_interrupts=queued_interrupts,
+            queued_branches=queued_branches,
+            reanchor_due_at_step=reanchor_due_at_step,
+            hyperfocus_steps_used=hyperfocus_steps_used,
+            novelty_budget_used=novelty_budget_used,
+            last_reanchor_summary=last_reanchor_summary,
             budget_snapshot=updated_budget_snapshot,
         )
+        updated.last_reanchor_summary = self._make_reanchor_summary(
+            context=context,
+            checkpoint=updated,
+            reason=report.reason or decision_value,
+        )
         storage.save_checkpoint(updated)
+        self._persist_style_context(context, updated)
 
         append_event(
             context,
@@ -995,6 +1066,51 @@ class AutonomySupervisor:
                 "run_state": context.state.value,
             },
         )
+        if previous_mode != updated.current_attention_mode:
+            append_event(
+                context,
+                EventType.autonomy_attention_mode_changed,
+                "autonomy",
+                {
+                    "from": previous_mode,
+                    "to": updated.current_attention_mode,
+                    "reason": report.reason,
+                },
+            )
+            if updated.current_attention_mode == AttentionMode.hyperfocus.value:
+                append_event(
+                    context,
+                    EventType.autonomy_hyperfocus_entered,
+                    "autonomy",
+                    {"reason": report.reason},
+                )
+            elif previous_mode == AttentionMode.hyperfocus.value:
+                append_event(
+                    context,
+                    EventType.autonomy_hyperfocus_exited,
+                    "autonomy",
+                    {"reason": report.reason},
+                )
+        if report.decision == EvaluatorDecision.reanchor:
+            append_event(
+                context,
+                EventType.autonomy_reanchor_requested,
+                "autonomy",
+                {"reason": report.reason, "evidence": report.evidence},
+            )
+            append_event(
+                context,
+                EventType.autonomy_reanchor_written,
+                "autonomy",
+                {"summary": updated.last_reanchor_summary},
+            )
+        elif report.decision == EvaluatorDecision.switch_branch:
+            append_event(
+                context,
+                EventType.autonomy_reanchor_written,
+                "autonomy",
+                {"summary": updated.last_reanchor_summary},
+            )
 
         if report.decision == EvaluatorDecision.escalate:
             append_event(
@@ -1172,6 +1288,7 @@ class AutonomySupervisor:
         launched: List[AutonomyRunLink] = []
         observed: List[str] = []
         rejected: List[str] = []
+        queued: List[str] = []
         try:
             # Observe already-running autonomy runs first so a restarted
             # supervisor never launches duplicates for the same trigger.
@@ -1191,6 +1308,33 @@ class AutonomySupervisor:
                     self.observe_run(existing.run_id)
                     continue
 
+                agent = storage.get_agent(trigger.agent_id)
+                active_checkpoint = (
+                    self._find_active_checkpoint(trigger.agent_id)
+                    if agent is not None
+                    else None
+                )
+                if (
+                    agent is not None
+                    and active_checkpoint is not None
+                    and active_checkpoint.run_id is not None
+                    and active_checkpoint.trigger_id != trigger.trigger_id
+                ):
+                    style_result = self._queue_interrupt_for_active_run(
+                        agent=agent,
+                        checkpoint=active_checkpoint,
+                        trigger=trigger,
+                    )
+                    if style_result in {
+                        "queue_interrupt",
+                        "switch_to_queued_interrupt",
+                    }:
+                        queued.append(trigger.trigger_id)
+                        continue
+                    if style_result == "reject_branch":
+                        rejected.append(trigger.trigger_id)
+                        continue
+
                 decision = self.accept_trigger(trigger)
                 if not decision.allowed:
                     rejected.append(trigger.trigger_id)
@@ -1207,6 +1351,7 @@ class AutonomySupervisor:
             "launched": [link.model_dump(mode="json") for link in launched],
             "observed": observed,
             "rejected": rejected,
+            "queued": queued,
         }
 
 

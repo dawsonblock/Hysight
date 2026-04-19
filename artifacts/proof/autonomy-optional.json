@@ -1,10 +1,10 @@
 {
   "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --autonomy",
-  "commit_sha": "61182bb045e948c3b190ba9904111b204efd3f7c",
-  "environment_mode": "repo_local_venv",
+  "commit_sha": "842ba2dffd62a0b91e216104d864cd134ea730a1",
+  "environment_mode": "cargo_local_sidecar",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-19T23:03:53.162320+00:00",
+  "generated_at": "2026-04-19T23:26:54.650176+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -31,9 +31,9 @@
         "counts": {
           "error_test_count": 0,
           "failed_test_count": 0,
-          "passed_test_count": 50,
+          "passed_test_count": 61,
           "skipped_test_count": 0,
-          "total_test_count": 50
+          "total_test_count": 61
         },
         "id": "autonomy-optional",
         "junit_xml": "test_reports/pytest/backend-autonomy-optional-proof.xml",
@@ -48,14 +48,14 @@
     ]
   },
   "outcome": "passed",
-  "passed_test_count": 50,
+  "passed_test_count": 61,
   "platform": "macOS-26.2-arm64-arm-64bit",
   "proof_tier": "autonomy-optional",
   "python_version": "3.9.7",
   "schema_version": 2,
-  "service_connection_mode": "none",
+  "service_connection_mode": "cargo-run:memvid_service",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-19T23:03:53.162320+00:00",
-  "total_test_count": 50
+  "timestamp": "2026-04-19T23:26:54.650176+00:00",
+  "total_test_count": 61
 }

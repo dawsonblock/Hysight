@@ -137,7 +137,18 @@ def _checkpoint_to_response(c: AutonomyCheckpoint) -> AutonomyCheckpointResponse
 
 
 def _status_to_response(status) -> AutonomyStatusResponse:
-    return AutonomyStatusResponse(**status.model_dump(mode="json"))
+    payload = status.model_dump(mode="json")
+    raw_checkpoint = getattr(status, "last_checkpoint", None)
+    if raw_checkpoint is not None:
+        checkpoint = (
+            raw_checkpoint
+            if isinstance(raw_checkpoint, AutonomyCheckpoint)
+            else AutonomyCheckpoint.model_validate(raw_checkpoint)
+        )
+        payload["last_checkpoint"] = _checkpoint_to_response(
+            checkpoint
+        ).model_dump(mode="json")
+    return AutonomyStatusResponse(**payload)
 
 
 def register_autonomy_routes(router: APIRouter) -> None:

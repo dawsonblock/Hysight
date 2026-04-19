@@ -410,6 +410,12 @@
         "last_tick_at": { "type": ["string", "null"], "format": "date-time" },
         "last_error": { "type": ["string", "null"] },
         "last_evaluator_decision": { "type": ["string", "null"] },
+        "current_attention_mode": { "type": ["string", "null"] },
+        "interrupt_queue_length": { "type": "integer" },
+        "reanchor_due": { "type": "boolean" },
+        "novelty_budget_remaining": { "type": ["integer", "null"] },
+        "hyperfocus_steps_used": { "type": "integer" },
+        "last_reanchor_summary": { "type": ["object", "null"] },
         "dedupe_keys_tracked": { "type": "integer" },
         "recent_runs": {
           "type": "array",
@@ -471,6 +477,14 @@
         "kill_switch_observed": { "type": "boolean" },
         "idempotency": { "type": ["string", "null"] },
         "dedupe_key": { "type": ["string", "null"] },
+        "style_profile_id": { "type": "string" },
+        "current_attention_mode": { "type": ["string", "null"] },
+        "current_subgoal": { "type": ["string", "null"] },
+        "interrupt_queue_length": { "type": "integer" },
+        "reanchor_due": { "type": "boolean" },
+        "novelty_budget_remaining": { "type": ["integer", "null"] },
+        "hyperfocus_steps_used": { "type": "integer" },
+        "last_reanchor_summary": { "type": ["object", "null"] },
         "checkpointed_at": { "type": "string", "format": "date-time" },
         "budget_snapshot": { "type": "object" }
       }

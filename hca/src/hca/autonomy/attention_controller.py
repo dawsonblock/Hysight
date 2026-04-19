@@ -120,7 +120,7 @@ class AttentionController:
                     reason="hyperfocus_step_budget_exceeded",
                     evidence=evidence,
                 )
-            if weighted_novelty < 0.55 and weighted_return >= weighted_goal:
+            if weighted_novelty < 0.55 or weighted_goal >= weighted_novelty + 0.20:
                 return AttentionDecision(
                     decision="reject_branch",
                     next_mode=AttentionMode.hyperfocus,
@@ -189,7 +189,11 @@ class AttentionController:
                 evidence=evidence,
             )
 
-        if weighted_return >= 0.82 and weighted_goal >= 0.70:
+        if (
+            current_mode != AttentionMode.hyperfocus
+            and weighted_return >= 0.82
+            and weighted_goal >= 0.70
+        ):
             return AttentionDecision(
                 decision="enter_hyperfocus",
                 next_mode=AttentionMode.hyperfocus,
