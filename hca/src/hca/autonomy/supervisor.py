@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Protocol
 from pydantic import BaseModel, Field
 
 from hca.autonomy import storage
+from hca.autonomy.attention_controller import AttentionController
 from hca.autonomy.checkpoint import (
     AutonomyBudgetState,
     AutonomyCheckpoint,
@@ -26,6 +27,8 @@ from hca.autonomy.checkpoint import (
 )
 from hca.autonomy.evaluator import EvaluatorReport, evaluate as evaluator_evaluate
 from hca.autonomy.policy import AutonomyPolicy, PolicyDecision
+from hca.autonomy.reanchor import ReanchorState, build_reanchor_summary
+from hca.autonomy.style_profile import AttentionMode, get_style_profile
 from hca.autonomy.triggers import (
     AutonomyAgent,
     AutonomyInboxItem,
@@ -46,7 +49,7 @@ from hca.common.enums import (
 from hca.common.time import utc_now
 from hca.common.types import RunContext
 from hca.storage.event_log import append_event, read_events
-from hca.storage.runs import load_run
+from hca.storage.runs import load_run, save_run
 
 
 class _RuntimeProtocol(Protocol):
@@ -76,6 +79,12 @@ class SupervisorStatus(BaseModel):
     last_tick_at: Optional[datetime] = None
     last_error: Optional[str] = None
     last_evaluator_decision: Optional[str] = None
+    current_attention_mode: Optional[str] = None
+    interrupt_queue_length: int = 0
+    reanchor_due: bool = False
+    novelty_budget_remaining: Optional[int] = None
+    hyperfocus_steps_used: int = 0
+    last_reanchor_summary: Optional[Dict[str, Any]] = None
     dedupe_keys_tracked: int = 0
     recent_runs: List[Dict[str, Any]] = Field(default_factory=list)
     budget_ledgers: List[Dict[str, Any]] = Field(default_factory=list)
@@ -195,6 +204,197 @@ class AutonomySupervisor:
         self._runtime_factory = Runtime()
         return self._runtime_factory
 
+    def _find_active_checkpoint(
+        self, agent_id: str
+    ) -> Optional[AutonomyCheckpoint]:
+        for checkpoint in storage.list_active_autonomy_runs():
+            if checkpoint.agent_id == agent_id:
+                return checkpoint
+        return None
+
+    def _persist_style_context(
+        self, context: RunContext, checkpoint: AutonomyCheckpoint
+    ) -> None:
+        context.autonomy_style_profile_id = checkpoint.style_profile_id
+        context.autonomy_attention_mode = checkpoint.current_attention_mode
+        context.autonomy_interrupt_queue_length = len(
+            checkpoint.queued_interrupts
+        )
+        context.autonomy_last_reanchor_summary = checkpoint.last_reanchor_summary
+        save_run(context)
+
+    def _make_reanchor_summary(
+        self,
+        *,
+        context: RunContext,
+        checkpoint: AutonomyCheckpoint,
+        reason: str,
+    ) -> Dict[str, Any]:
+        queued = [
+            str(item.get("goal"))
+            for item in checkpoint.queued_interrupts
+            if isinstance(item, dict) and item.get("goal")
+        ]
+        blocked: List[str] = []
+        if context.state == RuntimeState.awaiting_approval:
+            blocked.append("awaiting approval")
+        next_action = (
+            f"resume {checkpoint.current_subgoal or context.goal}"
+            if checkpoint.current_subgoal
+            else f"continue {context.goal}"
+        )
+        state = ReanchorState(
+            primary_goal=context.goal,
+            current_subgoal=checkpoint.current_subgoal or context.goal,
+            active_reason=reason,
+            queued=queued,
+            blocked=blocked,
+            next_action=next_action,
+            attention_mode=AttentionMode(checkpoint.current_attention_mode),
+            continuation_justification=reason,
+        )
+        return build_reanchor_summary(state).model_dump(mode="json")
+
+    def _queue_interrupt_for_active_run(
+        self,
+        *,
+        agent: AutonomyAgent,
+        checkpoint: AutonomyCheckpoint,
+        trigger: AutonomyTrigger,
+    ) -> str:
+        if checkpoint.run_id is None:
+            return "reject_branch"
+        context = load_run(checkpoint.run_id)
+        if context is None:
+            return "reject_branch"
+
+        style_profile = get_style_profile(agent.style_profile_id)
+        controller = AttentionController()
+        try:
+            current_mode = AttentionMode(checkpoint.current_attention_mode)
+        except ValueError:
+            current_mode = style_profile.default_attention_mode
+
+        urgency_hint = float(trigger.payload.get("urgency", 0.9) or 0.9)
+        novelty_hint = float(trigger.payload.get("novelty", 0.65) or 0.65)
+        decision = controller.decide(
+            profile=style_profile,
+            current_mode=current_mode,
+            goal_score=0.8,
+            novelty_score=max(0.0, min(1.0, novelty_hint)),
+            urgency_score=max(0.0, min(1.0, urgency_hint)),
+            return_on_focus_score=0.7,
+            drift_score=0.2,
+            queued_interrupts=len(checkpoint.queued_interrupts) + 1,
+            active_branch_count=1 + len(checkpoint.queued_branches),
+            checkpoint_safe=checkpoint.safe_to_continue,
+            steps_since_reanchor=int(
+                checkpoint.budget_snapshot.get("steps_in_current_run", 0) or 0
+            ),
+            novelty_budget_used=checkpoint.novelty_budget_used,
+            high_risk_pending=context.state == RuntimeState.awaiting_approval,
+            kill_switch_active=storage.load_kill_switch().active,
+            primary_near_completion=context.state
+            in {RuntimeState.reporting, RuntimeState.memory_commit},
+            hyperfocus_steps_used=checkpoint.hyperfocus_steps_used,
+        )
+
+        if decision.decision == "reject_branch":
+            append_event(
+                context,
+                EventType.autonomy_branch_rejected,
+                "autonomy",
+                {
+                    "trigger_id": trigger.trigger_id,
+                    "goal": trigger.goal,
+                    "reason": decision.reason,
+                },
+            )
+            return decision.decision
+
+        updated = checkpoint.model_copy(deep=True)
+        updated.style_profile_id = agent.style_profile_id
+        updated.current_attention_mode = decision.next_mode.value
+        updated.reanchor_due_at_step = max(
+            updated.reanchor_due_at_step,
+            int(updated.budget_snapshot.get("steps_in_current_run", 0) or 0)
+            + style_profile.reanchor_interval_steps,
+        )
+
+        queued_payload = {
+            "trigger_id": trigger.trigger_id,
+            "goal": trigger.goal,
+            "trigger_type": trigger.trigger_type.value,
+            "urgency": urgency_hint,
+            "novelty": novelty_hint,
+            "queued_at": utc_now().isoformat(),
+        }
+
+        if decision.decision == "switch_to_queued_interrupt":
+            if updated.current_subgoal and updated.current_subgoal != trigger.goal:
+                updated.queued_branches.append(
+                    {
+                        "goal": updated.current_subgoal,
+                        "reason": "deferred_for_interrupt",
+                    }
+                )
+            updated.current_subgoal = trigger.goal
+        else:
+            updated.queued_interrupts.append(queued_payload)
+
+        if decision.next_mode == AttentionMode.hyperfocus:
+            updated.hyperfocus_steps_used += 1
+        elif updated.current_attention_mode != AttentionMode.hyperfocus.value:
+            updated.hyperfocus_steps_used = 0
+
+        if novelty_hint >= 0.7:
+            updated.novelty_budget_used = min(
+                style_profile.novelty_exploration_budget,
+                updated.novelty_budget_used + 1,
+            )
+
+        updated.last_reanchor_summary = self._make_reanchor_summary(
+            context=context,
+            checkpoint=updated,
+            reason=decision.reason or "interrupt handled",
+        )
+        storage.save_checkpoint(updated)
+        self._persist_style_context(context, updated)
+
+        append_event(
+            context,
+            EventType.autonomy_branch_queued,
+            "autonomy",
+            {
+                "trigger_id": trigger.trigger_id,
+                "goal": trigger.goal,
+                "decision": decision.decision,
+                "attention_mode": updated.current_attention_mode,
+                "interrupt_queue_length": len(updated.queued_interrupts),
+            },
+        )
+        append_event(
+            context,
+            EventType.autonomy_attention_mode_changed,
+            "autonomy",
+            {
+                "from": checkpoint.current_attention_mode,
+                "to": updated.current_attention_mode,
+                "reason": decision.reason,
+            },
+        )
+        if decision.decision == "switch_to_queued_interrupt":
+            append_event(
+                context,
+                EventType.autonomy_reanchor_written,
+                "autonomy",
+                {"summary": updated.last_reanchor_summary},
+            )
+        inbox_item_id = trigger.payload.get("inbox_item_id")
+        if isinstance(inbox_item_id, str):
+            storage.complete_inbox_item(inbox_item_id)
+        return decision.decision
+
     # ------------------------------------------------------------------
     # Status
     # ------------------------------------------------------------------
@@ -215,6 +415,33 @@ class AutonomySupervisor:
             )
             kill_switch = storage.load_kill_switch()
             latest_checkpoint = checkpoints[0] if checkpoints else None
+            novelty_budget_remaining: Optional[int] = None
+            interrupt_queue_length = 0
+            current_attention_mode: Optional[str] = None
+            reanchor_due = False
+            hyperfocus_steps_used = 0
+            last_reanchor_summary: Optional[Dict[str, Any]] = None
+            if latest_checkpoint is not None:
+                current_attention_mode = latest_checkpoint.current_attention_mode
+                interrupt_queue_length = len(latest_checkpoint.queued_interrupts)
+                hyperfocus_steps_used = latest_checkpoint.hyperfocus_steps_used
+                last_reanchor_summary = latest_checkpoint.last_reanchor_summary
+                steps = int(
+                    latest_checkpoint.budget_snapshot.get("steps_in_current_run", 0)
+                    or 0
+                )
+                reanchor_due = steps >= int(
+                    latest_checkpoint.reanchor_due_at_step or 0
+                )
+                try:
+                    style_profile = get_style_profile(latest_checkpoint.style_profile_id)
+                    novelty_budget_remaining = max(
+                        0,
+                        style_profile.novelty_exploration_budget
+                        - latest_checkpoint.novelty_budget_used,
+                    )
+                except ValueError:
+                    novelty_budget_remaining = None
             return SupervisorStatus(
                 enabled=self._enabled,
                 running=self._running,
@@ -233,6 +460,12 @@ class AutonomySupervisor:
                     if latest_checkpoint is not None
                     else None
                 ),
+                current_attention_mode=current_attention_mode,
+                interrupt_queue_length=interrupt_queue_length,
+                reanchor_due=reanchor_due,
+                novelty_budget_remaining=novelty_budget_remaining,
+                hyperfocus_steps_used=hyperfocus_steps_used,
+                last_reanchor_summary=last_reanchor_summary,
                 dedupe_keys_tracked=storage.count_dedupe_records(),
                 recent_runs=[
                     {
@@ -418,6 +651,14 @@ class AutonomySupervisor:
             )
         else:
             decision = agent.policy.check_trigger(trigger.trigger_type.value)
+            if decision.allowed:
+                ledger = storage.get_budget_ledger(agent.agent_id)
+                budget_decision = agent.policy.check_budget(
+                    runs_launched=ledger.launched_runs_total,
+                    parallel_runs=ledger.active_runs,
+                )
+                if not budget_decision.allowed:
+                    decision = budget_decision
 
         audit_event = (
             EventType.autonomy_trigger_accepted.value
@@ -440,6 +681,7 @@ class AutonomySupervisor:
         if agent is None:
             raise LookupError(f"agent {trigger.agent_id} not found")
 
+        style_profile = get_style_profile(agent.style_profile_id)
         runtime = self._get_runtime()
         context = runtime.create_autonomous_run(
             trigger.goal,
@@ -447,6 +689,9 @@ class AutonomySupervisor:
             autonomy_trigger_id=trigger.trigger_id,
             autonomy_mode=agent.mode.value,
         )
+        context.autonomy_style_profile_id = style_profile.profile_id
+        context.autonomy_attention_mode = style_profile.default_attention_mode.value
+        context.autonomy_interrupt_queue_length = 0
 
         append_event(
             context,
@@ -458,6 +703,25 @@ class AutonomySupervisor:
                 "agent_id": agent.agent_id,
                 "autonomy_mode": agent.mode.value,
                 "dedupe_key": trigger.dedupe_key,
+            },
+        )
+        append_event(
+            context,
+            EventType.autonomy_style_loaded,
+            "autonomy",
+            {
+                "style_profile_id": style_profile.profile_id,
+                "style_profile_name": style_profile.name,
+            },
+        )
+        append_event(
+            context,
+            EventType.autonomy_attention_mode_changed,
+            "autonomy",
+            {
+                "from": None,
+                "to": style_profile.default_attention_mode.value,
+                "reason": "style_profile_loaded",
             },
         )
 
@@ -483,6 +747,12 @@ class AutonomySupervisor:
             parallel_runs=ledger.active_runs,
             run_started_at=utc_now(),
         ).model_dump(mode="json")
+        budget_snapshot["style_novelty_budget"] = (
+            style_profile.novelty_exploration_budget
+        )
+        budget_snapshot["style_reanchor_interval_steps"] = (
+            style_profile.reanchor_interval_steps
+        )
 
         kill_switch = storage.load_kill_switch()
         checkpoint = AutonomyCheckpoint(
@@ -497,9 +767,21 @@ class AutonomySupervisor:
             kill_switch_observed=kill_switch.active,
             idempotency=Idempotency.unknown,
             dedupe_key=trigger.dedupe_key,
+            style_profile_id=style_profile.profile_id,
+            current_attention_mode=style_profile.default_attention_mode.value,
+            current_subgoal=trigger.goal,
+            reanchor_due_at_step=style_profile.reanchor_interval_steps,
+            last_reanchor_summary=None,
             budget_snapshot=budget_snapshot,
         )
+        checkpoint.last_reanchor_summary = self._make_reanchor_summary(
+            context=context,
+            checkpoint=checkpoint,
+            reason="fresh run launch",
+        )
+        context.autonomy_last_reanchor_summary = checkpoint.last_reanchor_summary
         storage.save_checkpoint(checkpoint)
+        self._persist_style_context(context, checkpoint)
         append_event(
             context,
             EventType.autonomy_checkpoint_written,
@@ -509,6 +791,7 @@ class AutonomySupervisor:
                 "status": checkpoint.status.value,
                 "attempt": checkpoint.attempt,
                 "safe_to_continue": checkpoint.safe_to_continue,
+                "attention_mode": checkpoint.current_attention_mode,
             },
         )
 
@@ -552,6 +835,9 @@ class AutonomySupervisor:
         events, _ = read_events(run_id)
         agent = storage.get_agent(context.autonomy_agent_id)
         policy = agent.policy if agent is not None else AutonomyPolicy()
+        style_profile = get_style_profile(
+            agent.style_profile_id if agent is not None else existing.style_profile_id
+        )
         ledger = storage.get_budget_ledger(context.autonomy_agent_id)
         kill_switch = storage.load_kill_switch()
 
@@ -562,6 +848,8 @@ class AutonomySupervisor:
             ledger=ledger,
             kill_switch=kill_switch,
             idempotency=existing.idempotency,
+            checkpoint=existing,
+            style_profile=style_profile,
         )
 
         decision_value = report.decision.value
