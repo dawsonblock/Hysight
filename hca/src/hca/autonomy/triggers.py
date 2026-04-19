@@ -26,6 +26,7 @@ class AutonomyAgent(BaseModel):
     mode: AutonomyMode = AutonomyMode.bounded
     status: AgentStatus = AgentStatus.active
     policy: AutonomyPolicy = Field(default_factory=AutonomyPolicy)
+    style_profile_id: str = "conservative_operator"
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

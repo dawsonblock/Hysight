@@ -47,6 +47,15 @@ class AutonomyCheckpoint(BaseModel):
     # Persisted dedupe key for the trigger that produced this checkpoint.
     # None for historical records.
     dedupe_key: Optional[str] = None
+    style_profile_id: str = "conservative_operator"
+    current_attention_mode: str = "stable"
+    current_subgoal: Optional[str] = None
+    queued_interrupts: list[Dict[str, Any]] = Field(default_factory=list)
+    queued_branches: list[Dict[str, Any]] = Field(default_factory=list)
+    reanchor_due_at_step: int = 0
+    hyperfocus_steps_used: int = 0
+    novelty_budget_used: int = 0
+    last_reanchor_summary: Optional[Dict[str, Any]] = None
     checkpointed_at: datetime = Field(default_factory=utc_now)
     budget_snapshot: Dict[str, Any] = Field(default_factory=dict)
 

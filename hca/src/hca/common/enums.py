@@ -71,6 +71,14 @@ class EventType(str, Enum):
     autonomy_kill_switch_enabled = "autonomy_kill_switch_enabled"
     autonomy_kill_switch_cleared = "autonomy_kill_switch_cleared"
     autonomy_evaluator_decided = "autonomy_evaluator_decided"
+    autonomy_style_loaded = "autonomy_style_loaded"
+    autonomy_attention_mode_changed = "autonomy_attention_mode_changed"
+    autonomy_branch_queued = "autonomy_branch_queued"
+    autonomy_branch_rejected = "autonomy_branch_rejected"
+    autonomy_reanchor_requested = "autonomy_reanchor_requested"
+    autonomy_reanchor_written = "autonomy_reanchor_written"
+    autonomy_hyperfocus_entered = "autonomy_hyperfocus_entered"
+    autonomy_hyperfocus_exited = "autonomy_hyperfocus_exited"
     autonomy_continuation_blocked_non_idempotent = (
         "autonomy_continuation_blocked_non_idempotent"
     )
@@ -154,6 +162,8 @@ class EvaluatorDecision(str, Enum):
     continue_observe = "continue"
     retry = "retry"
     escalate = "escalate"
+    reanchor = "reanchor"
+    switch_branch = "switch_branch"
     stop_budget = "stop_budget"
     stop_deadman = "stop_deadman"
     stop_killed = "stop_killed"

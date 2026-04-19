@@ -132,6 +132,43 @@ class AutonomyPolicy(BaseModel):
             },
         )
 
+    def check_branching(
+        self,
+        *,
+        requested_parallel_subgoals: int,
+        style_parallel_limit: int,
+        novelty_budget_remaining: int,
+    ) -> PolicyDecision:
+        hard_parallel_limit = min(
+            max(1, requested_parallel_subgoals),
+            max(1, self.budget.max_parallel_runs),
+            max(1, style_parallel_limit),
+        )
+        if requested_parallel_subgoals > hard_parallel_limit:
+            return PolicyDecision(
+                allowed=False,
+                reason="style_parallel_limit_exceeded",
+                evidence={
+                    "requested_parallel_subgoals": requested_parallel_subgoals,
+                    "style_parallel_limit": style_parallel_limit,
+                    "policy_parallel_limit": self.budget.max_parallel_runs,
+                },
+            )
+        if novelty_budget_remaining < 0:
+            return PolicyDecision(
+                allowed=False,
+                reason="novelty_budget_exhausted",
+                evidence={"novelty_budget_remaining": novelty_budget_remaining},
+            )
+        return PolicyDecision(
+            allowed=True,
+            evidence={
+                "requested_parallel_subgoals": requested_parallel_subgoals,
+                "style_parallel_limit": style_parallel_limit,
+                "novelty_budget_remaining": novelty_budget_remaining,
+            },
+        )
+
     def check_action_binding(
         self,
         *,

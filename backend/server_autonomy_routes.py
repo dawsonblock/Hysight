@@ -35,6 +35,7 @@ from backend.server_models import (
 from hca.autonomy import storage as autonomy_storage
 from hca.autonomy.checkpoint import AutonomyCheckpoint
 from hca.autonomy.policy import AutonomyBudget, AutonomyPolicy
+from hca.autonomy.style_profile import get_style_profile
 from hca.autonomy.supervisor import get_supervisor
 from hca.autonomy.triggers import (
     AutonomyAgent,
@@ -66,6 +67,7 @@ def _agent_to_response(agent: AutonomyAgent) -> AutonomyAgentResponse:
         description=agent.description,
         mode=agent.mode.value,
         status=agent.status.value,
+        style_profile_id=agent.style_profile_id,
         policy=policy,
         created_at=agent.created_at,
         updated_at=agent.updated_at,
@@ -101,6 +103,13 @@ def _inbox_to_response(item: AutonomyInboxItem) -> AutonomyInboxItemResponse:
 
 
 def _checkpoint_to_response(c: AutonomyCheckpoint) -> AutonomyCheckpointResponse:
+    budget_snapshot = dict(c.budget_snapshot)
+    style_budget = max(
+        0,
+        int(budget_snapshot.get("style_novelty_budget", 0) or 0)
+        - int(c.novelty_budget_used or 0),
+    )
+    steps = int(budget_snapshot.get("steps_in_current_run", 0) or 0)
     return AutonomyCheckpointResponse(
         agent_id=c.agent_id,
         trigger_id=c.trigger_id,
@@ -114,8 +123,16 @@ def _checkpoint_to_response(c: AutonomyCheckpoint) -> AutonomyCheckpointResponse
         safe_to_continue=c.safe_to_continue,
         kill_switch_observed=c.kill_switch_observed,
         dedupe_key=c.dedupe_key,
+        style_profile_id=c.style_profile_id,
+        current_attention_mode=c.current_attention_mode,
+        current_subgoal=c.current_subgoal,
+        interrupt_queue_length=len(c.queued_interrupts),
+        reanchor_due=steps >= int(c.reanchor_due_at_step or 0),
+        novelty_budget_remaining=style_budget,
+        hyperfocus_steps_used=c.hyperfocus_steps_used,
+        last_reanchor_summary=c.last_reanchor_summary,
         checkpointed_at=c.checkpointed_at,
-        budget_snapshot=dict(c.budget_snapshot),
+        budget_snapshot=budget_snapshot,
     )
 
 
@@ -215,6 +232,14 @@ def register_autonomy_routes(router: APIRouter) -> None:
                 status_code=400, detail=f"invalid mode: {body.mode}"
             ) from exc
 
+        try:
+            style_profile = get_style_profile(body.style_profile_id)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid style profile: {body.style_profile_id}",
+            ) from exc
+
         if body.policy is not None:
             policy = AutonomyPolicy(
                 mode=mode,
@@ -244,6 +269,7 @@ def register_autonomy_routes(router: APIRouter) -> None:
             description=body.description,
             mode=mode,
             policy=policy,
+            style_profile_id=style_profile.profile_id,
         )
         saved = await asyncio.to_thread(autonomy_storage.save_agent, agent)
         return _agent_to_response(saved)

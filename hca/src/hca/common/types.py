@@ -52,6 +52,10 @@ class RunContext(BaseModel):
     autonomy_agent_id: Optional[str] = None
     autonomy_trigger_id: Optional[str] = None
     autonomy_mode: Optional[str] = None
+    autonomy_style_profile_id: Optional[str] = None
+    autonomy_attention_mode: Optional[str] = None
+    autonomy_interrupt_queue_length: int = 0
+    autonomy_last_reanchor_summary: Optional[Dict[str, Any]] = None
 
 
 class WorkspaceItem(BaseModel):

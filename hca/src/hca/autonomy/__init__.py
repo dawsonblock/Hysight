@@ -33,9 +33,16 @@ from hca.autonomy.checkpoint import (
     AutonomyCheckpoint,
     AutonomyRunLink,
 )
+from hca.autonomy.style_profile import (
+    AttentionMode,
+    OperatorStyleProfile,
+    StyleDecisionHints,
+    StyleTraitWeights,
+)
 
 __all__ = [
     "AgentStatus",
+    "AttentionMode",
     "AutonomyAgent",
     "AutonomyBudget",
     "AutonomyBudgetState",
@@ -48,7 +55,10 @@ __all__ = [
     "AutonomyTrigger",
     "CheckpointStatus",
     "InboxStatus",
+    "OperatorStyleProfile",
     "PolicyDecision",
+    "StyleDecisionHints",
+    "StyleTraitWeights",
     "TriggerStatus",
     "TriggerType",
 ]

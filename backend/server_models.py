@@ -81,6 +81,12 @@ class AutonomySubsystemStatus(BackendModel):
     last_tick_at: Optional[datetime] = None
     last_error: Optional[str] = None
     last_evaluator_decision: Optional[str] = None
+    current_attention_mode: Optional[str] = None
+    interrupt_queue_length: int = 0
+    reanchor_due: bool = False
+    novelty_budget_remaining: Optional[int] = None
+    hyperfocus_steps_used: int = 0
+    last_reanchor_summary: Optional[Dict[str, Any]] = None
     dedupe_keys_tracked: int = 0
     recent_runs: List["AutonomyRunLinkResponse"] = Field(default_factory=list)
     budget_ledgers: List["AutonomyBudgetLedgerResponse"] = Field(default_factory=list)
@@ -113,6 +119,7 @@ class CreateAutonomyAgentRequest(BackendModel):
     name: str
     description: Optional[str] = None
     mode: str = "bounded"
+    style_profile_id: str = "conservative_operator"
     policy: Optional[AutonomyPolicyModel] = None
 
 
@@ -122,6 +129,7 @@ class AutonomyAgentResponse(BackendModel):
     description: Optional[str] = None
     mode: str
     status: str
+    style_profile_id: str = "conservative_operator"
     policy: AutonomyPolicyModel
     created_at: datetime
     updated_at: datetime
@@ -189,6 +197,14 @@ class AutonomyCheckpointResponse(BackendModel):
     kill_switch_observed: bool = False
     idempotency: Optional[str] = None
     dedupe_key: Optional[str] = None
+    style_profile_id: str = "conservative_operator"
+    current_attention_mode: Optional[str] = None
+    current_subgoal: Optional[str] = None
+    interrupt_queue_length: int = 0
+    reanchor_due: bool = False
+    novelty_budget_remaining: Optional[int] = None
+    hyperfocus_steps_used: int = 0
+    last_reanchor_summary: Optional[Dict[str, Any]] = None
     checkpointed_at: datetime
     budget_snapshot: Dict[str, Any] = Field(default_factory=dict)
 
@@ -221,6 +237,12 @@ class AutonomyStatusResponse(BackendModel):
     last_tick_at: Optional[datetime] = None
     last_error: Optional[str] = None
     last_evaluator_decision: Optional[str] = None
+    current_attention_mode: Optional[str] = None
+    interrupt_queue_length: int = 0
+    reanchor_due: bool = False
+    novelty_budget_remaining: Optional[int] = None
+    hyperfocus_steps_used: int = 0
+    last_reanchor_summary: Optional[Dict[str, Any]] = None
     dedupe_keys_tracked: int = 0
     recent_runs: List["AutonomyRunLinkResponse"] = Field(default_factory=list)
     budget_ledgers: List["AutonomyBudgetLedgerResponse"] = Field(default_factory=list)
