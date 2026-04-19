@@ -1,0 +1,163 @@
+===== runtime verification =====
+node=v20.20.2
+yarn=1.22.22
+
+===== yarn install --frozen-lockfile =====
+yarn install v1.22.22
+$ node ./scripts/verify-runtime.js
+[1/5] Validating package.json...
+[2/5] Resolving packages...
+[3/5] Fetching packages...
+[4/5] Linking dependencies...
+warning " > react-day-picker@8.10.1" has incorrect peer dependency "date-fns@^2.28.0 || ^3.0.0".
+warning " > react-day-picker@8.10.1" has incorrect peer dependency "react@^16.8.0 || ^17.0.0 || ^18.0.0".
+warning " > react-markdown@10.1.0" has unmet peer dependency "@types/react@>=18".
+warning " > @babel/plugin-proposal-private-property-in-object@7.21.11" has unmet peer dependency "@babel/core@^7.0.0-0".
+warning "react-scripts > eslint-config-react-app > eslint-plugin-flowtype@8.0.3" has unmet peer dependency "@babel/plugin-syntax-flow@^7.14.5".
+warning "react-scripts > eslint-config-react-app > eslint-plugin-flowtype@8.0.3" has unmet peer dependency "@babel/plugin-transform-react-jsx@^7.14.9".
+warning "react-scripts > react-dev-utils > fork-ts-checker-webpack-plugin@6.5.3" has unmet peer dependency "typescript@>= 2.7".
+warning "react-scripts > eslint-config-react-app > @typescript-eslint/eslint-plugin > tsutils@3.21.0" has unmet peer dependency "typescript@>=2.8.0 || >= 3.2.0-dev || >= 3.3.0-dev || >= 3.4.0-dev || >= 3.5.0-dev || >= 3.6.0-dev || >= 3.6.0-beta || >= 3.7.0-dev || >= 3.7.0-beta".
+warning " > recharts@3.8.1" has unmet peer dependency "react-is@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0".
+warning "@craco/craco > cosmiconfig-typescript-loader@1.0.9" has unmet peer dependency "@types/node@*".
+warning "@craco/craco > cosmiconfig-typescript-loader@1.0.9" has unmet peer dependency "typescript@>=3".
+warning "@craco/craco > cosmiconfig-typescript-loader > ts-node@10.9.2" has unmet peer dependency "@types/node@*".
+warning "@craco/craco > cosmiconfig-typescript-loader > ts-node@10.9.2" has unmet peer dependency "typescript@>=2.7".
+warning Workspaces can only be enabled in private projects.
+warning Workspaces can only be enabled in private projects.
+[5/5] Building fresh packages...
+Done in 12.47s.
+yarn-install exit=0
+
+===== scripts/proof_frontend.py =====
+
+FAILED: Frontend fixture drift gate failed.
+
+==> [Node version]
+    node --version
+v20.20.2
+
+==> [Yarn version]
+    yarn --version
+1.22.22
+
+==> [Frontend runtime verification]
+    node ./scripts/verify-runtime.js
+
+==> [Frontend fixture drift gate]
+    /Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q --check-fixture-drift -k generated_frontend_api_fixtures_match_backend_export -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/frontend-fixture-drift.xml
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________ test_generated_frontend_api_fixtures_match_backend_export ___________
+
+tmp_path = PosixPath('/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/pytest-of-dawsonblock/pytest-97/test_generated_frontend_api_fi0')
+
+    @pytest.mark.fixture_drift
+    def test_generated_frontend_api_fixtures_match_backend_export(tmp_path):
+        generated_path = tmp_path / "api.fixtures.generated.json"
+        committed_path = (
+            ROOT / "frontend" / "src" / "lib" / "api.fixtures.generated.json"
+        )
+    
+>       subprocess.run(
+            [sys.executable, "scripts/export_api_fixtures.py", "--output", str(generated_path)],
+            cwd=ROOT,
+            check=True,
+        )
+
+backend/tests/test_server_bootstrap.py:1339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = False, timeout = None, check = True
+popenargs = (['/Users/dawsonblock/Hysight/.venv/bin/python', 'scripts/export_api_fixtures.py', '--output', '/private/var/folders/x...hl26tk5qx3m_28h0000gn/T/pytest-of-dawsonblock/pytest-97/test_generated_frontend_api_fi0/api.fixtures.generated.json'],)
+kwargs = {'cwd': PosixPath('/Users/dawsonblock/Hysight')}
+process = <Popen: returncode: 1 args: ['/Users/dawsonblock/Hysight/.venv/bin/python', ...>
+stdout = None, stderr = None, retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/Users/dawsonblock/Hysight/.venv/bin/python', 'scripts/export_api_fixtures.py', '--output', '/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/pytest-of-dawsonblock/pytest-97/test_generated_frontend_api_fi0/api.fixtures.generated.json']' returned non-zero exit status 1.
+
+../.pyenv/versions/3.9.7/lib/python3.9/subprocess.py:528: CalledProcessError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/dawsonblock/Hysight/scripts/export_api_fixtures.py", line 548, in <module>
+    raise SystemExit(main())
+  File "/Users/dawsonblock/Hysight/scripts/export_api_fixtures.py", line 537, in main
+    fixtures = build_fixtures()
+  File "/Users/dawsonblock/Hysight/scripts/export_api_fixtures.py", line 89, in build_fixtures
+    subsystem_fixture = SubsystemsResponse(
+  File "/Users/dawsonblock/Hysight/.venv/lib/python3.9/site-packages/pydantic/main.py", line 263, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for SubsystemsResponse
+autonomy
+  Field required [type=missing, input_value={'status': 'degraded', 'c...ll back when possible')}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/frontend-fixture-drift.xml -
+=========================== short test summary info ============================
+FAILED backend/tests/test_server_bootstrap.py::test_generated_frontend_api_fixtures_match_backend_export
+1 failed, 55 deselected in 0.28s
+frontend-proof exit=1

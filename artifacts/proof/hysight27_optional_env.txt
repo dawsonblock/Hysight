@@ -1,0 +1,29 @@
+# Hysight optional-surface double-check (HEAD=aad7d10251c53b2b97c989dd3b750124d93d74fe)
+# generated: 2026-04-19T07:14:44Z
+
+## uname
+Darwin Mac.gateway.sasktel.net 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:07:05 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6020 arm64
+
+## sw_vers
+ProductName:		macOS
+ProductVersion:		26.2
+BuildVersion:		25C56
+
+## arch: arm64
+
+## python3: Python 3.9.7
+## venv python: Python 3.9.7
+## rustc: rustc 1.94.0 (4a4ef493e 2026-03-02)
+## cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+## node: v25.9.0
+## yarn: 1.22.22
+## pwd: /Users/dawsonblock/Hysight
+## git HEAD: aad7d10251c53b2b97c989dd3b750124d93d74fe
+## git status: 1 modified
+
+## repo fingerprint (find -type f ...):
+d7279460257480c3d919562d0e7ecf5b88c5b3ee  -
+
+## staged-node20: /tmp/node-v20.20.2-darwin-arm64/bin/node -> v20.20.2
+## system-yarn: 1.22.22 (1.22.22 matches repo pin)
+## verification target: current clean HEAD in workspace (selected after no Hysight-main 27 zip was found)

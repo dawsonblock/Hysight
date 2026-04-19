@@ -1,0 +1,6 @@
+===== verify sidecar is down =====
+curl: (7) Failed to connect to 127.0.0.1 port 3041 after 0 ms: Couldn't connect to server
+sidecar-down-confirmed
+
+===== explicit no-fallback startup proof =====
+EXPECTED_FAILURE: MemoryConfigurationError: Rust memory backend health check failed for http://127.0.0.1:3041/health. Verify the sidecar is running and reachable. Example: MEMORY_SERVICE_URL=http://localhost:3031 ([Errno 61] Connection refused)

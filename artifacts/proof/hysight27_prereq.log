@@ -1,0 +1,47 @@
+===== 1.1 root meta-project install (.pkg-venv) =====
+pkg-venv install exit=0
+
+===== 1.2 supported bootstrap (make venv) =====
+zsh: command not found: #
+zsh: command not found: confirm
+    Found existing installation: hybrid-cognitive-agent 0.1.0
+    Uninstalling hybrid-cognitive-agent-0.1.0:
+      Successfully uninstalled hybrid-cognitive-agent-0.1.0
+Successfully installed hybrid-cognitive-agent-0.1.0
+Created .venv, installed baseline requirements, and installed editable ./hca. Next: make test
+make venv exit=0
+
+===== 1.3 canonical baseline proof =====
+==> [HCA pipeline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-obzhpvln MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-obzhpvln/memory /Users/dawsonblock/Hysight/.venv/bin/python -m pytest tests/test_hca_pipeline.py -q -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/hca-pipeline-proof.xml
+.......                                                                  [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/hca-pipeline-proof.xml -
+7 passed in 0.21s
+
+==> [Backend baseline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-tibzntwh MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-tibzntwh/memory /Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/backend-baseline-proof.xml
+........................................................................ [ 73%]
+..........................                                               [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/backend-baseline-proof.xml -
+98 passed, 1 deselected in 4.81s
+
+==> [Contract conformance proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-qvwktaiu MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-qvwktaiu/memory /Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_contract_conformance.py -q -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/contract-conformance-proof.xml
+..................                                                       [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/contract-conformance-proof.xml -
+18 passed in 0.46s
+
+All 3 proof step(s) passed (123 passed, 0 skipped).
+baseline exit=0
+
+===== 1.4 autonomy optional proof =====
+Running 1 proof step(s).
+
+==> [Bounded autonomy proof (optional)]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-2hhtpsaj MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-2hhtpsaj/memory /Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_autonomy_policy.py backend/tests/test_autonomy_supervisor.py backend/tests/test_autonomy_routes.py backend/tests/test_autonomy_resume.py backend/tests/test_autonomy_budgets.py backend/tests/test_autonomy_events.py backend/tests/test_autonomy_kill_switch.py backend/tests/test_autonomy_dedupe.py backend/tests/test_autonomy_lifecycle.py -q -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/backend-autonomy-optional-proof.xml
+..................................................                       [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/backend-autonomy-optional-proof.xml -
+50 passed in 0.55s
+
+All 1 proof step(s) passed (50 passed, 0 skipped).
+autonomy-optional exit=0

@@ -1,0 +1,991 @@
+### scripts/proof_sidecar.py
+#!/usr/bin/env python3
+"""Run the live memvid sidecar proof with lifecycle management and receipts."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlopen
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_LOG_PATH = REPO_ROOT / "test_reports" / "proof-sidecar.log"
+BOOTSTRAP_HINT = "See BOOTSTRAP.md for the supported bootstrap path."
+DEFAULT_SIDECAR_PORT = 3031
+AUTO_FALLBACK_PORT_LIMIT = 10
+
+
+def _default_service_url(port: int) -> str:
+    return f"http://localhost:{port}"
+
+
+def _uses_default_local_target(service_url: str, port: int) -> bool:
+    normalized_url = service_url.rstrip("/")
+    if port != DEFAULT_SIDECAR_PORT:
+        return False
+    return normalized_url in {
+        _default_service_url(DEFAULT_SIDECAR_PORT),
+        f"http://127.0.0.1:{DEFAULT_SIDECAR_PORT}",
+    }
+
+
+def _next_available_port(start_port: int) -> int | None:
+    end_port = start_port + AUTO_FALLBACK_PORT_LIMIT
+    for candidate in range(start_port, end_port):
+        if _port_is_available(candidate):
+            return candidate
+    return None
+
+
+def _resolve_service_target(service_url: str, port: int) -> tuple[str, int, str | None, str | None]:
+    if not _uses_default_local_target(service_url, port):
+        return service_url, port, None, None
+
+    default_health_url = f"{service_url.rstrip('/')}/health"
+    if _check_health(service_url):
+        conflict_reason = (
+            f"Default proof endpoint {default_health_url} is already healthy and in use."
+        )
+    elif not _port_is_available(port):
+        conflict_reason = (
+            f"Default proof port {port} is already in use, and {default_health_url} is unhealthy."
+        )
+    else:
+        return service_url, port, None, None
+
+    fallback_port = _next_available_port(port + 1)
+    if fallback_port is None:
+        failure_reason = (
+            f"{conflict_reason} No free fallback localhost port was found in the range "
+            f"{port + 1}-{port + AUTO_FALLBACK_PORT_LIMIT}. Stop the conflicting service or rerun "
+            "with an explicit MEMORY_SERVICE_PORT."
+        )
+        return service_url, port, None, failure_reason
+
+    fallback_url = _default_service_url(fallback_port)
+    notice = (
+        f"{conflict_reason} Falling back to {fallback_url} for this proof run."
+    )
+    return fallback_url, fallback_port, notice, None
+
+
+def _check_health(url: str) -> bool:
+    try:
+        with urlopen(f"{url.rstrip('/')}/health", timeout=2) as response:
+            return 200 <= response.status < 300
+    except (URLError, ValueError, OSError):
+        return False
+
+
+def _wait_for_health(url: str, timeout_seconds: float) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if _check_health(url):
+            return True
+        time.sleep(1)
+    return False
+
+
+def _tail_log(log_path: Path, lines: int = 40) -> str:
+    if not log_path.exists():
+        return "sidecar log file does not exist"
+    content = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(content[-lines:])
+
+
+def _port_is_available(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as candidate:
+        candidate.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            candidate.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+def _stop_process(process: subprocess.Popen[str] | None) -> None:
+    if process is None:
+        return
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("MEMORY_SERVICE_PORT", str(DEFAULT_SIDECAR_PORT))),
+    )
+    parser.add_argument(
+        "--service-url",
+        default=os.environ.get("MEMORY_SERVICE_URL", ""),
+    )
+    parser.add_argument(
+        "--ready-timeout",
+        type=float,
+        default=float(os.environ.get("MEMORY_SERVICE_READY_TIMEOUT", "90")),
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Absolute directory for the sidecar memory data root. When unset, "
+            "proof uses an isolated temporary directory."
+        ),
+    )
+    parser.add_argument("--log-path", type=Path, default=DEFAULT_LOG_PATH)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = _parse_args()
+    service_url = args.service_url.strip() or _default_service_url(args.port)
+    service_url, selected_port, fallback_notice, fallback_failure = _resolve_service_target(
+        service_url,
+        args.port,
+    )
+    args.log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    sidecar_process: subprocess.Popen[str] | None = None
+    data_dir_handle: tempfile.TemporaryDirectory[str] | None = None
+    log_handle = None
+
+    if args.data_dir is not None:
+        data_dir = args.data_dir.expanduser().resolve()
+        data_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        data_dir_handle = tempfile.TemporaryDirectory(
+            prefix="hysight-sidecar-proof-"
+        )
+        data_dir = Path(data_dir_handle.name).resolve()
+
+    try:
+        if fallback_failure is not None:
+            print(fallback_failure, file=sys.stderr)
+            return 1
+
+        if fallback_notice is not None:
+            print(fallback_notice, file=sys.stderr)
+
+        if _check_health(service_url):
+            failure_reason = (
+                f"Refusing to reuse an already-running memvid sidecar at {service_url}. "
+                "Use make test-sidecar for an existing service or override MEMORY_SERVICE_PORT."
+            )
+            print(failure_reason, file=sys.stderr)
+            return 1
+
+        if not _port_is_available(selected_port):
+            failure_reason = (
+                f"Port {selected_port} is already in use, but {service_url}/health is not healthy. "
+                "Stop the conflicting process or rerun with a free port, for example "
+                "MEMORY_SERVICE_PORT=3032 make proof-sidecar."
+            )
+            print(failure_reason, file=sys.stderr)
+            return 1
+
+        args.log_path.unlink(missing_ok=True)
+        log_handle = args.log_path.open("w", encoding="utf-8")
+        env = dict(os.environ)
+        env["MEMORY_SERVICE_PORT"] = str(selected_port)
+        env["MEMORY_DATA_DIR"] = str(data_dir)
+        sidecar_process = subprocess.Popen(
+            [
+                "cargo",
+                "run",
+                "--manifest-path",
+                "memvid_service/Cargo.toml",
+                "--release",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+            start_new_session=True,
+        )
+
+### backend/tests/test_memvid_sidecar.py
+"""Memvid sidecar boundary tests.
+
+Default mode runs mock-backed contract checks against an in-memory sidecar via
+requests-mock, so the backend suite can prove request/response shapes without a
+running Rust service. The mock-backed boundary proof is the opt-in integration
+tier, and live-sidecar behavior is the opt-in live tier:
+
+    pytest backend/tests/test_memvid_sidecar.py -v --run-integration
+
+    RUN_MEMVID_TESTS=1 \
+    MEMORY_SERVICE_PORT=3032 \
+    pytest backend/tests/test_memvid_sidecar.py -v --run-live
+
+Or set the full URL explicitly:
+
+    RUN_MEMVID_TESTS=1 \
+    MEMORY_SERVICE_URL=http://localhost:3032 \
+    pytest backend/tests/test_memvid_sidecar.py -v --run-live
+
+Tests that require real restart semantics skip unless the live sidecar is
+reachable and supervisorctl is available.
+
+This suite is also the proof surface for the supported production sidecar mode.
+"""
+import os
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import time
+import uuid
+from pathlib import Path
+from urllib.parse import urlparse
+
+import pytest
+import requests
+import requests_mock as rm_lib
+
+from backend.tests.contract_helpers import assert_contract_payload
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+pytestmark = pytest.mark.integration
+
+
+# Sidecar availability probe.
+
+
+SIDECAR_URL = os.environ.get(
+    "MEMORY_SERVICE_URL",
+    (
+        "http://localhost:"
+        f"{os.environ.get('MEMORY_SERVICE_PORT', '').strip() or '3031'}"
+    ),
+)
+
+
+def _probe_sidecar() -> bool:
+    parsed = urlparse(SIDECAR_URL)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 3031
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+SIDECAR_REACHABLE = (
+    os.environ.get("RUN_MEMVID_TESTS") == "1" and _probe_sidecar()
+)
+_USE_REAL_SIDECAR = SIDECAR_REACHABLE
+_LIVE_SIDECAR_REASON = (
+    f"requires RUN_MEMVID_TESTS=1 with a live memvid sidecar at {SIDECAR_URL}"
+)
+_RESTART_REASON = (
+    f"requires RUN_MEMVID_TESTS=1, a live memvid sidecar at {SIDECAR_URL}, "
+    "and supervisorctl in PATH"
+)
+
+# In-memory mock sidecar.
+
+
+class _FakeSidecar:
+    """Stateful in-memory mock.
+
+    Validates sidecar request and response shapes.
+    """
+
+    def __init__(self):
+        self._store: dict = {}
+
+    def ingest(self, request, context):
+        data = request.json()
+        mid = str(uuid.uuid4())
+        record = {
+            **data,
+            "memory_id": mid,
+            "memory_layer": "trace",
+            "stored_at": "2026-01-01T00:00:00Z",
+            "expired": False,
+            "metadata": data.get("metadata", {}),
+        }
+        self._store[mid] = record
+        return {"memory_id": mid}
+
+    def list(self, request, context):
+        records = [
+            {
+                "memory_id": record["memory_id"],
+                "memory_layer": record.get("memory_layer", "trace"),
+                "memory_type": record.get("memory_type", "fact"),
+                "text": record.get("raw_text", ""),
+                "scope": record.get("scope", "private"),
+                "confidence": record.get("confidence", 0.5),
+                "stored_at": record["stored_at"],
+                "expired": record.get("expired", False),
+                "run_id": record.get("run_id"),
+            }
+            for record in self._store.values()
+        ]
+        return {"records": records, "total": len(records)}
+
+    def retrieve(self, request, context):
+        data = request.json()
+        words = set(data.get("query_text", "").lower().split())
+        top_k = data.get("top_k", 5)
+
+        def _overlap(m):
+            return sum(1 for w in words if w in m.get("raw_text", "").lower())
+
+        ranked = sorted(
+            self._store.values(),
+            key=_overlap,
+            reverse=True,
+        )[:top_k]
+        return {
+            "hits": [
+                {
+                    "memory_layer": m.get("memory_layer", "trace"),
+                    "text": m["raw_text"],
+                    "score": float(max(1, _overlap(m))),
+                    "memory_type": m.get("memory_type", "fact"),
+                    "memory_id": m["memory_id"],
+                    "belief_id": None,
+                    "entity": m.get("entity"),
+                    "slot": m.get("slot"),
+                    "value": m.get("value"),
+                    "confidence": m.get("confidence", 0.5),
+                    "stored_at": m["stored_at"],
+                    "expired": m.get("expired", False),
+                    "metadata": m.get("metadata", {}),
+                }
+                for m in ranked
+            ]
+        }
+
+    def delete(self, request, context):
+        mid = request.path.rsplit("/", 1)[-1]
+        if mid in self._store:
+            del self._store[mid]
+            return {"deleted": True, "memory_id": mid}
+        context.status_code = 404
+        return {"error": "not found"}
+
+    def maintain(self, request, context):
+        return {
+            "durable_memory_count": len(self._store),
+            "expired_count": 0,
+            "expired_ids": [],
+            "compaction_supported": False,
+            "compactor_status": "ok",
+        }
+
+    def health(self, request, context):
+        return {
+            "status": "ok",
+            "engine": "mock-bm25",
+            "user_stores": 1,
+        }
+
+
+@pytest.fixture(autouse=True)
+def sidecar(request):
+    """Provide one isolated sidecar backend per test.
+
+    Mock mode gets a fresh in-memory store every test; live mode hits the real
+    service only when explicitly enabled.
+    """
+    use_real_sidecar = _USE_REAL_SIDECAR and request.node.get_closest_marker(
+        "live"
+    ) is not None
+    if use_real_sidecar:
+        yield None
+        return
+
+    fake = _FakeSidecar()
+    with rm_lib.Mocker() as m:
+        m.post(f"{SIDECAR_URL}/memory/ingest", json=fake.ingest)
+        m.get(f"{SIDECAR_URL}/memory/list", json=fake.list)
+        m.post(f"{SIDECAR_URL}/memory/retrieve", json=fake.retrieve)
+        m.post(f"{SIDECAR_URL}/memory/maintain", json=fake.maintain)
+        m.get(f"{SIDECAR_URL}/health", json=fake.health)
+        m.delete(
+            re.compile(rf"{re.escape(SIDECAR_URL)}/memory/.+"),
+            json=fake.delete,
+        )
+        yield fake
+
+    # Helpers.
+
+
+def ingest(text, memory_type="fact", scope="shared", tags=None, slot=None):
+    payload = {
+        "raw_text": text,
+        "memory_type": memory_type,
+        "scope": scope,
+
+### backend/tests/test_memvid_sidecar_parity.py
+"""Live sidecar parity tests for the rust-backed memory authority.
+
+These tests stay out of the default baseline proof surface. They compare the
+public MemoryController contract across the local python backend and a real
+sidecar, and they verify explicit failure semantics when the sidecar restarts
+or disappears.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import pytest
+import requests
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from fastapi.testclient import TestClient
+
+from backend.server import create_app
+from memory_service import CandidateMemory, RetrievalQuery
+from memory_service.config import MemorySettings
+from memory_service.controller import MemoryController
+pytestmark = [pytest.mark.integration, pytest.mark.live]
+
+
+def _tail_log(path: Path, *, lines: int = 40) -> str:
+    if not path.exists():
+        return "sidecar log file does not exist"
+    content = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(content[-lines:])
+
+
+def _wait_for_health(service_url: str, *, timeout_seconds: float = 30.0) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            response = requests.get(f"{service_url}/health", timeout=1)
+        except requests.RequestException:
+            time.sleep(0.25)
+            continue
+        if response.status_code == 200:
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def _pick_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as candidate:
+        candidate.bind(("127.0.0.1", 0))
+        candidate.listen(1)
+        return int(candidate.getsockname()[1])
+
+
+def _sidecar_command() -> list[str]:
+    release_binary = ROOT / "memvid_service" / "target" / "release" / "memvid-sidecar"
+    if release_binary.exists():
+        return [str(release_binary)]
+    return [
+        "cargo",
+        "run",
+        "--manifest-path",
+        "memvid_service/Cargo.toml",
+        "--release",
+    ]
+
+
+@dataclass
+class ManagedSidecar:
+    port: int
+    data_dir: Path
+    log_path: Path
+    process: subprocess.Popen[str] | None = None
+    _log_handle: object | None = field(default=None, init=False, repr=False)
+
+    @property
+    def service_url(self) -> str:
+        return f"http://127.0.0.1:{self.port}"
+
+    def start(self) -> None:
+        if self.process is not None and self.process.poll() is None:
+            return
+
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._log_handle = self.log_path.open("a", encoding="utf-8")
+        env = dict(os.environ)
+        env["MEMORY_SERVICE_PORT"] = str(self.port)
+        env["MEMORY_DATA_DIR"] = str(self.data_dir)
+        self.process = subprocess.Popen(
+            _sidecar_command(),
+            cwd=ROOT,
+            env=env,
+            stdout=self._log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+            start_new_session=True,
+        )
+        if not _wait_for_health(self.service_url):
+            self.stop()
+            raise RuntimeError(
+                "Managed sidecar did not become healthy.\n"
+                f"{_tail_log(self.log_path)}"
+            )
+
+    def stop(self) -> None:
+        if self.process is not None and self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=10)
+        self.process = None
+        if self._log_handle is not None:
+            self._log_handle.close()
+            self._log_handle = None
+
+    def restart(self) -> None:
+        self.stop()
+        self.start()
+
+
+@pytest.fixture()
+def managed_sidecar(tmp_path):
+    if not shutil.which("cargo") and not (
+        ROOT / "memvid_service" / "target" / "release" / "memvid-sidecar"
+    ).exists():
+        pytest.skip("requires cargo or a prebuilt memvid-sidecar binary")
+
+    sidecar = ManagedSidecar(
+        port=_pick_free_port(),
+        data_dir=tmp_path / "sidecar-data",
+        log_path=tmp_path / "sidecar.log",
+    )
+    sidecar.start()
+    try:
+        yield sidecar
+    finally:
+        sidecar.stop()
+
+
+@pytest.fixture()
+def rust_app_client(managed_sidecar, tmp_path, monkeypatch):
+    storage_root = tmp_path / "storage"
+    monkeypatch.setenv("MEMORY_BACKEND", "rust")
+    monkeypatch.setenv("MEMORY_SERVICE_URL", managed_sidecar.service_url)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(storage_root / "memory"))
+    monkeypatch.delenv("MONGO_URL", raising=False)
+    monkeypatch.delenv("DB_NAME", raising=False)
+    monkeypatch.delenv("CORS_ORIGINS", raising=False)
+    import memory_service.singleton as memory_singleton
+
+    memory_singleton._controller = None
+    with TestClient(create_app()) as client:
+        yield client
+    memory_singleton._controller = None
+
+
+def _local_controller(tmp_path, monkeypatch) -> MemoryController:
+    storage_root = tmp_path / "local-storage"
+    memory_dir = storage_root / "memory"
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
+    monkeypatch.delenv("MEMORY_SERVICE_URL", raising=False)
+    monkeypatch.setenv("HCA_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("MEMORY_STORAGE_DIR", str(memory_dir))
+    return MemoryController(storage_dir=str(memory_dir))
+
+
+def _rust_controller(service_url: str, storage_dir: Path) -> MemoryController:
+    return MemoryController(
+        settings=MemorySettings(
+            backend="rust",
+            storage_dir=storage_dir,
+            service_url=service_url,
+        )
+    )
+
+
+def test_live_sidecar_controller_matches_local_memory_contract(
+    managed_sidecar,
+    tmp_path,
+    monkeypatch,
+):
+    local_controller = _local_controller(tmp_path, monkeypatch)
+    rust_controller = _rust_controller(
+        managed_sidecar.service_url,
+        tmp_path / "unused-rust-storage",
+    )
+
+    local_memory_id = local_controller.ingest(
+        CandidateMemory(
+            raw_text="sidecar parity alpha text",
+            memory_type="fact",
+            scope="shared",
+        )
+    )
+    rust_memory_id = rust_controller.ingest(
+        CandidateMemory(
+            raw_text="sidecar parity alpha text",
+            memory_type="fact",
+            scope="shared",
+        )
+    )
+
+    local_records, local_total = local_controller.list_records()
+    rust_records, rust_total = rust_controller.list_records()
+    assert local_total == 1
+    assert rust_total == 1
+    assert local_records[0].text == rust_records[0].text == "sidecar parity alpha text"
+
+    local_hits = local_controller.retrieve(
+        RetrievalQuery(query_text="parity alpha", top_k=5)
+    )
+    rust_hits = rust_controller.retrieve(
+        RetrievalQuery(query_text="parity alpha", top_k=5)
+    )
+    assert [hit.text for hit in local_hits] == ["sidecar parity alpha text"]
+    assert [hit.text for hit in rust_hits] == ["sidecar parity alpha text"]
+
+    local_report = local_controller.maintain()
+    rust_report = rust_controller.maintain()
+    assert local_report.durable_memory_count == rust_report.durable_memory_count == 1
+    assert local_report.expired_count == rust_report.expired_count == 0
+    assert local_report.expired_ids == rust_report.expired_ids == []
+    assert local_report.compaction_supported is rust_report.compaction_supported is False
+
+    assert local_controller.delete_record(local_memory_id) is True
+    assert rust_controller.delete_record(rust_memory_id) is True
+    assert local_controller.delete_record("00000000-0000-0000-0000-000000000000") is False
+    assert rust_controller.delete_record("00000000-0000-0000-0000-000000000000") is False
+
+
+def test_rust_backend_delete_missing_matches_local_404(app_client, rust_app_client):
+    local_response = app_client.delete("/api/hca/memory/nonexistent-id")
+    rust_response = rust_app_client.delete("/api/hca/memory/nonexistent-id")
+
+    assert local_response.status_code == 404
+    assert rust_response.status_code == 404
+    assert rust_response.json() == local_response.json()
+
+
+def test_managed_live_sidecar_persists_ingest_and_delete_across_restart(
+    managed_sidecar,
+    tmp_path,
+):
+    controller = _rust_controller(
+        managed_sidecar.service_url,
+        tmp_path / "unused-rust-storage",
+    )
+
+### memvid_service/Cargo.toml
+[package]
+name = "memvid-sidecar"
+version = "0.1.0"
+edition = "2021"
+description = "Axum HTTP sidecar exposing the HCA memory contract (ingest / retrieve / maintain) backed by the memvid Rust memory engine."
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+memvid-core = { path = "../memvid", default-features = false, features = [
+    "lex",
+] }
+hnsw = { version = "0.11.0", features = ["serde"] }
+space = "0.17"
+rand_pcg = "0.3"
+
+### memvid_service/src/main.rs
+/// memvid-sidecar v3 — Axum HTTP server implementing the HCA memory contract.
+///
+/// New in v3:
+///   • Session isolation — per-user persistent memory stores (data/user_<id>/)
+///   • Semantic HNSW search — 384-dim embeddings (Python-computed) indexed via
+///     the `hnsw` crate; survives restarts via JSON embedding stored in frames.
+///
+/// Routes:
+///   POST /memory/ingest      → store CandidateMemory (BM25 + optional HNSW)
+///   POST /memory/retrieve    → BM25 or semantic/hybrid retrieval
+///   POST /memory/maintain    → TTL expiry
+///   GET  /memory/list        → paginated list
+///   DELETE /memory/:id       → hard-delete (persisted)
+///   GET  /health             → liveness
+use axum::{extract::State, http::StatusCode, response::Json, routing::post, Router};
+use chrono::{DateTime, Duration, Utc};
+use hnsw::{Hnsw, Params, Searcher};
+use memvid_core::{AclEnforcementMode, Memvid, PutOptions, SearchRequest, TimelineQuery};
+use rand_pcg::Pcg64;
+use serde::{Deserialize, Serialize};
+use space::Metric;
+use std::{
+    collections::{HashMap, HashSet},
+    fs::{self, OpenOptions},
+    io::{BufRead, BufReader, Write},
+    num::NonZeroU64,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
+use uuid::Uuid;
+
+// ── HNSW L2 metric ────────────────────────────────────────────────────────────
+
+const HNSW_DIST_SCALE: f32 = 100_000.0;
+
+struct L2Metric;
+impl Metric<Vec<f32>> for L2Metric {
+    type Unit = u32;
+    fn distance(&self, a: &Vec<f32>, b: &Vec<f32>) -> u32 {
+        let d: f32 = a
+            .iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x - y).powi(2))
+            .sum::<f32>()
+            .sqrt();
+        (d * HNSW_DIST_SCALE).min(u32::MAX as f32) as u32
+    }
+}
+
+// ── In-process HNSW index ─────────────────────────────────────────────────────
+
+struct SidecarVecIndex {
+    graph: Hnsw<L2Metric, Vec<f32>, Pcg64, 16, 32>,
+    /// memory_id at each insertion position (0-based index).
+    ids: Vec<String>,
+}
+
+impl SidecarVecIndex {
+    fn new() -> Self {
+        Self {
+            graph: Hnsw::new_params(L2Metric, Params::new().ef_construction(100)),
+            ids: Vec::new(),
+        }
+    }
+
+    fn insert(&mut self, memory_id: String, embedding: Vec<f32>) {
+        let mut s = Searcher::default();
+        self.graph.insert(embedding, &mut s);
+        self.ids.push(memory_id);
+    }
+
+    fn search(&self, query: &[f32], limit: usize) -> Vec<(String, f32)> {
+        if self.ids.is_empty() {
+            return vec![];
+        }
+        let ef = 50_usize.max(limit);
+        let mut dest = vec![
+            space::Neighbor::<u32> {
+                index: !0,
+                distance: 0
+            };
+            ef
+        ];
+        let mut s: Searcher<u32> = Searcher::default();
+        let q: Vec<f32> = query.to_vec();
+        let found = self.graph.nearest(&q, ef, &mut s, &mut dest);
+        found
+            .iter()
+            .take(limit)
+            .filter_map(|n| {
+                self.ids.get(n.index).map(|id| {
+                    let dist = n.distance as f32 / HNSW_DIST_SCALE;
+                    let score = 1.0_f32 / (1.0 + dist);
+                    (id.clone(), score)
+                })
+            })
+            .collect()
+    }
+
+    fn len(&self) -> usize {
+        self.ids.len()
+    }
+}
+
+// ── Contract types ────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct Provenance {
+    source_type: String,
+    source_id: String,
+    source_label: Option<String>,
+    trust_weight: f64,
+}
+impl Default for Provenance {
+    fn default() -> Self {
+        Self {
+            source_type: "system".into(),
+            source_id: Uuid::new_v4().to_string(),
+            source_label: None,
+            trust_weight: 0.5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct CandidateMemory {
+    candidate_id: Option<String>,
+    raw_text: String,
+    memory_type: String,
+    #[serde(default)]
+    entity: String,
+    #[serde(default)]
+    slot: String,
+    #[serde(default)]
+    value: String,
+    #[serde(default = "half")]
+    confidence: f64,
+    #[serde(default = "half")]
+    salience: f64,
+    #[serde(default = "private_scope")]
+    scope: String,
+    run_id: Option<String>,
+    workflow_key: Option<String>,
+    #[serde(default)]
+    source: Provenance,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    metadata: HashMap<String, serde_json::Value>,
+    /// Session / user-scoped isolation key.
+    #[serde(default = "default_user")]
+    user_id: String,
+    /// Pre-computed embedding vector (384-dim bge-small-en-v1.5).
+    #[serde(default)]
+    embedding: Option<Vec<f32>>,
+}
+
+fn half() -> f64 {
+    0.5
+}
+fn private_scope() -> String {
+    "private".into()
+}
+fn default_user() -> String {
+    "default".into()
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct RetrievalQuery {
+    query_text: String,
+    #[serde(default = "default_top_k")]
+    top_k: usize,
+    memory_layer: Option<String>,
+    scope: Option<String>,
+    run_id: Option<String>,
+    #[serde(default)]
+    include_expired: bool,
+    #[serde(default = "general_intent")]
+    intent: String,
+    /// Session isolation key.
+    #[serde(default = "default_user")]
+    user_id: String,
+    /// Pre-computed query embedding for semantic/hybrid search.
+    #[serde(default)]
+    embedding: Option<Vec<f32>>,
+    /// "bm25" | "semantic" | "hybrid" (default: "bm25")
+    #[serde(default = "bm25_mode")]
+    mode: String,
+}
+
+fn default_top_k() -> usize {
+    10
+}
+fn general_intent() -> String {
+    "general".into()
+}
+fn bm25_mode() -> String {
+    "bm25".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RetrievalHit {
+    memory_id: Option<String>,
+    belief_id: Option<String>,
+    memory_layer: String,
+    memory_type: Option<String>,
+    entity: Option<String>,
+    slot: Option<String>,
+    value: Option<String>,
+    text: String,
+    score: f64,
+    confidence: f64,
+    stored_at: DateTime<Utc>,
+    expired: bool,
+    metadata: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct IngestResponse {
+    memory_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RetrieveResponse {
+    hits: Vec<RetrievalHit>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct MaintenanceReport {
+    durable_memory_count: usize,
+    expired_count: usize,
+    expired_ids: Vec<String>,
+    compaction_supported: bool,
+    compactor_status: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct MaintainRequest {
+    #[serde(default = "default_user")]
+    user_id: String,
+}
+
+// ── In-memory record ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+struct MemoryRecord {
+    memory_id: String,
+    raw_text: String,
+    memory_type: String,
+    entity: String,
+    slot: String,
+    value: String,
+    confidence: f64,
+    scope: String,
+    run_id: Option<String>,
+    metadata: HashMap<String, serde_json::Value>,
+    stored_at: DateTime<Utc>,
+    expired: bool,

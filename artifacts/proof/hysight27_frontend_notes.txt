@@ -1,0 +1,379 @@
+### scripts/proof_frontend.py
+#!/usr/bin/env python3
+"""Run the frontend proof surface and write a machine-readable receipt."""
+
+from __future__ import annotations
+
+import json
+import os
+import pathlib
+import shlex
+import shutil
+import subprocess
+import sys
+from typing import Any, Dict, List, Sequence
+
+try:
+    from proof_receipt import (
+        empty_test_counts,
+        merge_test_counts,
+        summarize_junit_xml,
+        write_proof_receipt,
+    )
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.proof_receipt import (
+        empty_test_counts,
+        merge_test_counts,
+        summarize_junit_xml,
+        write_proof_receipt,
+    )
+
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+FRONTEND_ROOT = REPO_ROOT / "frontend"
+PROOF_RECEIPT_PATH = REPO_ROOT / "artifacts" / "proof" / "frontend.json"
+JEST_REPORT_PATH = REPO_ROOT / "test_reports" / "frontend-jest.json"
+FIXTURE_JUNIT_PATH = REPO_ROOT / "test_reports" / "frontend-fixture-drift.xml"
+EXPECTED_NODE_MAJOR = 20
+EXPECTED_YARN_VERSION = "1.22.22"
+REPO_VENV_DIR = (REPO_ROOT / ".venv").resolve()
+ALL_PROOF_STEP_IDS = (
+    "pipeline",
+    "backend-baseline",
+    "contract",
+    "frontend",
+    "integration",
+    "mongo-live",
+    "sidecar",
+)
+
+
+class FrontendProofError(RuntimeError):
+    """Raised when the frontend proof surface cannot complete."""
+
+
+def _tail_text(text: str, *, lines: int = 20) -> str | None:
+    stripped = text.strip()
+    if not stripped:
+        return None
+    return "\n".join(stripped.splitlines()[-lines:])
+
+
+def _command_string(command: Sequence[str]) -> str:
+    return shlex.join(list(command))
+
+
+def _env_mode() -> str:
+    python_mode = (
+        "repo_local_venv"
+        if pathlib.Path(sys.prefix).resolve() == REPO_VENV_DIR
+        else "external_python"
+    )
+    return f"{python_mode}+local_node"
+
+
+def _run_command(
+    *,
+    name: str,
+    command: Sequence[str],
+    cwd: pathlib.Path,
+    env: Dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    print(f"\n==> [{name}]")
+    print(f"    {_command_string(command)}")
+    completed = subprocess.run(
+        list(command),
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, end="", file=sys.stderr)
+    return completed
+
+
+def _require_tool(command: str) -> None:
+    if not shutil.which(command):
+        raise FrontendProofError(
+            f"{command} is unavailable. Use Node {EXPECTED_NODE_MAJOR}.x and "
+            f"Yarn {EXPECTED_YARN_VERSION}, then run make test-bootstrap-frontend."
+        )
+
+
+def _parse_node_major(version_text: str) -> int | None:
+    stripped = version_text.strip().lstrip("v")
+    major_text = stripped.split(".", 1)[0]
+    try:
+        return int(major_text)
+    except ValueError:
+        return None
+
+
+def _validate_runtime(stage_results: List[Dict[str, Any]]) -> tuple[str, str]:
+    node_version_result = _run_command(
+        name="Node version",
+        command=["node", "--version"],
+        cwd=FRONTEND_ROOT,
+    )
+    if node_version_result.returncode != 0:
+        raise FrontendProofError("Unable to determine the Node.js version.")
+    node_version = node_version_result.stdout.strip()
+    node_major = _parse_node_major(node_version)
+    if node_major != EXPECTED_NODE_MAJOR:
+        stage_results.append(
+            {
+                "name": "runtime-verification",
+                "command": _command_string(["node", "--version"]),
+                "returncode": node_version_result.returncode,
+                "status": "failed",
+                "node_version": node_version,
+                "yarn_version": "unknown",
+                "stdout_tail": _tail_text(node_version_result.stdout),
+                "stderr_tail": _tail_text(node_version_result.stderr),
+            }
+        )
+        raise FrontendProofError(
+            f"Hysight frontend requires Node {EXPECTED_NODE_MAJOR}.x. "
+            f"Detected Node {node_version}."
+        )
+
+    yarn_version_result = _run_command(
+        name="Yarn version",
+        command=["yarn", "--version"],
+        cwd=FRONTEND_ROOT,
+    )
+    if yarn_version_result.returncode != 0:
+        stage_results.append(
+            {
+                "name": "runtime-verification",
+                "command": _command_string(["yarn", "--version"]),
+                "returncode": yarn_version_result.returncode,
+                "status": "failed",
+                "node_version": node_version,
+                "yarn_version": "unknown",
+                "stdout_tail": _tail_text(yarn_version_result.stdout),
+                "stderr_tail": _tail_text(yarn_version_result.stderr),
+            }
+        )
+        raise FrontendProofError("Unable to determine the Yarn version.")
+    yarn_version = yarn_version_result.stdout.strip()
+    if yarn_version != EXPECTED_YARN_VERSION:
+        stage_results.append(
+            {
+                "name": "runtime-verification",
+                "command": _command_string(["yarn", "--version"]),
+                "returncode": yarn_version_result.returncode,
+                "status": "failed",
+                "node_version": node_version,
+                "yarn_version": yarn_version,
+                "stdout_tail": _tail_text(yarn_version_result.stdout),
+                "stderr_tail": _tail_text(yarn_version_result.stderr),
+            }
+        )
+        raise FrontendProofError(
+            f"Hysight frontend requires Yarn {EXPECTED_YARN_VERSION}. "
+            f"Detected Yarn {yarn_version}."
+        )
+
+    runtime_env = dict(os.environ)
+    runtime_env["npm_config_user_agent"] = (
+        f"yarn/{yarn_version} npm/? node/{node_version.lstrip('v')} darwin arm64"
+    )
+    runtime_check = _run_command(
+        name="Frontend runtime verification",
+        command=["node", "./scripts/verify-runtime.js"],
+        cwd=FRONTEND_ROOT,
+        env=runtime_env,
+    )
+    stage_results.append(
+        {
+            "name": "runtime-verification",
+            "command": _command_string(["node", "./scripts/verify-runtime.js"]),
+            "returncode": runtime_check.returncode,
+            "status": "passed" if runtime_check.returncode == 0 else "failed",
+            "node_version": node_version,
+            "yarn_version": yarn_version,
+            "stdout_tail": _tail_text(runtime_check.stdout),
+            "stderr_tail": _tail_text(runtime_check.stderr),
+        }
+    )
+    if runtime_check.returncode != 0:
+        raise FrontendProofError(
+            "Frontend runtime verification failed. Use Node 20.20.2 and Yarn 1.22.22."
+        )
+    return node_version, yarn_version
+
+
+def _proof_scope_metadata(
+    stage_results: List[Dict[str, Any]],
+    skipped_cases: List[Dict[str, str]],
+    *,
+    node_version: str,
+    yarn_version: str,
+) -> Dict[str, Any]:
+    covered_stage_names = [str(stage.get("name", "")) for stage in stage_results]
+    passed_stage_names = [
+        str(stage.get("name", ""))
+        for stage in stage_results
+        if stage.get("status") == "passed"
+    ]
+    failed_stage_names = [
+        str(stage.get("name", ""))
+        for stage in stage_results
+        if stage.get("status") == "failed"
+    ]
+
+    return {
+        "receipt_scope": (
+            "This receipt covers only the frontend proof and the stages "
+            "listed in covered_stage_names."
+        ),
+        "covered_proof_steps": ["frontend"],
+        "omitted_proof_steps": [
+            step_id for step_id in ALL_PROOF_STEP_IDS if step_id != "frontend"
+        ],
+        "covered_stage_names": covered_stage_names,
+        "passed_stage_names": passed_stage_names,
+        "failed_stage_names": failed_stage_names,
+        "node_version": node_version,
+        "yarn_version": yarn_version,
+        "stages": stage_results,
+        "receipt_format": "frontend-proof-v1",
+        "skipped_cases": skipped_cases,
+    }
+
+
+def _require_installed_dependencies() -> None:
+    sentinels = [
+        FRONTEND_ROOT / "node_modules" / ".bin" / "craco",
+        FRONTEND_ROOT / "node_modules" / ".bin" / "craco.cmd",
+        FRONTEND_ROOT / "node_modules" / "react-scripts" / "package.json",
+    ]
+    if not any(path.exists() for path in sentinels):
+        raise FrontendProofError(
+            "Frontend dependencies are not installed. Run make test-bootstrap-frontend "
+            "or cd frontend && yarn install --frozen-lockfile."
+        )
+
+
+### frontend/package.json
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@hookform/resolvers": "^5.0.1",
+    "@radix-ui/react-accordion": "^1.2.8",
+    "@radix-ui/react-alert-dialog": "^1.1.11",
+    "@radix-ui/react-aspect-ratio": "^1.1.4",
+    "@radix-ui/react-avatar": "^1.1.7",
+    "@radix-ui/react-checkbox": "^1.2.3",
+    "@radix-ui/react-collapsible": "^1.1.8",
+    "@radix-ui/react-context-menu": "^2.2.12",
+    "@radix-ui/react-dialog": "^1.1.11",
+    "@radix-ui/react-dropdown-menu": "^2.1.12",
+    "@radix-ui/react-hover-card": "^1.1.11",
+    "@radix-ui/react-label": "^2.1.4",
+    "@radix-ui/react-menubar": "^1.1.12",
+    "@radix-ui/react-navigation-menu": "^1.2.10",
+    "@radix-ui/react-popover": "^1.1.11",
+    "@radix-ui/react-progress": "^1.1.4",
+    "@radix-ui/react-radio-group": "^1.3.4",
+    "@radix-ui/react-scroll-area": "^1.2.6",
+    "@radix-ui/react-select": "^2.2.2",
+    "@radix-ui/react-separator": "^1.1.4",
+    "@radix-ui/react-slider": "^1.3.2",
+    "@radix-ui/react-slot": "^1.2.0",
+    "@radix-ui/react-switch": "^1.2.2",
+    "@radix-ui/react-tabs": "^1.1.9",
+    "@radix-ui/react-toast": "^1.2.11",
+    "@radix-ui/react-toggle": "^1.1.6",
+    "@radix-ui/react-toggle-group": "^1.1.7",
+    "@radix-ui/react-tooltip": "^1.2.4",
+    "axios": "^1.8.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "cra-template": "1.2.0",
+    "date-fns": "^4.1.0",
+    "embla-carousel-react": "^8.6.0",
+    "input-otp": "^1.4.2",
+    "lucide-react": "^0.507.0",
+    "next-themes": "^0.4.6",
+    "react": "^19.0.0",
+    "react-day-picker": "8.10.1",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.56.2",
+    "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^3.0.1",
+    "react-router-dom": "^7.5.1",
+    "react-scripts": "5.0.1",
+    "recharts": "^3.6.0",
+    "remark-gfm": "^4.0.1",
+    "sonner": "^2.0.3",
+    "tailwind-merge": "^3.2.0",
+    "tailwindcss-animate": "^1.0.7",
+    "vaul": "^1.1.2",
+    "zod": "^3.24.4"
+  },
+  "scripts": {
+    "preinstall": "node ./scripts/verify-runtime.js",
+    "start": "craco start",
+    "build": "craco build",
+    "test": "craco test",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": "20.x",
+    "yarn": "1.22.22"
+  },
+  "volta": {
+    "node": "20.20.2",
+    "yarn": "1.22.22"
+  },
+  "proxy": "http://localhost:8000",
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+    "@craco/craco": "^7.1.0",
+    "@emergentbase/visual-edits": "https://assets.emergent.sh/npm/emergentbase-visual-edits-1.0.8.tgz",
+    "@eslint/js": "9.23.0",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "autoprefixer": "^10.4.20",
+    "dotenv": "^16.4.7",
+    "eslint": "9.23.0",
+    "eslint-plugin-import": "2.31.0",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-react": "7.37.4",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "globals": "15.15.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17"
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+}
+
+### frontend/.nvmrc
+20
+### frontend/mise.toml
+[tools]
+node = "20.20.2"
+yarn = "1.22.22"

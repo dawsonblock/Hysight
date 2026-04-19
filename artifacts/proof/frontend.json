@@ -1,10 +1,10 @@
 {
-  "command": "/tmp/Hysight/.venv/bin/python scripts/proof_frontend.py",
-  "commit_sha": "14a7e29a651736713df61c8831a2d80da48492e1",
+  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/proof_frontend.py",
+  "commit_sha": "aad7d10251c53b2b97c989dd3b750124d93d74fe",
   "environment_mode": "repo_local_venv+local_node",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-18T21:19:20.322370+00:00",
+  "generated_at": "2026-04-19T07:31:07.715686+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -49,7 +49,7 @@
         "yarn_version": "1.22.22"
       },
       {
-        "command": "/tmp/Hysight/.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q --check-fixture-drift -k generated_frontend_api_fixtures_match_backend_export -ra --strict-markers --junitxml=/tmp/Hysight/test_reports/frontend-fixture-drift.xml",
+        "command": "/Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q --check-fixture-drift -k generated_frontend_api_fixtures_match_backend_export -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/frontend-fixture-drift.xml",
         "counts": {
           "error_test_count": 0,
           "failed_test_count": 0,
@@ -63,7 +63,7 @@
         "returncode": 0,
         "status": "passed",
         "stderr_tail": null,
-        "stdout_tail": ".                                                                        [100%]\n--- generated xml file: /tmp/Hysight/test_reports/frontend-fixture-drift.xml ---\n1 passed, 53 deselected in 0.20s"
+        "stdout_tail": ".                                                                        [100%]\n- generated xml file: /Users/dawsonblock/Hysight/test_reports/frontend-fixture-drift.xml -\n1 passed, 55 deselected in 0.18s"
       },
       {
         "command": "yarn lint",
@@ -71,10 +71,10 @@
         "returncode": 0,
         "status": "passed",
         "stderr_tail": null,
-        "stdout_tail": "yarn run v1.22.22\n$ eslint .\nDone in 0.76s."
+        "stdout_tail": "yarn run v1.22.22\n$ eslint .\nDone in 0.80s."
       },
       {
-        "command": "yarn test --watch=false --runInBand --json --outputFile=/tmp/Hysight/test_reports/frontend-jest.json",
+        "command": "yarn test --watch=false --runInBand --json --outputFile=/Users/dawsonblock/Hysight/test_reports/frontend-jest.json",
         "counts": {
           "error_test_count": 0,
           "failed_test_count": 0,
@@ -93,8 +93,8 @@
         "report": "test_reports/frontend-jest.json",
         "returncode": 0,
         "status": "passed",
-        "stderr_tail": "PASS src/components/OperatorConsole.test.js\nPASS src/lib/api.test.js\nPASS src/components/HCAChat.test.js\nPASS src/App.test.js\nPASS src/components/MemoryBrowser.test.js\n\nTest Suites: 5 passed, 5 total\nTests:       19 passed, 19 total\nSnapshots:   0 total\nTime:        3.702 s\nRan all test suites.\nTest results written to: ../test_reports/frontend-jest.json",
-        "stdout_tail": "yarn run v1.22.22\n$ craco test --watch=false --runInBand --json --outputFile=/tmp/Hysight/test_reports/frontend-jest.json\nDone in 4.12s."
+        "stderr_tail": "PASS src/components/OperatorConsole.test.js\nPASS src/lib/api.test.js\nPASS src/components/HCAChat.test.js\nPASS src/App.test.js\nPASS src/components/MemoryBrowser.test.js\n\nTest Suites: 5 passed, 5 total\nTests:       19 passed, 19 total\nSnapshots:   0 total\nTime:        3.224 s\nRan all test suites.\nTest results written to: ../test_reports/frontend-jest.json",
+        "stdout_tail": "yarn run v1.22.22\n$ craco test --watch=false --runInBand --json --outputFile=/Users/dawsonblock/Hysight/test_reports/frontend-jest.json\nDone in 3.79s."
       },
       {
         "command": "yarn build",
@@ -102,20 +102,20 @@
         "returncode": 0,
         "status": "passed",
         "stderr_tail": null,
-        "stdout_tail": "\nFile sizes after gzip:\n\n  178.45 kB  build/static/js/main.2e27f740.js\n  12.28 kB   build/static/css/main.e3a07d3d.css\n\nThe project was built assuming it is hosted at /.\nYou can control this with the homepage field in your package.json.\n\nThe build folder is ready to be deployed.\nYou may serve it with a static server:\n\n  yarn global add serve\n  serve -s build\n\nFind out more about deployment here:\n\n  https://cra.link/deployment\n\nDone in 13.66s."
+        "stdout_tail": "\nFile sizes after gzip:\n\n  178.45 kB  build/static/js/main.2e27f740.js\n  12.28 kB   build/static/css/main.e3a07d3d.css\n\nThe project was built assuming it is hosted at /.\nYou can control this with the homepage field in your package.json.\n\nThe build folder is ready to be deployed.\nYou may serve it with a static server:\n\n  yarn global add serve\n  serve -s build\n\nFind out more about deployment here:\n\n  https://cra.link/deployment\n\nDone in 6.45s."
       }
     ],
     "yarn_version": "1.22.22"
   },
   "outcome": "passed",
   "passed_test_count": 20,
-  "platform": "Linux-6.12.76-linuxkit-aarch64-with-glibc2.36",
+  "platform": "macOS-26.2-arm64-arm-64bit",
   "proof_tier": "frontend",
-  "python_version": "3.11.2",
+  "python_version": "3.9.7",
   "schema_version": 2,
   "service_connection_mode": "none",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-18T21:19:20.322370+00:00",
+  "timestamp": "2026-04-19T07:31:07.715686+00:00",
   "total_test_count": 20
 }

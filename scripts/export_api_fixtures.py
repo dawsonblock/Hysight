@@ -15,6 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from backend.server_models import (
+    AutonomySubsystemStatus,
     DatabaseSubsystemStatus,
     LLMSubsystemStatus,
     MemorySubsystemStatus,
@@ -122,6 +123,19 @@ def build_fixtures() -> dict[str, object]:
             detail=(
                 "EMERGENT_LLM_KEY is missing; LLM-backed modules will fall back when possible"
             ),
+        ),
+        autonomy=AutonomySubsystemStatus(
+            enabled=True,
+            running=False,
+            active_agents=0,
+            active_runs=0,
+            pending_triggers=0,
+            loop_running=False,
+            kill_switch_active=False,
+            kill_switch_reason=None,
+            kill_switch_set_at=None,
+            last_tick_at=None,
+            last_error=None,
         ),
     ).model_dump(mode="json")
 
