@@ -9,6 +9,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from backend import server_bootstrap as _server_bootstrap  # noqa: F401
 from backend import server_persistence, server_subsystems
+from backend.server_autonomy_routes import register_autonomy_routes
 from backend.server_hca_routes import register_hca_routes
 from backend.server_memory_routes import register_memory_routes
 from backend.server_status_routes import register_status_routes
@@ -56,6 +57,7 @@ register_status_routes(
 )
 register_hca_routes(api_router)
 register_memory_routes(api_router)
+register_autonomy_routes(api_router)
 
 
 @asynccontextmanager
