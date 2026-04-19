@@ -304,6 +304,7 @@ def list_checkpoints(
     ]
     if agent_id is not None:
         checkpoints = [c for c in checkpoints if c.agent_id == agent_id]
+    checkpoints.sort(key=lambda c: c.checkpointed_at, reverse=True)
     return checkpoints
 
 
@@ -384,10 +385,15 @@ def get_budget_ledger(agent_id: str) -> AutonomyBudgetLedger:
 
 
 def list_budget_ledgers() -> List[AutonomyBudgetLedger]:
-    return [
+    ledgers = [
         AutonomyBudgetLedger.model_validate(r)
         for r in _latest_ledgers().values()
     ]
+    ledgers.sort(
+        key=lambda ledger: ledger.updated_at or utc_now(),
+        reverse=True,
+    )
+    return ledgers
 
 
 def update_budget_ledger(
@@ -460,3 +466,7 @@ def record_dedupe(
             "recorded_at": utc_now().isoformat(),
         },
     )
+
+
+def count_dedupe_records() -> int:
+    return len(_latest_dedupe())

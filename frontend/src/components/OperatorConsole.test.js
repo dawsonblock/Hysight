@@ -498,10 +498,74 @@ test("renders replay-backed overview fields and filters the run list", async () 
 test("renders subsystem health and approval context for pending runs", async () => {
   const user = userEvent.setup();
 
+  getSubsystems.mockResolvedValue({
+    ...SUBSYSTEMS,
+    autonomy: {
+      enabled: true,
+      running: true,
+      active_agents: 2,
+      active_runs: 1,
+      pending_triggers: 3,
+      pending_escalations: 1,
+      loop_running: true,
+      kill_switch_active: false,
+      kill_switch_reason: null,
+      kill_switch_set_at: null,
+      last_tick_at: "2026-04-19T08:00:00Z",
+      last_error: null,
+      last_evaluator_decision: "escalate",
+      dedupe_keys_tracked: 4,
+      recent_runs: [
+        {
+          agent_id: "agent-1",
+          trigger_id: "trigger-1",
+          run_id: "run-autonomy-1",
+        },
+      ],
+      budget_ledgers: [
+        {
+          agent_id: "agent-1",
+          launched_runs_total: 4,
+          active_runs: 1,
+          total_steps_observed: 6,
+          total_retries_used: 1,
+          last_run_started_at: "2026-04-19T07:58:00Z",
+          last_run_completed_at: null,
+          last_budget_breach_at: null,
+          updated_at: "2026-04-19T08:00:00Z",
+        },
+      ],
+      last_checkpoint: {
+        agent_id: "agent-1",
+        trigger_id: "trigger-1",
+        run_id: "run-autonomy-1",
+        status: "awaiting_approval",
+        attempt: 1,
+        last_event_id: "event-1",
+        last_state: "awaiting_approval",
+        last_decision: "escalate",
+        resume_allowed: false,
+        safe_to_continue: false,
+        kill_switch_observed: false,
+        dedupe_key: "inbox:item-1",
+        checkpointed_at: "2026-04-19T08:00:00Z",
+        budget_snapshot: {
+          runs_launched: 4,
+          parallel_runs: 1,
+          steps_in_current_run: 2,
+          retries_for_current_step: 1,
+        },
+      },
+    },
+  });
+
   renderConsole({ selectedRunId: "run-awaiting" });
 
   expect(await screen.findByText("Subsystem health")).toBeInTheDocument();
   expect((await screen.findAllByText("Degraded")).length).toBeGreaterThan(0);
+  expect(await screen.findByText("Autonomy control plane")).toBeInTheDocument();
+  expect(await screen.findByText("Pending escalations")).toBeInTheDocument();
+  expect((await screen.findAllByText("Awaiting approval")).length).toBeGreaterThan(0);
   expect(
     (await screen.findAllByText("Write access is gated for operator review.")).length
   ).toBeGreaterThan(0);

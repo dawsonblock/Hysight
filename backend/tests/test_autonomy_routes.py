@@ -138,6 +138,13 @@ def test_status_and_checkpoints_surface(app_client):
 
     status = app_client.get("/api/hca/autonomy/status").json()
     assert "active_agents" in status
+    assert "pending_escalations" in status
+    assert "dedupe_keys_tracked" in status
+    assert "budget_ledgers" in status
+    assert "recent_runs" in status
+    assert "last_checkpoint" in status
+    assert isinstance(status["budget_ledgers"], list)
+    assert isinstance(status["recent_runs"], list)
 
     checkpoints_all = app_client.get(
         "/api/hca/autonomy/checkpoints"

@@ -7,76 +7,75 @@ warning: function `truncate_at_boundary` is never used
     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
 
 warning: `memvid-core` (lib) generated 1 warning
-    Finished `release` profile [optimized] target(s) in 0.45s
+    Finished `release` profile [optimized] target(s) in 0.49s
      Running `memvid_service/target/release/memvid-sidecar`
-[2m2026-04-18T21:15:52.302707Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m memvid-sidecar v3 (Tantivy BM25 + HNSW semantic + session isolation)
-[2m2026-04-18T21:15:52.302930Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Creating store: /private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-sidecar-proof-51a_7etn/user_default/memory.mv2
-[2m2026-04-18T21:15:52.308474Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:52.355830Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmpLTLtU8/meta.json" was modified
-[2m2026-04-18T21:15:52.356457Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
-[2m2026-04-18T21:15:52.357153Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
-[2m2026-04-18T21:15:52.357164Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
-[2m2026-04-18T21:15:52.357206Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:52.367257Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
-[2m2026-04-18T21:15:52.367268Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
-[2m2026-04-18T21:15:52.367761Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
-[2m2026-04-18T21:15:52.367864Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
-[2m2026-04-18T21:15:52.367880Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
-[2m2026-04-18T21:15:52.367916Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:52.378172Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
-[2m2026-04-18T21:15:52.378187Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
-[2m2026-04-18T21:15:52.378522Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m69632 [3mdata_end[0m[2m=[0m69632
-[2m2026-04-18T21:15:52.386950Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Scanning 0 frames…
-[2m2026-04-18T21:15:52.386963Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Loaded 0 memories (0 with embeddings).
-[2m2026-04-18T21:15:52.387681Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Listening on 0.0.0.0:3032
-[2m2026-04-18T21:15:55.669811Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
-[2m2026-04-18T21:15:55.735088Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 2
-[2m2026-04-18T21:15:55.735126Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 2
-[2m2026-04-18T21:15:55.735157Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:55.747111Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
-[2m2026-04-18T21:15:55.747131Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
-[2m2026-04-18T21:15:55.758262Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:55.803875Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
-[2m2026-04-18T21:15:55.803924Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmpFgB6Qn/meta.json" was modified
-[2m2026-04-18T21:15:55.804392Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
-[2m2026-04-18T21:15:55.804517Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
-[2m2026-04-18T21:15:55.804531Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:55.817983Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
-[2m2026-04-18T21:15:55.818093Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
-[2m2026-04-18T21:15:55.818572Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
-[2m2026-04-18T21:15:55.880992Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 2
-[2m2026-04-18T21:15:55.881067Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 2
-[2m2026-04-18T21:15:55.881089Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:55.881777Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmpLTLtU8/meta.json" was modified
-[2m2026-04-18T21:15:55.903616Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
-[2m2026-04-18T21:15:55.903637Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
-[2m2026-04-18T21:15:55.906199Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
-[2m2026-04-18T21:15:55.906395Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 2
-[2m2026-04-18T21:15:55.910046Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 2
-[2m2026-04-18T21:15:55.910067Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:55.929748Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
-[2m2026-04-18T21:15:55.929769Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
-[2m2026-04-18T21:15:55.930013Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3c7758b22dd547bead50f1ef1abf005f.fast"
-[2m2026-04-18T21:15:55.930110Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3c7758b22dd547bead50f1ef1abf005f.idx"
-[2m2026-04-18T21:15:55.930202Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3c7758b22dd547bead50f1ef1abf005f.fieldnorm"
-[2m2026-04-18T21:15:55.930633Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3c7758b22dd547bead50f1ef1abf005f.store"
-[2m2026-04-18T21:15:55.930714Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3c7758b22dd547bead50f1ef1abf005f.term"
-[2m2026-04-18T21:15:55.930800Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3c7758b22dd547bead50f1ef1abf005f.pos"
-[2m2026-04-18T21:15:55.943032Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
-[2m2026-04-18T21:15:56.018115Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 4
-[2m2026-04-18T21:15:56.018352Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 4
-[2m2026-04-18T21:15:56.018392Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:56.028413Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
-[2m2026-04-18T21:15:56.028435Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
-[2m2026-04-18T21:15:56.029553Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
-[2m2026-04-18T21:15:56.029759Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 4
-[2m2026-04-18T21:15:56.029771Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 4
-[2m2026-04-18T21:15:56.029793Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
-[2m2026-04-18T21:15:56.040290Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
-[2m2026-04-18T21:15:56.040317Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
-[2m2026-04-18T21:15:56.049935Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m74464 [3mdata_end[0m[2m=[0m69746
-[2m2026-04-18T21:15:56.055823Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rebuild_indexes: ti_offset=69718 ti_length=28 computed_footer=74464 current_footer=74464 (before setting)
-[2m2026-04-18T21:15:56.055847Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m74464 [3mdata_end[0m[2m=[0m69718
-[2m2026-04-18T21:15:56.061438Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m ✓ Doctor lex index rebuild succeeded: 1 docs from 1 frames (0 text-indexable)
-[2m2026-04-18T21:15:56.061481Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m74520 [3mdata_end[0m[2m=[0m69718
-[2m2026-04-18T21:15:56.309200Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmpFgB6Qn/meta.json" was modified
+[2m2026-04-19T08:45:19.582055Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m memvid-sidecar v3 (Tantivy BM25 + HNSW semantic + session isolation)
+[2m2026-04-19T08:45:19.582239Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Creating store: /private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-sidecar-proof-qh6anfyt/user_default/memory.mv2
+[2m2026-04-19T08:45:19.587404Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:19.628633Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmpn1NNLL/meta.json" was modified
+[2m2026-04-19T08:45:19.629405Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-19T08:45:19.630125Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
+[2m2026-04-19T08:45:19.630138Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
+[2m2026-04-19T08:45:19.630193Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:19.640494Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-19T08:45:19.640515Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-19T08:45:19.641183Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-19T08:45:19.641310Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
+[2m2026-04-19T08:45:19.641330Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
+[2m2026-04-19T08:45:19.641383Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:19.649380Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-19T08:45:19.649392Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-19T08:45:19.649768Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m69632 [3mdata_end[0m[2m=[0m69632
+[2m2026-04-19T08:45:19.658203Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Scanning 0 frames…
+[2m2026-04-19T08:45:19.658220Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Loaded 0 memories (0 with embeddings).
+[2m2026-04-19T08:45:19.658959Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Listening on 0.0.0.0:3045
+[2m2026-04-19T08:45:22.932385Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-19T08:45:22.993260Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 2
+[2m2026-04-19T08:45:22.993290Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 2
+[2m2026-04-19T08:45:22.993311Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:23.001687Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-19T08:45:23.001755Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-19T08:45:23.011921Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:23.057330Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-19T08:45:23.057363Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmpRDMjZn/meta.json" was modified
+[2m2026-04-19T08:45:23.057896Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
+[2m2026-04-19T08:45:23.057917Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
+[2m2026-04-19T08:45:23.057935Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:23.066433Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-19T08:45:23.066442Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-19T08:45:23.066884Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-19T08:45:23.124394Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 2
+[2m2026-04-19T08:45:23.124412Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 2
+[2m2026-04-19T08:45:23.124430Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:23.132444Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-19T08:45:23.132455Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-19T08:45:23.134454Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-19T08:45:23.134991Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 2
+[2m2026-04-19T08:45:23.134999Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 2
+[2m2026-04-19T08:45:23.135010Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:23.147572Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-19T08:45:23.147587Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-19T08:45:23.147703Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "d57a0f3df5e4445c9b9d3bc29018af7d.fast"
+[2m2026-04-19T08:45:23.147771Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "d57a0f3df5e4445c9b9d3bc29018af7d.fieldnorm"
+[2m2026-04-19T08:45:23.147830Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "d57a0f3df5e4445c9b9d3bc29018af7d.idx"
+[2m2026-04-19T08:45:23.147889Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "d57a0f3df5e4445c9b9d3bc29018af7d.pos"
+[2m2026-04-19T08:45:23.147950Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "d57a0f3df5e4445c9b9d3bc29018af7d.store"
+[2m2026-04-19T08:45:23.148011Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "d57a0f3df5e4445c9b9d3bc29018af7d.term"
+[2m2026-04-19T08:45:23.159075Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-19T08:45:23.214151Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 4
+[2m2026-04-19T08:45:23.214167Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 4
+[2m2026-04-19T08:45:23.214184Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:23.222147Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-19T08:45:23.222158Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-19T08:45:23.222775Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-19T08:45:23.222883Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 4
+[2m2026-04-19T08:45:23.222895Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 4
+[2m2026-04-19T08:45:23.222906Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-19T08:45:23.231206Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-19T08:45:23.231213Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-19T08:45:23.236022Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m74466 [3mdata_end[0m[2m=[0m69747
+[2m2026-04-19T08:45:23.240058Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rebuild_indexes: ti_offset=69719 ti_length=28 computed_footer=74466 current_footer=74466 (before setting)
+[2m2026-04-19T08:45:23.240066Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m74466 [3mdata_end[0m[2m=[0m69719
+[2m2026-04-19T08:45:23.244215Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m ✓ Doctor lex index rebuild succeeded: 1 docs from 1 frames (0 text-indexable)
+[2m2026-04-19T08:45:23.244237Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m74522 [3mdata_end[0m[2m=[0m69719
+[2m2026-04-19T08:45:23.567295Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmpRDMjZn/meta.json" was modified

@@ -281,19 +281,7 @@ def _autonomy_status() -> AutonomySubsystemStatus:
     try:
         supervisor = get_supervisor()
         status = supervisor.status()
-        return AutonomySubsystemStatus(
-            enabled=status.enabled,
-            running=status.running,
-            active_agents=status.active_agents,
-            active_runs=status.active_runs,
-            pending_triggers=status.pending_triggers,
-            loop_running=status.loop_running,
-            kill_switch_active=status.kill_switch_active,
-            kill_switch_reason=status.kill_switch_reason,
-            kill_switch_set_at=status.kill_switch_set_at,
-            last_tick_at=status.last_tick_at,
-            last_error=status.last_error,
-        )
+        return AutonomySubsystemStatus(**status.model_dump(mode="json"))
     except Exception as exc:  # pragma: no cover - defensive
         return AutonomySubsystemStatus(
             enabled=False,

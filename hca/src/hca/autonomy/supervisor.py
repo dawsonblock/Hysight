@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from hca.autonomy import storage
 from hca.autonomy.checkpoint import (
@@ -69,11 +69,17 @@ class SupervisorStatus(BaseModel):
     active_agents: int
     active_runs: int
     pending_triggers: int
+    pending_escalations: int = 0
     kill_switch_active: bool = False
     kill_switch_reason: Optional[str] = None
     kill_switch_set_at: Optional[datetime] = None
     last_tick_at: Optional[datetime] = None
     last_error: Optional[str] = None
+    last_evaluator_decision: Optional[str] = None
+    dedupe_keys_tracked: int = 0
+    recent_runs: List[Dict[str, Any]] = Field(default_factory=list)
+    budget_ledgers: List[Dict[str, Any]] = Field(default_factory=list)
+    last_checkpoint: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -196,24 +202,56 @@ class AutonomySupervisor:
     def status(self) -> SupervisorStatus:
         with self._lock:
             agents = storage.list_agents()
+            checkpoints = storage.list_checkpoints()
+            active_checkpoint_runs = storage.list_active_autonomy_runs()
             active_agents = sum(
                 1 for agent in agents if agent.status == AgentStatus.active
             )
-            active_runs = len(storage.list_active_autonomy_runs())
             pending = len(storage.list_inbox_items(status=InboxStatus.pending))
+            pending_escalations = sum(
+                1
+                for checkpoint in checkpoints
+                if checkpoint.status == CheckpointStatus.awaiting_approval
+            )
             kill_switch = storage.load_kill_switch()
+            latest_checkpoint = checkpoints[0] if checkpoints else None
             return SupervisorStatus(
                 enabled=self._enabled,
                 running=self._running,
                 loop_running=self.loop_running,
                 active_agents=active_agents,
-                active_runs=active_runs,
+                active_runs=len(active_checkpoint_runs),
                 pending_triggers=pending,
+                pending_escalations=pending_escalations,
                 kill_switch_active=kill_switch.active,
                 kill_switch_reason=kill_switch.reason,
                 kill_switch_set_at=kill_switch.set_at,
                 last_tick_at=self._last_tick_at,
                 last_error=self._last_error,
+                last_evaluator_decision=(
+                    latest_checkpoint.last_decision
+                    if latest_checkpoint is not None
+                    else None
+                ),
+                dedupe_keys_tracked=storage.count_dedupe_records(),
+                recent_runs=[
+                    {
+                        "agent_id": checkpoint.agent_id,
+                        "trigger_id": checkpoint.trigger_id,
+                        "run_id": checkpoint.run_id or "",
+                    }
+                    for checkpoint in active_checkpoint_runs[:5]
+                    if checkpoint.run_id
+                ],
+                budget_ledgers=[
+                    ledger.model_dump(mode="json")
+                    for ledger in storage.list_budget_ledgers()[:5]
+                ],
+                last_checkpoint=(
+                    latest_checkpoint.model_dump(mode="json")
+                    if latest_checkpoint is not None
+                    else None
+                ),
             )
 
     # ------------------------------------------------------------------
@@ -557,6 +595,32 @@ class AutonomySupervisor:
         else:
             new_status = CheckpointStatus.observing
 
+        snapshot = dict(existing.budget_snapshot or {})
+        observed_steps = sum(
+            1
+            for event in events
+            if event.get("event_type") == EventType.execution_started.value
+        )
+        observed_retries = sum(
+            1
+            for event in events
+            if event.get("event_type")
+            == EventType.autonomy_retry_scheduled.value
+        )
+        previous_steps = int(snapshot.get("steps_in_current_run", 0) or 0)
+        previous_retries = int(snapshot.get("retries_for_current_step", 0) or 0)
+        steps_delta = max(0, observed_steps - previous_steps)
+        retries_delta = max(0, observed_retries - previous_retries)
+
+        ledger_changed = False
+        if steps_delta or retries_delta:
+            ledger = storage.update_budget_ledger(
+                context.autonomy_agent_id,
+                steps_delta=steps_delta,
+                retries_delta=retries_delta,
+            )
+            ledger_changed = True
+
         # Durable ledger update on terminal transitions.
         if new_status in (
             CheckpointStatus.completed,
@@ -567,11 +631,27 @@ class AutonomySupervisor:
             CheckpointStatus.failed,
             CheckpointStatus.stopped,
         ):
-            storage.update_budget_ledger(
+            ledger = storage.update_budget_ledger(
                 context.autonomy_agent_id,
                 active_runs_delta=-1,
                 run_completed=True,
                 budget_breach=report.decision == EvaluatorDecision.stop_budget,
+            )
+            ledger_changed = True
+
+        if ledger_changed:
+            append_event(
+                context,
+                EventType.autonomy_budget_updated,
+                "autonomy",
+                {
+                    "launched_runs_total": ledger.launched_runs_total,
+                    "active_runs": ledger.active_runs,
+                    "total_steps_observed": ledger.total_steps_observed,
+                    "total_retries_used": ledger.total_retries_used,
+                    "steps_delta": steps_delta,
+                    "retries_delta": retries_delta,
+                },
             )
 
         resume_allowed = (
@@ -582,6 +662,19 @@ class AutonomySupervisor:
                 EvaluatorDecision.stop_killed,
             )
             and report.safe_to_continue
+        )
+
+        updated_budget_snapshot = dict(snapshot)
+        updated_budget_snapshot["runs_launched"] = max(
+            int(updated_budget_snapshot.get("runs_launched", 0) or 0),
+            ledger.launched_runs_total,
+        )
+        updated_budget_snapshot["parallel_runs"] = max(0, ledger.active_runs)
+        updated_budget_snapshot["steps_in_current_run"] = max(
+            previous_steps, observed_steps
+        )
+        updated_budget_snapshot["retries_for_current_step"] = max(
+            previous_retries, observed_retries
         )
 
         updated = AutonomyCheckpoint(
@@ -600,7 +693,7 @@ class AutonomySupervisor:
             kill_switch_observed=kill_switch.active,
             idempotency=report.idempotency,
             dedupe_key=existing.dedupe_key,
-            budget_snapshot=existing.budget_snapshot,
+            budget_snapshot=updated_budget_snapshot,
         )
         storage.save_checkpoint(updated)
 

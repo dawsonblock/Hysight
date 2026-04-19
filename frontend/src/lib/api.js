@@ -100,6 +100,62 @@ const llmSubsystemSchema = z.object({
   detail: z.string(),
 }).passthrough();
 
+const autonomyRunLinkSchema = z.object({
+  agent_id: z.string(),
+  trigger_id: z.string(),
+  run_id: z.string(),
+}).passthrough();
+
+const autonomyBudgetLedgerSchema = z.object({
+  agent_id: z.string(),
+  launched_runs_total: z.number().int().nonnegative().optional(),
+  active_runs: z.number().int().nonnegative().optional(),
+  total_steps_observed: z.number().int().nonnegative().optional(),
+  total_retries_used: z.number().int().nonnegative().optional(),
+  last_run_started_at: z.string().nullish(),
+  last_run_completed_at: z.string().nullish(),
+  last_budget_breach_at: z.string().nullish(),
+  updated_at: z.string().nullish(),
+}).passthrough();
+
+const autonomyCheckpointSchema = z.object({
+  agent_id: z.string(),
+  trigger_id: z.string(),
+  run_id: z.string().nullable().optional(),
+  status: z.string(),
+  attempt: z.number().int().nonnegative(),
+  last_event_id: z.string().nullable().optional(),
+  last_state: z.string().nullable().optional(),
+  last_decision: z.string().nullable().optional(),
+  resume_allowed: z.boolean().optional(),
+  safe_to_continue: z.boolean().optional(),
+  kill_switch_observed: z.boolean().optional(),
+  idempotency: z.string().nullable().optional(),
+  dedupe_key: z.string().nullable().optional(),
+  checkpointed_at: z.string(),
+  budget_snapshot: z.record(z.unknown()).optional(),
+}).passthrough();
+
+const autonomySubsystemSchema = z.object({
+  enabled: z.boolean(),
+  running: z.boolean(),
+  active_agents: z.number().int().nonnegative(),
+  active_runs: z.number().int().nonnegative(),
+  pending_triggers: z.number().int().nonnegative(),
+  pending_escalations: z.number().int().nonnegative().optional(),
+  loop_running: z.boolean().optional(),
+  kill_switch_active: z.boolean().optional(),
+  kill_switch_reason: z.string().nullable().optional(),
+  kill_switch_set_at: z.string().nullable().optional(),
+  last_tick_at: z.string().nullable().optional(),
+  last_error: z.string().nullable().optional(),
+  last_evaluator_decision: z.string().nullable().optional(),
+  dedupe_keys_tracked: z.number().int().nonnegative().optional(),
+  recent_runs: z.array(autonomyRunLinkSchema).optional(),
+  budget_ledgers: z.array(autonomyBudgetLedgerSchema).optional(),
+  last_checkpoint: autonomyCheckpointSchema.nullish(),
+}).passthrough();
+
 const subsystemsResponseSchema = z.object({
   status: z.string(),
   consistency_check_passed: z.boolean(),
@@ -109,6 +165,7 @@ const subsystemsResponseSchema = z.object({
   memory: memorySubsystemSchema,
   storage: storageSubsystemSchema,
   llm: llmSubsystemSchema,
+  autonomy: autonomySubsystemSchema.optional(),
 }).passthrough();
 
 const runSummarySchema = z.object({

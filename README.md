@@ -126,8 +126,10 @@ Current baseline expectations:
 | Step | Expected passing tests |
 | --- | --- |
 | HCA pipeline | 7 |
-| Backend baseline | 96 |
+| Backend baseline | 98 |
 | Contract conformance | 18 |
+| Overall baseline | 123 |
+| Autonomy optional | 50 |
 
 Supported proof tiers:
 
@@ -188,6 +190,7 @@ Notes:
 - `MEMORY_BACKEND=python` is the default.
 - `MEMORY_SERVICE_URL` must be unset in python mode.
 - If `MONGO_URL` and `DB_NAME` are both unset, the backend still serves the HCA and memory routes; Mongo-backed `/api/status` persistence remains disabled.
+- `GET /api/subsystems` now also surfaces the bounded autonomy control plane: kill switch state, pending escalations, recent active runs, per-agent budget ledgers, last evaluator decision, and the latest checkpoint summary.
 
 ### 2. Frontend plus backend
 
@@ -280,7 +283,11 @@ The frontend and the operator workflows use the same replay-backed backend surfa
 | Method | Path | What it does |
 | --- | --- | --- |
 | `GET` | `/api/` | Backend root health message |
-| `GET` | `/api/subsystems` | Database, memory, storage, and LLM readiness |
+| `GET` | `/api/subsystems` | Database, memory, storage, LLM, and bounded autonomy readiness |
+| `GET` | `/api/hca/autonomy/status` | Kill switch state, pending escalations, budget ledgers, recent runs, and latest checkpoint summary |
+| `GET` | `/api/hca/autonomy/budgets` | Per-agent durable autonomy budget ledgers |
+| `GET` | `/api/hca/autonomy/escalations` | Pending approval/escalation checkpoints |
+| `GET` | `/api/hca/autonomy/runs` | Active autonomous run links on the shared HCA run spine |
 | `POST` | `/api/status` | Persist a status check when Mongo is configured |
 | `GET` | `/api/status` | List persisted status checks when Mongo is configured |
 | `POST` | `/api/hca/run` | Create and execute a run |

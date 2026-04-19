@@ -1012,17 +1012,62 @@
   },
   "SUBSYSTEMS_FIXTURE": {
     "autonomy": {
-      "active_agents": 0,
-      "active_runs": 0,
+      "active_agents": 1,
+      "active_runs": 1,
+      "budget_ledgers": [
+        {
+          "active_runs": 1,
+          "agent_id": "agent-1",
+          "last_budget_breach_at": null,
+          "last_run_completed_at": null,
+          "last_run_started_at": "2026-04-19T07:58:00Z",
+          "launched_runs_total": 4,
+          "total_retries_used": 1,
+          "total_steps_observed": 6,
+          "updated_at": "2026-04-19T08:00:00Z"
+        }
+      ],
+      "dedupe_keys_tracked": 4,
       "enabled": true,
       "kill_switch_active": false,
       "kill_switch_reason": null,
       "kill_switch_set_at": null,
+      "last_checkpoint": {
+        "agent_id": "agent-1",
+        "attempt": 1,
+        "budget_snapshot": {
+          "parallel_runs": 1,
+          "retries_for_current_step": 1,
+          "runs_launched": 4,
+          "steps_in_current_run": 2
+        },
+        "checkpointed_at": "2026-04-19T08:00:00Z",
+        "dedupe_key": "inbox:item-1",
+        "idempotency": "unknown",
+        "kill_switch_observed": false,
+        "last_decision": "escalate",
+        "last_event_id": "event-1",
+        "last_state": "awaiting_approval",
+        "resume_allowed": false,
+        "run_id": "run-autonomy-1",
+        "safe_to_continue": false,
+        "status": "awaiting_approval",
+        "trigger_id": "trigger-1"
+      },
       "last_error": null,
-      "last_tick_at": null,
-      "loop_running": false,
-      "pending_triggers": 0,
-      "running": false
+      "last_evaluator_decision": "escalate",
+      "last_tick_at": "2026-04-19T08:00:00Z",
+      "loop_running": true,
+      "pending_escalations": 1,
+      "pending_triggers": 2,
+      "recent_runs": [
+        {
+          "agent_id": "agent-1",
+          "run_id": "run-autonomy-1",
+          "trigger_id": "trigger-1"
+        }
+      ],
+      "running": true
     },
     "consistency_check_passed": true,
     "database": {

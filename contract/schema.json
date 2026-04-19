@@ -402,12 +402,77 @@
         "active_agents": { "type": "integer" },
         "active_runs": { "type": "integer" },
         "pending_triggers": { "type": "integer" },
+        "pending_escalations": { "type": "integer" },
         "loop_running": { "type": "boolean" },
         "kill_switch_active": { "type": "boolean" },
         "kill_switch_reason": { "type": ["string", "null"] },
         "kill_switch_set_at": { "type": ["string", "null"], "format": "date-time" },
         "last_tick_at": { "type": ["string", "null"], "format": "date-time" },
-        "last_error": { "type": ["string", "null"] }
+        "last_error": { "type": ["string", "null"] },
+        "last_evaluator_decision": { "type": ["string", "null"] },
+        "dedupe_keys_tracked": { "type": "integer" },
+        "recent_runs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/AutonomyRunLinkSummary" }
+        },
+        "budget_ledgers": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/AutonomyBudgetLedgerSummary" }
+        },
+        "last_checkpoint": {
+          "anyOf": [
+            { "$ref": "#/definitions/AutonomyCheckpointSummary" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "AutonomyRunLinkSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "trigger_id", "run_id"],
+      "properties": {
+        "agent_id": { "type": "string" },
+        "trigger_id": { "type": "string" },
+        "run_id": { "type": "string" }
+      }
+    },
+    "AutonomyBudgetLedgerSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "launched_runs_total", "active_runs", "total_steps_observed", "total_retries_used"],
+      "properties": {
+        "agent_id": { "type": "string" },
+        "launched_runs_total": { "type": "integer" },
+        "active_runs": { "type": "integer" },
+        "total_steps_observed": { "type": "integer" },
+        "total_retries_used": { "type": "integer" },
+        "last_run_started_at": { "type": ["string", "null"], "format": "date-time" },
+        "last_run_completed_at": { "type": ["string", "null"], "format": "date-time" },
+        "last_budget_breach_at": { "type": ["string", "null"], "format": "date-time" },
+        "updated_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "AutonomyCheckpointSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "trigger_id", "status", "attempt", "resume_allowed", "checkpointed_at"],
+      "properties": {
+        "agent_id": { "type": "string" },
+        "trigger_id": { "type": "string" },
+        "run_id": { "type": ["string", "null"] },
+        "status": { "type": "string" },
+        "attempt": { "type": "integer" },
+        "last_event_id": { "type": ["string", "null"] },
+        "last_state": { "type": ["string", "null"] },
+        "last_decision": { "type": ["string", "null"] },
+        "resume_allowed": { "type": "boolean" },
+        "safe_to_continue": { "type": "boolean" },
+        "kill_switch_observed": { "type": "boolean" },
+        "idempotency": { "type": ["string", "null"] },
+        "dedupe_key": { "type": ["string", "null"] },
+        "checkpointed_at": { "type": "string", "format": "date-time" },
+        "budget_snapshot": { "type": "object" }
       }
     },
     "HCARunRequest": {

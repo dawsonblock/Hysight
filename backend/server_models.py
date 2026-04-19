@@ -73,12 +73,18 @@ class AutonomySubsystemStatus(BackendModel):
     active_agents: int
     active_runs: int
     pending_triggers: int
+    pending_escalations: int = 0
     loop_running: bool = False
     kill_switch_active: bool = False
     kill_switch_reason: Optional[str] = None
     kill_switch_set_at: Optional[datetime] = None
     last_tick_at: Optional[datetime] = None
     last_error: Optional[str] = None
+    last_evaluator_decision: Optional[str] = None
+    dedupe_keys_tracked: int = 0
+    recent_runs: List["AutonomyRunLinkResponse"] = Field(default_factory=list)
+    budget_ledgers: List["AutonomyBudgetLedgerResponse"] = Field(default_factory=list)
+    last_checkpoint: Optional["AutonomyCheckpointResponse"] = None
 
 
 class AutonomyBudgetModel(BackendModel):
@@ -179,6 +185,10 @@ class AutonomyCheckpointResponse(BackendModel):
     last_state: Optional[str] = None
     last_decision: Optional[str] = None
     resume_allowed: bool
+    safe_to_continue: bool = True
+    kill_switch_observed: bool = False
+    idempotency: Optional[str] = None
+    dedupe_key: Optional[str] = None
     checkpointed_at: datetime
     budget_snapshot: Dict[str, Any] = Field(default_factory=dict)
 
@@ -203,12 +213,18 @@ class AutonomyStatusResponse(BackendModel):
     active_agents: int
     active_runs: int
     pending_triggers: int
+    pending_escalations: int = 0
     loop_running: bool = False
     kill_switch_active: bool = False
     kill_switch_reason: Optional[str] = None
     kill_switch_set_at: Optional[datetime] = None
     last_tick_at: Optional[datetime] = None
     last_error: Optional[str] = None
+    last_evaluator_decision: Optional[str] = None
+    dedupe_keys_tracked: int = 0
+    recent_runs: List["AutonomyRunLinkResponse"] = Field(default_factory=list)
+    budget_ledgers: List["AutonomyBudgetLedgerResponse"] = Field(default_factory=list)
+    last_checkpoint: Optional["AutonomyCheckpointResponse"] = None
 
 
 class AutonomyControlResponse(BackendModel):
@@ -260,4 +276,6 @@ class AutonomyEscalationListResponse(BackendModel):
     escalations: List[AutonomyEscalationResponse] = Field(default_factory=list)
 
 
+AutonomyStatusResponse.model_rebuild()
+AutonomySubsystemStatus.model_rebuild()
 SubsystemsResponse.model_rebuild()

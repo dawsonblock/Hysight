@@ -8,8 +8,12 @@ than coupling them to the default local proof surface.
 
 - `GET /api/subsystems` is the release-facing operator health endpoint.
 - The endpoint is always available, even when optional integrations are not.
-- Subsystem reporting is split by `database`, `memory`, `storage`, and `llm`,
-  each with status detail for degraded-mode diagnosis.
+- Subsystem reporting is split by `database`, `memory`, `storage`, `llm`,
+  and the bounded `autonomy` control plane for degraded-mode diagnosis.
+- The autonomy surface now exposes kill-switch state, pending escalations,
+  recent active run links, per-agent budget ledgers, the last evaluator
+  decision, and the latest checkpoint summary without creating a second
+  execution authority.
 - `POST /api/status` and `GET /api/status` remain optional and intentionally
   return `503` when Mongo-backed persistence is not configured.
 
@@ -68,6 +72,8 @@ Current enforced baseline contract in the runner:
 - HCA pipeline proof: `7 passed`
 - Backend baseline proof: `98 passed, 1 deselected`
 - Contract conformance proof: `18 passed`
+- Overall baseline proof: `123 passed, 0 skipped`
+- Autonomy optional proof: `50 passed, 0 skipped`
 
 - Optional frontend proof:
 
@@ -96,7 +102,7 @@ MEMORY_SERVICE_PORT=3032 make proof-sidecar
 make proof-mongo-live
 ```
 
-- Verified optional proof refresh commands on 2026-04-17:
+- Verified optional proof refresh commands on 2026-04-19:
 
 ```bash
 make test-backend-integration

@@ -81,6 +81,9 @@ def test_max_steps_per_run_triggers_budget_exceeded(env):
     assert checkpoint is not None
     assert checkpoint.status == CheckpointStatus.stopped
 
+    ledger = autonomy_storage.get_budget_ledger(link["agent_id"])
+    assert ledger.total_steps_observed >= 2
+
 
 def test_max_retries_per_step_triggers_budget_exceeded(env):
     policy = AutonomyPolicy(budget=AutonomyBudget(max_retries_per_step=0))
@@ -103,6 +106,9 @@ def test_max_retries_per_step_triggers_budget_exceeded(env):
     types = _event_types_for_run(run_id)
     assert EventType.autonomy_budget_exceeded.value in types
     assert EventType.autonomy_stopped.value in types
+
+    ledger = autonomy_storage.get_budget_ledger(link["agent_id"])
+    assert ledger.total_retries_used >= 2
 
 
 def test_deadman_timeout_triggers_stop_deadman(env):
@@ -128,3 +134,4 @@ def test_deadman_timeout_triggers_stop_deadman(env):
     )
     assert checkpoint is not None
     assert checkpoint.status == CheckpointStatus.stopped
+

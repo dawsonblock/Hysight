@@ -1358,6 +1358,27 @@ function SubsystemStatusStrip({ subsystems, loading, error }) {
   ]
     .filter(Boolean)
     .join(" • ");
+  const autonomy = subsystems.autonomy || null;
+  const formatControlPlaneLabel = (value, fallback = "None") => {
+    if (!value) {
+      return fallback;
+    }
+    const label = formatSnakeLabel(value);
+    return label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+  };
+  const lastCheckpointStatus = formatControlPlaneLabel(
+    autonomy?.last_checkpoint?.status
+  );
+  const lastDecision = autonomy?.last_evaluator_decision
+    ? formatControlPlaneLabel(autonomy.last_evaluator_decision)
+    : formatControlPlaneLabel(autonomy?.last_checkpoint?.last_decision);
+  const autonomyTone = autonomy?.kill_switch_active
+    ? "danger"
+    : (autonomy?.pending_escalations || 0) > 0
+      ? "attention"
+      : autonomy?.running
+        ? "success"
+        : "default";
 
   return (
     <section style={S.section}>
@@ -1409,6 +1430,74 @@ function SubsystemStatusStrip({ subsystems, loading, error }) {
           },
         ]}
       />
+
+      {autonomy ? (
+        <section style={{ ...S.section, marginTop: 12, padding: 0, border: "none" }}>
+          <div style={S.panelHeaderRow}>
+            <div style={S.sectionLabel}>Autonomy control plane</div>
+            <div style={S.sectionCount}>{lastCheckpointStatus}</div>
+          </div>
+          <MetricStrip
+            compact
+            items={[
+              {
+                label: "Kill switch",
+                value: autonomy.kill_switch_active ? "Active" : "Clear",
+                hint:
+                  autonomy.kill_switch_reason ||
+                  (autonomy.kill_switch_active
+                    ? "new and continued autonomy are blocked"
+                    : "bounded autonomy may run within policy"),
+                tone: autonomy.kill_switch_active ? "danger" : "success",
+              },
+              {
+                label: "Pending escalations",
+                value: String(autonomy.pending_escalations || 0),
+                hint:
+                  (autonomy.pending_escalations || 0) > 0
+                    ? "operator approval is currently required"
+                    : "no approval backlog",
+                tone:
+                  (autonomy.pending_escalations || 0) > 0
+                    ? "attention"
+                    : "default",
+              },
+              {
+                label: "Active autonomous runs",
+                value: String(autonomy.active_runs || 0),
+                hint: `${autonomy.pending_triggers || 0} pending triggers • ${autonomy.dedupe_keys_tracked || 0} dedupe keys tracked`,
+                tone: autonomyTone,
+              },
+              {
+                label: "Last decision",
+                value: lastDecision,
+                hint: autonomy.loop_running
+                  ? "supervisor loop running"
+                  : "supervisor loop idle",
+                tone: autonomyTone,
+              },
+              {
+                label: "Checkpoint",
+                value: lastCheckpointStatus,
+                hint:
+                  autonomy.last_checkpoint?.last_state
+                    ? `last state ${formatSnakeLabel(autonomy.last_checkpoint.last_state)}`
+                    : "no checkpoint recorded",
+                tone: autonomyTone,
+              },
+              {
+                label: "Budget ledgers",
+                value: String(autonomy.budget_ledgers?.length || 0),
+                hint:
+                  autonomy.budget_ledgers?.length > 0
+                    ? `${autonomy.budget_ledgers[0].total_steps_observed || 0} observed steps • ${autonomy.budget_ledgers[0].total_retries_used || 0} retries`
+                    : "no budget usage recorded yet",
+                tone: "default",
+              },
+            ]}
+          />
+        </section>
+      ) : null}
     </section>
   );
 }

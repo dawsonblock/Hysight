@@ -111,9 +111,16 @@ def _checkpoint_to_response(c: AutonomyCheckpoint) -> AutonomyCheckpointResponse
         last_state=c.last_state,
         last_decision=c.last_decision,
         resume_allowed=c.resume_allowed,
+        safe_to_continue=c.safe_to_continue,
+        kill_switch_observed=c.kill_switch_observed,
+        dedupe_key=c.dedupe_key,
         checkpointed_at=c.checkpointed_at,
         budget_snapshot=dict(c.budget_snapshot),
     )
+
+
+def _status_to_response(status) -> AutonomyStatusResponse:
+    return AutonomyStatusResponse(**status.model_dump(mode="json"))
 
 
 def register_autonomy_routes(router: APIRouter) -> None:
@@ -123,19 +130,7 @@ def register_autonomy_routes(router: APIRouter) -> None:
     async def autonomy_status():
         supervisor = get_supervisor()
         status = await asyncio.to_thread(supervisor.status)
-        return AutonomyStatusResponse(
-            enabled=status.enabled,
-            running=status.running,
-            active_agents=status.active_agents,
-            active_runs=status.active_runs,
-            pending_triggers=status.pending_triggers,
-            loop_running=status.loop_running,
-            kill_switch_active=status.kill_switch_active,
-            kill_switch_reason=status.kill_switch_reason,
-            kill_switch_set_at=status.kill_switch_set_at,
-            last_tick_at=status.last_tick_at,
-            last_error=status.last_error,
-        )
+        return _status_to_response(status)
 
     @router.post(
         "/hca/autonomy/kill", response_model=AutonomyKillSwitchResponse
@@ -489,12 +484,4 @@ def register_autonomy_routes(router: APIRouter) -> None:
             return supervisor.status()
 
         status = await asyncio.to_thread(_run_tick)
-        return AutonomyStatusResponse(
-            enabled=status.enabled,
-            running=status.running,
-            active_agents=status.active_agents,
-            active_runs=status.active_runs,
-            pending_triggers=status.pending_triggers,
-            last_tick_at=status.last_tick_at,
-            last_error=status.last_error,
-        )
+        return _status_to_response(status)
