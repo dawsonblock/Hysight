@@ -3,7 +3,7 @@
 **Release tag:** hysight-36
 **Commit:** `78b5affefe6780694e69512e14e75038fda68dee`
 **Repo fingerprint:** `49ea69aec5af3ff97aa93e07031d5bd5ae2350da`
-**Sealed at:** 2026-04-20T22:46:24Z
+**Sealed at:** 2026-04-20T22:50:28Z
 **Classification:** **sealed local-core release**
 
 ---
@@ -25,8 +25,8 @@ Frontend: **UNPROVEN** — Node 20.x unavailable at seal time.
 
 | Receipt | Commit | Timestamp |
 |---------|--------|-----------|
-| `baseline.json` | `78b5affefe` | 2026-04-20T22:46:18Z |
-| `autonomy-optional.json` | `78b5affefe` | 2026-04-20T22:46:24Z |
+| `baseline.json` | `78b5affefe` | 2026-04-20T22:54:19Z |
+| `autonomy-optional.json` | `78b5affefe` | 2026-04-20T22:50:28Z |
 | `live-sidecar.json` | `78b5affefe` | 2026-04-20T22:42:08Z |
 
 ---

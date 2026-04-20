@@ -3,7 +3,7 @@
 **Release tag:** hysight-36
 **Commit:** `78b5affefe6780694e69512e14e75038fda68dee`
 **Repo fingerprint:** `49ea69aec5af3ff97aa93e07031d5bd5ae2350da`
-**Sealed at:** 2026-04-20T22:46:24Z
+**Sealed at:** 2026-04-20T22:50:28Z
 **Platform:** macOS 26.2, arm64 (Apple M2 Pro), Python 3.9.7
 **Classification:** **sealed local-core release**
 
@@ -49,8 +49,8 @@ Note: `style_profile.py` explicitly limits itself to controllable work-style bia
 
 | Receipt file | Commit | Timestamp | Passed |
 |-------------|--------|-----------|--------|
-| `artifacts/proof/baseline.json` | `78b5affefe` | 2026-04-20T22:46:18Z | 123 |
-| `artifacts/proof/autonomy-optional.json` | `78b5affefe` | 2026-04-20T22:46:24Z | 61 |
+| `artifacts/proof/baseline.json` | `78b5affefe` | 2026-04-20T22:54:19Z | 123 |
+| `artifacts/proof/autonomy-optional.json` | `78b5affefe` | 2026-04-20T22:50:28Z | 61 |
 | `artifacts/proof/live-sidecar.json` | `78b5affefe` | 2026-04-20T22:42:08Z | 13 |
 
 All receipts regenerated fresh from commit `78b5affefe` during the hysight-36 sealing run.

@@ -2,7 +2,7 @@
 
 **Release tag:** hysight-36
 **Commit:** `78b5affefe6780694e69512e14e75038fda68dee`
-**Sealed at:** 2026-04-20T22:46:24Z
+**Sealed at:** 2026-04-20T22:50:28Z
 
 ---
 
@@ -15,7 +15,7 @@
 | Outcome | ✅ PASS |
 | Receipt | `artifacts/proof/autonomy-optional.json` |
 | Commit | `78b5affefe6780694e69512e14e75038fda68dee` |
-| Timestamp | 2026-04-20T22:46:24Z |
+| Timestamp | 2026-04-20T22:50:28Z |
 
 The autonomy suite exercises the bounded operator-style control layer (`hca/src/hca/autonomy/`), including `style_profile.py`, `attention_controller.py`, and `supervisor.py`. Per the module's own docstring, these profiles describe controllable work-style biases (prioritization, memory emphasis, re-anchoring) and explicitly are not medical or diagnostic behavior models.
 
