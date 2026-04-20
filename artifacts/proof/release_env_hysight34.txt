@@ -1,0 +1,39 @@
+HYSIGHT RELEASE-34 MACHINE ENVIRONMENT RECORD
+==============================================
+Generated: 2026-04-20T20:05:31Z
+
+--- OS ---
+Darwin Mac.gateway.sasktel.net 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:07:05 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6020 arm64
+ProductName:  macOS
+ProductVersion: 26.2
+BuildVersion: 25C56
+
+--- Architecture ---
+arm64 (Apple Silicon)
+
+--- Python ---
+Python 3.9.7
+
+--- Rust ---
+rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo 1.94.0 (85eff7c80 2026-01-15)
+
+--- Node ---
+v25.9.0
+
+--- Yarn ---
+1.22.22
+
+--- Repo ---
+Absolute path: /Users/dawsonblock/Hysight
+HEAD commit:   5d68ab48030e67571015c60316683dc9a772a0d4
+Commit msg:    Implement bounded autonomy attention controls
+Commit date:   2026-04-19 17:28:11 -0600
+Branch:        main
+Remote origin: https://github.com/dawsonblock/Hysight.git
+
+--- Repo Fingerprint (tracked files, excluding .git/.venv/__pycache__/target/node_modules) ---
+9a3fcd167765afdd38072291d66cc27ee6f4b047
+
+--- Release Seal Timestamp ---
+2026-04-20T20:05:31Z

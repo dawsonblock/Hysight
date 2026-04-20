@@ -1,0 +1,5 @@
+..........ss.......                                                      [100%]
+=========================== short test summary info ============================
+SKIPPED [1] backend/tests/test_memvid_sidecar.py:452: requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3033, and supervisorctl in PATH
+SKIPPED [1] backend/tests/test_memvid_sidecar.py:466: requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3033, and supervisorctl in PATH
+17 passed, 2 skipped in 5.84s

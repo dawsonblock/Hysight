@@ -1,0 +1,36 @@
+SIDECAR NO-FALLBACK PROOF — HYSIGHT-MAIN 34
+==========================================
+Timestamp  : 2026-04-20T20:05:31Z
+Commit     : 5d68ab48030e67571015c60316683dc9a772a0d4
+Revision   : hysight-main 34
+
+TEST
+----
+File   : backend/tests/test_memvid_sidecar_parity.py
+Name   : test_rust_backend_routes_fail_explicitly_and_recover_after_sidecar_restart
+Result : PASSED
+
+WHAT THE TEST PROVES
+---------------------
+With MEMORY_BACKEND=rust and a live sidecar marked as the active memory authority:
+1. The sidecar is stopped mid-session.
+2. All subsequent memory-route requests return HTTP 503.
+3. The 503 detail contains: "Rust memory sidecar is configured as the active memory authority"
+4. No silent fallback to Python-local memory occurs.
+5. When the sidecar is restarted and health confirmed, requests recover successfully.
+
+SIDECAR CONFIGURATION FOR PROOF RUN
+-------------------------------------
+Port     : 3033
+Data dir : /tmp/hysight-sidecar-proof34
+PID      : 66661 (killed and confirmed down after test)
+
+FULL RUN SUMMARY
+-----------------
+Files run : test_memvid_sidecar.py + test_memvid_sidecar_parity.py
+Passed    : 17
+Skipped   : 2  (supervisorctl-dependent tests — supervisorctl not in PATH, expected skip)
+Failed    : 0
+exit      : 0
+
+OUTCOME: NO SILENT FALLBACK CONFIRMED

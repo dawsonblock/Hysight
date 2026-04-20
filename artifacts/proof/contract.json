@@ -1,10 +1,10 @@
 {
-  "command": "/private/tmp/hysight32-release-seal/.venv/bin/python scripts/run_tests.py --baseline-step contract",
-  "commit_sha": "local-worktree",
-  "environment_mode": "repo_local_venv",
+  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --baseline-step contract",
+  "commit_sha": "5d68ab48030e67571015c60316683dc9a772a0d4",
+  "environment_mode": "cargo_local_sidecar",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-19T22:49:23.833544+00:00",
+  "generated_at": "2026-04-20T20:08:04.730455+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -53,9 +53,9 @@
   "proof_tier": "contract",
   "python_version": "3.9.7",
   "schema_version": 2,
-  "service_connection_mode": "none",
+  "service_connection_mode": "cargo-run:memvid_service",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-19T22:49:23.833544+00:00",
+  "timestamp": "2026-04-20T20:08:04.730455+00:00",
   "total_test_count": 18
 }

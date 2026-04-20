@@ -73,11 +73,24 @@ Current enforced baseline contract in the runner:
 - Backend baseline proof: `98 passed, 1 deselected`
 - Contract conformance proof: `18 passed`
 - Overall baseline proof: `123 passed, 0 skipped`
-- Autonomy optional proof: `50 passed, 0 skipped`
+- Autonomy optional proof: `61 passed, 0 failed`
+
+## Release Seal Status for Hysight-main 34 (2026-04-20)
+
+- Release verdict: `sealed local-core release`
+- Commit: `5d68ab48030e67571015c60316683dc9a772a0d4`
+- Packaging install passed fresh.
+- `make venv` passed fresh.
+- Baseline: 123 passed, 0 failed (7 pipeline + 98 backend-baseline + 18 contract).
+- Autonomy optional: 61 passed, 0 failed.
+- Sidecar optional: 17 passed, 2 skipped (supervisorctl not in PATH — expected), 0 failed. No-fallback confirmed.
+- Frontend: skipped — Node 20.x required, v25.9.0 active; no frontend changes in this revision.
+- Live Mongo not rerun; remains historical only.
+- Historical Hysight 27–32 summary files remain in the tree for audit context only and are not proof for 34.
 
 ## Release Seal Status for Hysight-main 32 (2026-04-19)
 
-- Release verdict: `sealed full-proof release`
+- Release verdict: `sealed full-proof release` (historical)
 - Packaging install passed fresh from a clean copied tree for this exact revision.
 - `make venv` passed fresh from the same clean tree.
 - `.pkg-venv` did not contaminate the supported proof path.

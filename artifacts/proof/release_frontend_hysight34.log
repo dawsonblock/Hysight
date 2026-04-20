@@ -1,0 +1,24 @@
+FRONTEND PROOF — HYSIGHT-MAIN 34
+================================
+Timestamp  : 2026-04-20T20:05:31Z
+Commit     : 5d68ab48030e67571015c60316683dc9a772a0d4
+Revision   : hysight-main 34
+
+OUTCOME: SKIPPED — NODE VERSION MISMATCH
+-----------------------------------------
+Frontend requires Node 20.x (pinned in frontend/.nvmrc).
+Active system Node : v25.9.0
+
+The frontend/scripts/verify-runtime.js pre-install check exits non-zero when
+detected Node is not 20.x. yarn install --frozen-lockfile cannot proceed.
+
+No Node 20.x shim (nvm, fnm, mise) was active on this machine at proof time.
+Frontend proof is therefore untestable on this toolchain.
+
+PRIOR BASELINE
+--------------
+Last fresh frontend proof: artifacts/proof/frontend.json (2026-04-19)
+No regression was introduced in hysight-main 34 — only backend autonomy routes
+and backend tests were changed (commit 5d68ab4). Frontend source is unchanged.
+
+CLASSIFICATION: optional proof step — skipped, not failed.
