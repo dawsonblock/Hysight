@@ -27,6 +27,7 @@ REQUIRED_FILES = [
     "frontend/yarn.lock",
     "scripts/run_tests.py",
     "scripts/run_backend.sh",
+    "scripts/launch_unified.sh",
     "scripts/check_repo_integrity.py",
     "scripts/proof_frontend.py",
     "scripts/proof_receipt.py",

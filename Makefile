@@ -18,6 +18,8 @@
 	test-fixture-drift \
 	run-memvid-sidecar \
 	run \
+	run-unified \
+	run-unified-sidecar \
 	run-sidecar \
 	docker-build \
 	docker-build-sidecar
@@ -96,6 +98,12 @@ run-memvid-sidecar:
 
 run:
 	./scripts/run_backend.sh
+
+run-unified:
+	./scripts/launch_unified.sh
+
+run-unified-sidecar:
+	MEMORY_BACKEND=rust MEMORY_SERVICE_URL="$(MEMORY_SERVICE_URL)" ./scripts/launch_unified.sh
 
 run-sidecar:
 	# MEMORY_SERVICE_URL defaults to http://localhost:$(MEMORY_SERVICE_PORT) when unset
