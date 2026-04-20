@@ -1,0 +1,14 @@
+yarn run v1.22.22
+$ craco test --watchAll=false --passWithNoTests
+PASS src/lib/api.test.js
+PASS src/components/MemoryBrowser.test.js
+PASS src/App.test.js
+PASS src/components/HCAChat.test.js
+PASS src/components/OperatorConsole.test.js
+
+Test Suites: 5 passed, 5 total
+Tests:       19 passed, 19 total
+Snapshots:   0 total
+Time:        2.575 s
+Ran all test suites.
+Done in 3.38s.

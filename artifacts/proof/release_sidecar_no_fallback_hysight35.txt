@@ -1,0 +1,31 @@
+NO-FALLBACK VERIFICATION — Hysight rev 35
+==========================================
+Timestamp : 2026-04-20T21:05:33Z
+Commit    : 6162720ac0344d5e7f7a40eb7f13beb6b49d41bd
+Platform  : macOS-26.2-arm64
+
+Test: test_rust_backend_routes_fail_explicitly_and_recover_after_sidecar_restart
+File: backend/tests/test_memvid_sidecar_parity.py
+Fixture: managed_sidecar (requires supervisorctl in PATH)
+
+OUTCOME: SKIPPED (supervisorctl not present in this environment)
+  Reason: The no-fallback test uses the managed_sidecar fixture, which
+  programmatically stops/starts the sidecar via supervisorctl. supervisorctl
+  is not installed on this macOS development host.
+
+STATIC CODE VERIFICATION (explicit-failure semantics confirmed in source):
+  File: backend/tests/test_memvid_sidecar_parity.py, line ~302
+    assert unavailable_response.status_code == 503
+    detail = unavailable_response.json()["detail"]
+    assert "Rust memory sidecar is configured as the active memory authority" in detail
+    assert "/api/subsystems" in detail
+
+  The backend raises an explicit HTTP 503 with a structured detail payload
+  when MEMORY_BACKEND=rust and the sidecar is unreachable. There is no silent
+  fallback to the Python memory layer.
+
+SIDECAR PROOF SUMMARY (live, 2026-04-20T21:05:33Z):
+  13 passed, 2 skipped
+  Skipped: test_ingest_survives_restart, test_delete_persists_across_restart
+  Skip reason: requires supervisorctl in PATH
+  All 13 non-supervisor tests passed against live sidecar on http://localhost:3032

@@ -1,0 +1,26 @@
+Hysight-main 35 — Release Environment Record
+=============================================
+Sealed      : 2026-04-20T21:02:42Z
+HEAD        : 6162720ac0344d5e7f7a40eb7f13beb6b49d41bd
+Fingerprint : 64784aee68802d4fbb3e4617a416101ad93d02e9
+Repo path   : /Users/dawsonblock/Hysight
+
+OS          : macOS 26.2 (Build 25C56)
+Kernel      : Darwin Mac.gateway.sasktel.net 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:07:05 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6020
+Architecture: arm64 (Apple Silicon)
+
+Python      : Python 3.9.7
+rustc       : rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo       : cargo 1.94.0 (85eff7c80 2026-01-15)
+node        : v25.9.0
+yarn        : 1.22.22
+
+Commands run:
+  uname -a
+  sw_vers
+  python3 --version
+  rustc --version
+  cargo --version
+  node --version
+  yarn --version
+  find . -type f | grep -v '.git/' | sort | shasum | shasum

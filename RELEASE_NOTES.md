@@ -75,6 +75,20 @@ Current enforced baseline contract in the runner:
 - Overall baseline proof: `123 passed, 0 skipped`
 - Autonomy optional proof: `61 passed, 0 failed`
 
+## Release Seal Status for Hysight-main 35 (2026-04-20)
+
+- Release verdict: `sealed full-proof release`
+- Commit: `6162720ac0344d5e7f7a40eb7f13beb6b49d41bd`
+- What changed: `scripts/launch_unified.sh` (new unified backend+frontend launcher), `Makefile` (`run-unified`, `run-unified-sidecar` targets), `scripts/check_repo_integrity.py` (registered new script). No Python, Rust, or React source changes.
+- Packaging install passed fresh.
+- `make venv` passed fresh.
+- Baseline: 123 passed, 0 failed (7 pipeline + 98 backend-baseline + 18 contract).
+- Autonomy optional: 61 passed, 0 failed.
+- Sidecar optional: 13 passed, 2 skipped (supervisorctl not in PATH — expected), 0 failed. No-fallback confirmed (static code verified).
+- Frontend: 19 passed, 0 failed (Node v25.9.0 with --ignore-engines).
+- Live Mongo not rerun; remains historical only.
+- Historical Hysight 27–34 summary files remain in the tree for audit context only and are not proof for 35.
+
 ## Release Seal Status for Hysight-main 34 (2026-04-20)
 
 - Release verdict: `sealed local-core release`

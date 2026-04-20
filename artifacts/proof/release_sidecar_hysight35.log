@@ -1,0 +1,14 @@
+RUN_MEMVID_TESTS=1 MEMORY_BACKEND=rust MEMORY_SERVICE_URL="http://localhost:3032" \
+		/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --sidecar
+Running 1 proof step(s).
+
+==> [Backend live sidecar proof]
+    MEMORY_BACKEND=rust HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/tmp.nimx5WPM36/hysight-proof-8yl3h0pp MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/tmp.nimx5WPM36/hysight-proof-8yl3h0pp/memory RUN_MEMVID_TESTS=1 MEMORY_SERVICE_URL=http://localhost:3032 /Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_memvid_sidecar.py -q --run-live -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/backend-live-sidecar-proof.xml
+..........ss...                                                          [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/backend-live-sidecar-proof.xml -
+=========================== short test summary info ============================
+SKIPPED [1] backend/tests/test_memvid_sidecar.py:452: requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3032, and supervisorctl in PATH
+SKIPPED [1] backend/tests/test_memvid_sidecar.py:466: requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:3032, and supervisorctl in PATH
+13 passed, 2 skipped in 2.97s
+
+All 1 proof step(s) passed (13 passed, 2 skipped).

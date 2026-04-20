@@ -1,10 +1,10 @@
 {
   "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --autonomy",
-  "commit_sha": "5d68ab48030e67571015c60316683dc9a772a0d4",
+  "commit_sha": "6162720ac0344d5e7f7a40eb7f13beb6b49d41bd",
   "environment_mode": "cargo_local_sidecar",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-20T20:17:11.070466+00:00",
+  "generated_at": "2026-04-20T21:11:54.852932+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -56,6 +56,6 @@
   "service_connection_mode": "cargo-run:memvid_service",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-20T20:17:11.070466+00:00",
+  "timestamp": "2026-04-20T21:11:54.852932+00:00",
   "total_test_count": 61
 }
