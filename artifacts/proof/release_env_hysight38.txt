@@ -1,0 +1,34 @@
+=== Hysight-38 Release Environment ===
+Date: 2026-04-20T23:12:38Z
+
+--- OS ---
+Darwin Mac.gateway.sasktel.net 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:07:05 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6020 arm64
+ProductName:		macOS
+ProductVersion:		26.2
+BuildVersion:		25C56
+
+--- Architecture ---
+arm64
+
+--- Python ---
+Python 3.9.7
+Python 3.9.7
+
+--- Rust ---
+rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo 1.94.0 (85eff7c80 2026-01-15)
+
+--- Node / Yarn ---
+v25.9.0
+1.22.22
+
+--- Git commit ---
+commit: 9a1bb3274476c0e7ea7e1af818ede4f235a5a51e
+message: feat: Update proof summaries and test reports for Hysight-36 release
+date: 2026-04-20 16:56:07 -0600
+
+--- Repo path ---
+/Users/dawsonblock/Hysight
+
+--- Repo fingerprint ---
+680f036748f4f78becfda70e7ddb9d1945123704  -

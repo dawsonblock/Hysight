@@ -1,0 +1,3 @@
+Sidecar used port: 3032 (3031 in use)
+13 passed, 2 skipped (supervisorctl not in PATH)
+Result: PROVEN via fallback port 3032

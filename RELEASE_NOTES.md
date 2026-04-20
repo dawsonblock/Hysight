@@ -1,5 +1,18 @@
 # Release Notes
 
+## hysight-38 (2026-04-20)
+
+**Commit:** `9a1bb3274476c0e7ea7e1af818ede4f235a5a51e`
+**Classification:** sealed local-core release
+
+- Baseline: 123/0 — pipeline, backend, contract suites
+- Autonomy: 61/0
+- Live sidecar: 13/0 (2 skipped, supervisorctl)
+- Frontend: UNPROVEN (Node 20.x unavailable on seal host)
+- See `RELEASE_SEAL_HYSIGHT38.md` and `FULL_PROOF_SUMMARY_HYSIGHT38.md` for full proof evidence.
+
+---
+
 This release consolidates the backend authority path, formalizes replay-backed
 operator health visibility, and keeps optional deployment modes explicit rather
 than coupling them to the default local proof surface.

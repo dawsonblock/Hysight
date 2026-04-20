@@ -1,0 +1,33 @@
+=== Phase 1: Baseline ===
+Running 3 proof step(s).
+
+==> [HCA pipeline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-cxd24gkl MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-cxd24gkl/memory /Users/dawsonblock/Hysight/.venv/bin/python -m pytest tests/test_hca_pipeline.py -q -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/hca-pipeline-proof.xml
+.......                                                                  [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/hca-pipeline-proof.xml -
+7 passed in 0.23s
+
+==> [Backend baseline proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-9dam_wi0 MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-9dam_wi0/memory /Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_hca.py backend/tests/test_memory.py backend/tests/test_server_bootstrap.py -q -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/backend-baseline-proof.xml
+........................................................................ [ 73%]
+..........................                                               [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/backend-baseline-proof.xml -
+98 passed, 1 deselected in 4.80s
+
+==> [Contract conformance proof]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-vlon8jl7 MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-vlon8jl7/memory /Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_contract_conformance.py -q -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/contract-conformance-proof.xml
+..................                                                       [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/contract-conformance-proof.xml -
+18 passed in 0.47s
+
+All 3 proof step(s) passed (123 passed, 0 skipped).
+=== Phase 1: Autonomy ===
+Running 1 proof step(s).
+
+==> [Bounded autonomy proof (optional)]
+    MEMORY_BACKEND=python HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-9z118rie MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-9z118rie/memory /Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_autonomy_policy.py backend/tests/test_autonomy_supervisor.py backend/tests/test_autonomy_routes.py backend/tests/test_autonomy_resume.py backend/tests/test_autonomy_budgets.py backend/tests/test_autonomy_events.py backend/tests/test_autonomy_kill_switch.py backend/tests/test_autonomy_dedupe.py backend/tests/test_autonomy_lifecycle.py backend/tests/test_autonomy_style_profile.py backend/tests/test_autonomy_attention_controller.py backend/tests/test_autonomy_reanchor.py -q -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/backend-autonomy-optional-proof.xml
+.............................................................            [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/backend-autonomy-optional-proof.xml -
+61 passed in 0.61s
+
+All 1 proof step(s) passed (61 passed, 0 skipped).

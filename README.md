@@ -182,9 +182,9 @@ The current Hysight-main 36 release candidate was freshly sealed on 2026-04-20 f
 - Frontend proof: UNPROVEN — Node 20.x unavailable at seal time (host has v25.9.0, frontend pins 20.x)
 - Live Mongo proof was not rerun in this release seal and is not counted as fresh evidence
 
-Older Hysight 27–35 summary files remain in the repository as audit history only and are not proof for 36.
+Older Hysight 27–36 summary files remain in the repository as audit history only and are not proof for 38.
 
-Authoritative 36 release-seal evidence lives in `artifacts/proof/release_env_hysight36.txt`, `artifacts/proof/release_quarantine_hysight36.md`, and `RELEASE_SEAL_HYSIGHT36.md`.
+Authoritative 38 release-seal evidence lives in `artifacts/proof/release_env_hysight38.txt`, `artifacts/proof/release_quarantine_hysight38.md`, and `RELEASE_SEAL_HYSIGHT38.md`.
 
 ## Run Modes
 
