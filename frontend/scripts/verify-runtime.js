@@ -1,4 +1,4 @@
-const expectedNodeMajor = 20;
+const expectedNodeMajor = 24;
 const expectedYarnVersion = "1.22.22";
 
 function fail(message) {

@@ -1,10 +1,10 @@
 {
-  "command": "/private/tmp/hysight32-release-seal/.venv/bin/python scripts/proof_frontend.py",
-  "commit_sha": "local-worktree",
+  "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/proof_frontend.py",
+  "commit_sha": "af16597554ff8c2b8b00654657bcbed1e46e2097",
   "environment_mode": "repo_local_venv+local_node",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-19T22:58:02.432426+00:00",
+  "generated_at": "2026-04-20T23:29:44.022329+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -18,7 +18,7 @@
       "build"
     ],
     "failed_stage_names": [],
-    "node_version": "v20.20.2",
+    "node_version": "v24.15.0",
     "omitted_proof_steps": [
       "pipeline",
       "backend-baseline",
@@ -41,7 +41,7 @@
       {
         "command": "node ./scripts/verify-runtime.js",
         "name": "runtime-verification",
-        "node_version": "v20.20.2",
+        "node_version": "v24.15.0",
         "returncode": 0,
         "status": "passed",
         "stderr_tail": null,
@@ -49,7 +49,7 @@
         "yarn_version": "1.22.22"
       },
       {
-        "command": "/private/tmp/hysight32-release-seal/.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q --check-fixture-drift -k generated_frontend_api_fixtures_match_backend_export -ra --strict-markers --junitxml=/private/tmp/hysight32-release-seal/test_reports/frontend-fixture-drift.xml",
+        "command": "/Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_server_bootstrap.py -q --check-fixture-drift -k generated_frontend_api_fixtures_match_backend_export -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/frontend-fixture-drift.xml",
         "counts": {
           "error_test_count": 0,
           "failed_test_count": 0,
@@ -63,7 +63,7 @@
         "returncode": 0,
         "status": "passed",
         "stderr_tail": null,
-        "stdout_tail": ".                                                                        [100%]\n- generated xml file: /private/tmp/hysight32-release-seal/test_reports/frontend-fixture-drift.xml -\n1 passed, 55 deselected in 0.19s"
+        "stdout_tail": ".                                                                        [100%]\n- generated xml file: /Users/dawsonblock/Hysight/test_reports/frontend-fixture-drift.xml -\n1 passed, 55 deselected in 0.22s"
       },
       {
         "command": "yarn lint",
@@ -71,10 +71,10 @@
         "returncode": 0,
         "status": "passed",
         "stderr_tail": null,
-        "stdout_tail": "yarn run v1.22.22\n$ eslint .\nDone in 0.72s."
+        "stdout_tail": "yarn run v1.22.22\n$ eslint .\nDone in 1.08s."
       },
       {
-        "command": "yarn test --watch=false --runInBand --json --outputFile=/private/tmp/hysight32-release-seal/test_reports/frontend-jest.json",
+        "command": "yarn test --watch=false --runInBand --json --outputFile=/Users/dawsonblock/Hysight/test_reports/frontend-jest.json",
         "counts": {
           "error_test_count": 0,
           "failed_test_count": 0,
@@ -93,16 +93,16 @@
         "report": "test_reports/frontend-jest.json",
         "returncode": 0,
         "status": "passed",
-        "stderr_tail": "PASS src/components/OperatorConsole.test.js\nPASS src/lib/api.test.js\nPASS src/components/HCAChat.test.js\nPASS src/App.test.js\nPASS src/components/MemoryBrowser.test.js\n\nTest Suites: 5 passed, 5 total\nTests:       19 passed, 19 total\nSnapshots:   0 total\nTime:        3.28 s\nRan all test suites.\nTest results written to: ../test_reports/frontend-jest.json",
-        "stdout_tail": "yarn run v1.22.22\n$ craco test --watch=false --runInBand --json --outputFile=/private/tmp/hysight32-release-seal/test_reports/frontend-jest.json\nDone in 3.82s."
+        "stderr_tail": "PASS src/components/OperatorConsole.test.js\nPASS src/components/HCAChat.test.js\nPASS src/App.test.js\nPASS src/components/MemoryBrowser.test.js\nPASS src/lib/api.test.js\n\nTest Suites: 5 passed, 5 total\nTests:       19 passed, 19 total\nSnapshots:   0 total\nTime:        3.393 s\nRan all test suites.\nTest results written to: ../test_reports/frontend-jest.json",
+        "stdout_tail": "yarn run v1.22.22\n$ craco test --watch=false --runInBand --json --outputFile=/Users/dawsonblock/Hysight/test_reports/frontend-jest.json\nDone in 3.86s."
       },
       {
         "command": "yarn build",
         "name": "build",
         "returncode": 0,
         "status": "passed",
-        "stderr_tail": null,
-        "stdout_tail": "\nFile sizes after gzip:\n\n  178.93 kB  build/static/js/main.28a63002.js\n  12.26 kB   build/static/css/main.e3a07d3d.css\n\nThe project was built assuming it is hosted at /.\nYou can control this with the homepage field in your package.json.\n\nThe build folder is ready to be deployed.\nYou may serve it with a static server:\n\n  yarn global add serve\n  serve -s build\n\nFind out more about deployment here:\n\n  https://cra.link/deployment\n\nDone in 10.30s."
+        "stderr_tail": "(node:77181) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead\n(Use `node --trace-deprecation ...` to show where the warning was created)",
+        "stdout_tail": "\nFile sizes after gzip:\n\n  179.35 kB  build/static/js/main.28a63002.js\n  12.28 kB   build/static/css/main.e3a07d3d.css\n\nThe project was built assuming it is hosted at /.\nYou can control this with the homepage field in your package.json.\n\nThe build folder is ready to be deployed.\nYou may serve it with a static server:\n\n  yarn global add serve\n  serve -s build\n\nFind out more about deployment here:\n\n  https://cra.link/deployment\n\nDone in 6.57s."
       }
     ],
     "yarn_version": "1.22.22"
@@ -116,6 +116,6 @@
   "service_connection_mode": "none",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-19T22:58:02.432426+00:00",
+  "timestamp": "2026-04-20T23:29:44.022329+00:00",
   "total_test_count": 20
 }

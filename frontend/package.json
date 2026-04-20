@@ -65,11 +65,11 @@
     "lint": "eslint ."
   },
   "engines": {
-    "node": "20.x",
+    "node": "24.x",
     "yarn": "1.22.22"
   },
   "volta": {
-    "node": "20.20.2",
+    "node": "24.15.0",
     "yarn": "1.22.22"
   },
   "proxy": "http://localhost:8000",

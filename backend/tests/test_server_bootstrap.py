@@ -560,7 +560,7 @@ def test_frontend_runtime_validation_injects_yarn_user_agent(monkeypatch):
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="v20.20.2\n",
+                stdout="v24.15.0\n",
                 stderr="",
             )
         if list(command) == ["yarn", "--version"]:
@@ -583,7 +583,7 @@ def test_frontend_runtime_validation_injects_yarn_user_agent(monkeypatch):
 
     node_version, yarn_version = proof_frontend._validate_runtime(stage_results)
 
-    assert node_version == "v20.20.2"
+    assert node_version == "v24.15.0"
     assert yarn_version == "1.22.22"
     assert stage_results == [
         {
@@ -591,7 +591,7 @@ def test_frontend_runtime_validation_injects_yarn_user_agent(monkeypatch):
             "command": "node ./scripts/verify-runtime.js",
             "returncode": 0,
             "status": "passed",
-            "node_version": "v20.20.2",
+            "node_version": "v24.15.0",
             "yarn_version": "1.22.22",
             "stdout_tail": None,
             "stderr_tail": None,
@@ -603,7 +603,7 @@ def test_frontend_runtime_validation_injects_yarn_user_agent(monkeypatch):
     assert runtime_command["env"]["npm_config_user_agent"].startswith(
         "yarn/1.22.22 "
     )
-    assert "node/20.20.2" in runtime_command["env"]["npm_config_user_agent"]
+    assert "node/24.15.0" in runtime_command["env"]["npm_config_user_agent"]
 
 
 def test_frontend_parse_jest_counts_tracks_pending_and_todo_cases(tmp_path):

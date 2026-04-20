@@ -4,7 +4,7 @@
   "environment_mode": "repo_local_venv",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-20T23:34:31.161758+00:00",
+  "generated_at": "2026-04-20T23:34:31.188375+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -67,6 +67,6 @@
   "service_connection_mode": "manual:existing-sidecar",
   "service_endpoint": "http://localhost:3035",
   "skipped_test_count": 2,
-  "timestamp": "2026-04-20T23:34:31.161758+00:00",
+  "timestamp": "2026-04-20T23:34:31.188375+00:00",
   "total_test_count": 15
 }
