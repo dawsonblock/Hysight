@@ -168,7 +168,9 @@ Frontend proof details:
 
 ## Release Seal Status
 
-The current Hysight-main 35 release candidate was freshly sealed on 2026-04-20 from commit `6162720ac0344d5e7f7a40eb7f13beb6b49d41bd`.
+The current Hysight-main 36 release candidate was freshly sealed on 2026-04-20 from commit `78b5affefe6780694e69512e14e75038fda68dee`.
+
+**Classification: sealed local-core release**
 
 - Packaging install: PASS via `python -m pip install -e '.[dev]'`
 - Supported bootstrap: PASS via `make venv`
@@ -176,13 +178,13 @@ The current Hysight-main 35 release candidate was freshly sealed on 2026-04-20 f
 - Baseline proof: 123 passed, 0 failed (7 pipeline + 98 backend-baseline + 18 contract)
 - Autonomy optional proof: 61 passed, 0 failed
 - Live Rust sidecar proof: 13 passed, 2 skipped (supervisorctl not in PATH — expected)
-- Sidecar no-fallback check: PASS — HTTP 503 with explicit error on stopped sidecar, no silent Python fallback (static code verified)
-- Frontend proof: 19 passed, 0 failed (Node v25.9.0 with --ignore-engines)
+- Sidecar no-fallback check: N/A — backend not running as standalone service in test mode; structural enforcement via `MEMORY_BACKEND=rust`
+- Frontend proof: UNPROVEN — Node 20.x unavailable at seal time (host has v25.9.0, frontend pins 20.x)
 - Live Mongo proof was not rerun in this release seal and is not counted as fresh evidence
 
-Older Hysight 27–34 summary files remain in the repository as audit history only and are not proof for 35.
+Older Hysight 27–35 summary files remain in the repository as audit history only and are not proof for 36.
 
-Authoritative 35 release-seal evidence lives in `artifacts/proof/release_env_hysight35.txt`, `artifacts/proof/release_quarantine_hysight35.md`, and `RELEASE_SEAL_HYSIGHT35.md`.
+Authoritative 36 release-seal evidence lives in `artifacts/proof/release_env_hysight36.txt`, `artifacts/proof/release_quarantine_hysight36.md`, and `RELEASE_SEAL_HYSIGHT36.md`.
 
 ## Run Modes
 

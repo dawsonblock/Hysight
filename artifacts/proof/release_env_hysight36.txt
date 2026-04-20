@@ -1,0 +1,14 @@
+Sealed      : 2026-04-20T22:36:36Z
+HEAD        : 78b5affefe6780694e69512e14e75038fda68dee
+Fingerprint : 49ea69aec5af3ff97aa93e07031d5bd5ae2350da
+Repo path   : /Users/dawsonblock/Hysight
+
+OS          : macOS 26.2 (Build 25C56)
+Kernel      : Darwin 25.2.0 arm64
+Architecture: arm64 (Apple M2 Pro)
+
+Python  : 3.9.7
+rustc   : rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo   : cargo 1.94.0 (85eff7c80 2026-01-15)
+node    : v25.9.0
+yarn    : 1.22.22

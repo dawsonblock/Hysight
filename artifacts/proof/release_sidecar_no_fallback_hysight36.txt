@@ -1,0 +1,7 @@
+=== No-fallback test: stop sidecar at 3032, verify 503 ===
+Sidecar PID: 47698
+zsh: command not found: #
+SIDECAR_DOWN: confirmed
+zsh: command not found: #
+Backend not running — no-fallback test not applicable (backend only starts on demand)
+NO_FALLBACK_APPLICABLE: N/A — backend not running as standalone service in test mode
