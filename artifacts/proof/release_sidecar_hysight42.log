@@ -1,0 +1,329 @@
+   Compiling cfg-if v1.0.4
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling libc v0.2.184
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling version_check v0.9.5
+   Compiling itoa v1.0.18
+   Compiling typenum v1.19.0
+   Compiling memchr v2.8.0
+   Compiling pin-project-lite v0.2.17
+   Compiling autocfg v1.5.0
+   Compiling log v0.4.29
+   Compiling generic-array v0.14.7
+   Compiling once_cell v1.21.4
+   Compiling zerocopy v0.8.48
+   Compiling futures-core v0.3.32
+   Compiling libm v0.2.16
+   Compiling num-traits v0.2.19
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v1.3.0
+   Compiling crc32fast v1.5.0
+   Compiling crossbeam-utils v0.8.21
+   Compiling bytes v1.11.1
+   Compiling bitflags v2.11.0
+   Compiling regex-syntax v0.8.10
+   Compiling rustversion v1.0.22
+   Compiling powerfmt v0.2.0
+   Compiling jobserver v0.1.34
+   Compiling byteorder v1.5.0
+   Compiling cc v1.2.60
+   Compiling syn v2.0.117
+   Compiling getrandom v0.2.17
+   Compiling errno v0.3.14
+   Compiling tracing-core v0.1.36
+   Compiling rand_core v0.6.4
+   Compiling time-core v0.1.8
+   Compiling crypto-common v0.1.7
+   Compiling simd-adler32 v0.3.9
+   Compiling futures-task v0.3.32
+   Compiling num-conv v0.2.1
+   Compiling slab v0.4.12
+   Compiling parking_lot_core v0.9.12
+   Compiling getrandom v0.3.4
+   Compiling crunchy v0.2.4
+   Compiling block-padding v0.3.3
+   Compiling block-buffer v0.10.4
+   Compiling http v1.4.0
+   Compiling stable_deref_trait v1.2.1
+   Compiling adler2 v2.0.1
+   Compiling equivalent v1.0.2
+   Compiling pkg-config v0.3.32
+   Compiling zmij v1.0.21
+   Compiling ident_case v1.0.1
+   Compiling strsim v0.11.1
+   Compiling either v1.15.0
+   Compiling scopeguard v1.2.0
+   Compiling lock_api v0.4.14
+   Compiling miniz_oxide v0.8.9
+   Compiling ownedbytes v0.9.0
+   Compiling digest v0.10.7
+   Compiling deranged v0.5.8
+   Compiling inout v0.1.4
+   Compiling crossbeam-epoch v0.9.18
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling aho-corasick v1.1.4
+   Compiling serde_json v1.0.149
+   Compiling rayon-core v1.13.0
+   Compiling zlib-rs v0.6.3
+   Compiling http-body v1.0.1
+   Compiling semver v1.0.28
+   Compiling rustix v1.1.4
+   Compiling prettyplease v0.2.37
+   Compiling getrandom v0.4.2
+   Compiling rustc_version v0.4.1
+   Compiling crossbeam-deque v0.8.6
+   Compiling time v0.3.47
+   Compiling cipher v0.4.4
+   Compiling darling_core v0.23.0
+   Compiling rand_core v0.9.5
+   Compiling regex-automata v0.4.14
+   Compiling bitpacking v0.9.3
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.3.1
+   Compiling signal-hook-registry v1.4.8
+   Compiling rand v0.8.5
+   Compiling cpufeatures v0.2.17
+   Compiling socket2 v0.6.3
+   Compiling mio v1.2.0
+   Compiling serde_derive v1.0.228
+   Compiling futures-macro v0.3.32
+   Compiling async-trait v0.1.89
+   Compiling tracing-attributes v0.1.31
+   Compiling darling_macro v0.23.0
+   Compiling futures-util v0.3.32
+   Compiling tokio-macros v2.7.0
+   Compiling flate2 v1.1.9
+   Compiling encoding_rs v0.8.35
+   Compiling utf8-ranges v1.0.5
+   Compiling tracing v0.1.44
+   Compiling cfg_aliases v0.2.1
+   Compiling thiserror v2.0.18
+   Compiling tinyvec_macros v0.1.1
+   Compiling tower-service v0.3.3
+   Compiling httparse v1.10.1
+   Compiling tinyvec v1.11.0
+   Compiling nix v0.30.1
+   Compiling tantivy-fst v0.5.0
+   Compiling darling v0.23.0
+   Compiling thiserror-impl v2.0.18
+   Compiling rand_distr v0.4.3
+   Compiling rand_chacha v0.9.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling smallvec v1.15.1
+   Compiling tantivy-common v0.10.0
+   Compiling parking_lot v0.12.5
+   Compiling itertools v0.14.0
+   Compiling tokio v1.51.1
+   Compiling ahash v0.7.8
+   Compiling murmurhash32 v0.3.1
+   Compiling minimal-lexical v0.2.1
+   Compiling hashbrown v0.17.0
+   Compiling foldhash v0.1.5
+   Compiling core-foundation-sys v0.8.7
+   Compiling zstd-safe v7.2.4
+   Compiling tower-layer v0.3.3
+   Compiling allocator-api2 v0.2.21
+   Compiling doc-comment v0.3.4
+   Compiling iana-time-zone v0.1.65
+   Compiling indexmap v2.14.0
+   Compiling nom v7.1.3
+   Compiling tantivy-stacker v0.6.0
+   Compiling hashbrown v0.15.5
+   Compiling bon-macros v3.9.1
+   Compiling rayon v1.11.0
+   Compiling rand v0.9.3
+   Compiling unicode-normalization v0.1.25
+   Compiling sha2 v0.10.9
+   Compiling http-body-util v0.1.3
+   Compiling blake3 v1.8.4
+   Compiling futures-channel v0.3.32
+   Compiling fs-err v3.3.0
+   Compiling nom v8.0.0
+   Compiling signature v2.2.0
+   Compiling httpdate v1.0.3
+   Compiling unicode-bidi v0.3.18
+   Compiling fastrand v2.4.1
+   Compiling unicode-properties v0.1.4
+   Compiling virtue v0.0.18
+   Compiling tantivy-bitpacker v0.9.0
+   Compiling sync_wrapper v1.0.2
+   Compiling tantivy-sstable v0.6.0
+   Compiling downcast-rs v2.0.2
+   Compiling bytecount v0.6.9
+   Compiling fastdivide v0.4.2
+   Compiling bumpalo v3.20.2
+   Compiling subtle v2.6.1
+   Compiling percent-encoding v2.3.2
+   Compiling zeroize v1.8.2
+   Compiling atomic-waker v1.1.2
+   Compiling tantivy-columnar v0.6.0
+   Compiling form_urlencoded v1.2.2
+   Compiling zopfli v0.8.3
+   Compiling bincode_derive v2.0.1
+   Compiling tempfile v3.27.0
+   Compiling hyper v1.9.0
+   Compiling stringprep v0.1.5
+   Compiling nom_locate v5.0.0
+   Compiling bon v3.9.1
+   Compiling tantivy-query-grammar v0.25.0
+   Compiling ed25519 v2.2.3
+   Compiling lru v0.12.5
+   Compiling chrono v0.4.44
+   Compiling fs4 v0.13.1
+   Compiling uuid v1.23.0
+   Compiling tantivy-tokenizer-api v0.6.0
+   Compiling rust-stemmers v1.2.0
+   Compiling hyperloglogplus v0.4.1
+   Compiling sketches-ddsketch v0.3.1
+   Compiling quick-xml v0.30.0
+   Compiling codepage v0.1.2
+   Compiling zip v0.6.6
+   Compiling regex v1.12.3
+   Compiling aes v0.8.4
+   Compiling cbc v0.1.2
+   Compiling ecb v0.1.2
+   Compiling md-5 v0.10.6
+   Compiling arc-swap v1.9.1
+   Compiling crossbeam-channel v0.5.15
+   Compiling dirs-sys-next v0.1.2
+   Compiling memmap2 v0.9.10
+   Compiling measure_time v0.9.0
+   Compiling twox-hash v2.1.2
+   Compiling arrayvec v0.7.6
+   Compiling arrayref v0.3.9
+   Compiling ttf-parser v0.25.1
+   Compiling census v0.4.2
+   Compiling rangemap v1.7.1
+   Compiling base64 v0.22.1
+   Compiling oneshot v0.1.13
+   Compiling fnv v1.0.7
+   Compiling ryu v1.0.23
+   Compiling rustc-hash v2.1.2
+   Compiling jiff v0.2.23
+   Compiling mime v0.3.17
+   Compiling lazy_static v1.5.0
+   Compiling weezl v0.1.12
+   Compiling unty v0.0.4
+   Compiling levenshtein_automata v0.2.1
+   Compiling constant_time_eq v0.4.2
+   Compiling typed-path v0.12.3
+   Compiling htmlescape v0.3.1
+   Compiling tantivy v0.25.0
+   Compiling axum-core v0.4.5
+   Compiling zip v7.2.0
+   Compiling bincode v2.0.1
+   Compiling sharded-slab v0.1.7
+   Compiling serde_urlencoded v0.7.1
+   Compiling lz4_flex v0.12.1
+   Compiling dirs-next v2.0.0
+   Compiling calamine v0.22.1
+   Compiling atomic-write-file v0.3.0
+   Compiling lopdf v0.39.0
+   Compiling space v0.17.0
+   Compiling hashbrown v0.11.2
+   Compiling ed25519-dalek v2.2.0
+   Compiling hyper-util v0.1.20
+   Compiling tower v0.5.3
+   Compiling matchers v0.2.0
+   Compiling serde_path_to_error v0.1.20
+   Compiling tracing-log v0.2.0
+   Compiling fs2 v0.4.3
+   Compiling quick-xml v0.31.0
+   Compiling thread_local v1.1.9
+   Compiling same-file v1.0.6
+   Compiling nu-ansi-term v0.50.3
+   Compiling unicode-segmentation v1.13.2
+   Compiling matchit v0.7.3
+   Compiling hex v0.4.3
+   Compiling axum v0.7.9
+   Compiling tracing-subscriber v0.3.23
+   Compiling hnsw v0.11.0
+   Compiling tower-http v0.5.2
+   Compiling rand_pcg v0.3.1
+   Compiling zstd v0.13.3
+   Compiling memvid-core v2.0.139 (/private/tmp/hysight42-proof/memvid)
+warning: function `truncate_at_boundary` is never used
+   --> /private/tmp/hysight42-proof/memvid/src/extract_budgeted.rs:208:4
+    |
+208 | fn truncate_at_boundary(text: &str, max_chars: usize) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `memvid-core` (lib) generated 1 warning
+   Compiling memvid-sidecar v0.1.0 (/private/tmp/hysight42-proof/memvid_service)
+    Finished `release` profile [optimized] target(s) in 44.29s
+     Running `memvid_service/target/release/memvid-sidecar`
+[2m2026-04-21T06:18:16.798012Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m memvid-sidecar v3 (Tantivy BM25 + HNSW semantic + session isolation)
+[2m2026-04-21T06:18:16.798225Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Creating store: /private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-sidecar-proof-5uzyy25a/user_default/memory.mv2
+[2m2026-04-21T06:18:16.802521Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:16.830884Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmp0SUpLI/meta.json" was modified
+[2m2026-04-21T06:18:16.831387Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T06:18:16.831964Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
+[2m2026-04-21T06:18:16.831971Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
+[2m2026-04-21T06:18:16.832013Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:16.839373Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T06:18:16.839380Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T06:18:16.839718Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T06:18:16.839786Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
+[2m2026-04-21T06:18:16.839791Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
+[2m2026-04-21T06:18:16.839799Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:16.847538Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T06:18:16.847543Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T06:18:16.847904Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m69632 [3mdata_end[0m[2m=[0m69632
+[2m2026-04-21T06:18:16.857416Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Scanning 0 frames…
+[2m2026-04-21T06:18:16.857427Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Loaded 0 memories (0 with embeddings).
+[2m2026-04-21T06:18:16.858171Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Listening on 0.0.0.0:3032
+[2m2026-04-21T06:18:20.838485Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T06:18:20.906793Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 2
+[2m2026-04-21T06:18:20.906822Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 2
+[2m2026-04-21T06:18:20.906843Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:20.916858Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T06:18:20.916872Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T06:18:20.929004Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:20.980563Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T06:18:20.980603Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmptjcMxP/meta.json" was modified
+[2m2026-04-21T06:18:20.981103Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
+[2m2026-04-21T06:18:20.981114Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
+[2m2026-04-21T06:18:20.981147Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:20.990723Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T06:18:20.990864Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T06:18:20.991552Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T06:18:21.053517Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 2
+[2m2026-04-21T06:18:21.053550Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 2
+[2m2026-04-21T06:18:21.053580Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:21.063937Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T06:18:21.063953Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T06:18:21.066874Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T06:18:21.067850Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 2
+[2m2026-04-21T06:18:21.067861Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 2
+[2m2026-04-21T06:18:21.067882Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:21.083320Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T06:18:21.083335Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T06:18:21.083504Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7fb47a4e2cca4f9ebc9a33227917fac8.idx"
+[2m2026-04-21T06:18:21.083610Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7fb47a4e2cca4f9ebc9a33227917fac8.fieldnorm"
+[2m2026-04-21T06:18:21.083720Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7fb47a4e2cca4f9ebc9a33227917fac8.term"
+[2m2026-04-21T06:18:21.083815Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7fb47a4e2cca4f9ebc9a33227917fac8.store"
+[2m2026-04-21T06:18:21.083914Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7fb47a4e2cca4f9ebc9a33227917fac8.pos"
+[2m2026-04-21T06:18:21.084006Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7fb47a4e2cca4f9ebc9a33227917fac8.fast"
+[2m2026-04-21T06:18:21.095704Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T06:18:21.157758Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 4
+[2m2026-04-21T06:18:21.157789Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 4
+[2m2026-04-21T06:18:21.157814Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:21.167907Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T06:18:21.167923Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T06:18:21.169018Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T06:18:21.169217Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 4
+[2m2026-04-21T06:18:21.169229Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 4
+[2m2026-04-21T06:18:21.169263Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T06:18:21.178903Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T06:18:21.178933Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T06:18:21.184427Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m74465 [3mdata_end[0m[2m=[0m69747
+[2m2026-04-21T06:18:21.188512Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rebuild_indexes: ti_offset=69719 ti_length=28 computed_footer=74465 current_footer=74465 (before setting)
+[2m2026-04-21T06:18:21.188531Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m74465 [3mdata_end[0m[2m=[0m69719
+[2m2026-04-21T06:18:21.192608Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m ✓ Doctor lex index rebuild succeeded: 1 docs from 1 frames (0 text-indexable)
+[2m2026-04-21T06:18:21.192744Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m74521 [3mdata_end[0m[2m=[0m69719
+[2m2026-04-21T06:18:21.484896Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmptjcMxP/meta.json" was modified

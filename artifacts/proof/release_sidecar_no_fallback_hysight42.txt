@@ -1,0 +1,15 @@
+
+═══════════════════════════════════════════════
+  Hysight backend
+  memory backend : rust
+  run storage    : /tmp/hysight42-proof/storage
+  memory storage : /tmp/hysight42-proof/storage/memory
+  port           : 8000
+═══════════════════════════════════════════════
+
+Probing sidecar at http://127.0.0.1:3999/health …
+ERROR: memvid sidecar not reachable at http://127.0.0.1:3999/health.
+       Start the sidecar first:
+         cargo run --manifest-path memvid_service/Cargo.toml --release
+       Or use Docker: docker compose -f compose.yml -f compose.sidecar.yml up
+       See BOOTSTRAP.md for the supported bootstrap path.

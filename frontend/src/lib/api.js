@@ -132,6 +132,14 @@ const autonomyCheckpointSchema = z.object({
   kill_switch_observed: z.boolean().optional(),
   idempotency: z.string().nullable().optional(),
   dedupe_key: z.string().nullable().optional(),
+  style_profile_id: z.string().optional(),
+  current_attention_mode: z.string().nullable().optional(),
+  current_subgoal: z.string().nullable().optional(),
+  interrupt_queue_length: z.number().int().nonnegative().optional(),
+  reanchor_due: z.boolean().optional(),
+  novelty_budget_remaining: z.number().int().nonnegative().nullable().optional(),
+  hyperfocus_steps_used: z.number().int().nonnegative().optional(),
+  last_reanchor_summary: looseObjectSchema.nullish(),
   checkpointed_at: z.string(),
   budget_snapshot: z.record(z.unknown()).optional(),
 }).passthrough();
@@ -150,10 +158,125 @@ const autonomySubsystemSchema = z.object({
   last_tick_at: z.string().nullable().optional(),
   last_error: z.string().nullable().optional(),
   last_evaluator_decision: z.string().nullable().optional(),
+  current_attention_mode: z.string().nullable().optional(),
+  interrupt_queue_length: z.number().int().nonnegative().optional(),
+  reanchor_due: z.boolean().optional(),
+  novelty_budget_remaining: z.number().int().nonnegative().nullable().optional(),
+  hyperfocus_steps_used: z.number().int().nonnegative().optional(),
+  last_reanchor_summary: looseObjectSchema.nullish(),
   dedupe_keys_tracked: z.number().int().nonnegative().optional(),
   recent_runs: z.array(autonomyRunLinkSchema).optional(),
   budget_ledgers: z.array(autonomyBudgetLedgerSchema).optional(),
   last_checkpoint: autonomyCheckpointSchema.nullish(),
+}).passthrough();
+
+const autonomyBudgetModelSchema = z.object({
+  max_steps_per_run: z.number().int().nonnegative().optional(),
+  max_runs_per_agent: z.number().int().nonnegative().optional(),
+  max_parallel_runs: z.number().int().nonnegative().optional(),
+  max_retries_per_step: z.number().int().nonnegative().optional(),
+  max_run_duration_seconds: z.number().int().nonnegative().optional(),
+  deadman_timeout_seconds: z.number().int().nonnegative().optional(),
+}).passthrough();
+
+const autonomyPolicySchema = z.object({
+  mode: z.string(),
+  enabled: z.boolean(),
+  budget: autonomyBudgetModelSchema,
+  approval_required_action_classes: z.array(z.string()).optional(),
+  allowed_tool_names: z.array(z.string()).optional(),
+  allowed_network_domains: z.array(z.string()).optional(),
+  allowed_workspace_roots: z.array(z.string()).optional(),
+  allow_memory_writes: z.boolean().optional(),
+  allow_external_writes: z.boolean().optional(),
+  auto_resume_after_approval: z.boolean().optional(),
+}).passthrough();
+
+const autonomyAgentSchema = z.object({
+  agent_id: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  mode: z.string(),
+  status: z.string(),
+  style_profile_id: z.string(),
+  policy: autonomyPolicySchema,
+  created_at: z.string(),
+  updated_at: z.string(),
+}).passthrough();
+
+const autonomyAgentListSchema = z.object({
+  agents: z.array(autonomyAgentSchema),
+}).passthrough();
+
+const autonomyScheduleSchema = z.object({
+  schedule_id: z.string(),
+  agent_id: z.string(),
+  interval_seconds: z.number().int().positive(),
+  goal_override: z.string().nullable().optional(),
+  payload: z.record(z.unknown()).optional(),
+  enabled: z.boolean(),
+  last_fired_at: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+}).passthrough();
+
+const autonomyScheduleListSchema = z.object({
+  schedules: z.array(autonomyScheduleSchema),
+}).passthrough();
+
+const autonomyInboxItemSchema = z.object({
+  item_id: z.string(),
+  agent_id: z.string(),
+  goal: z.string(),
+  payload: z.record(z.unknown()).optional(),
+  status: z.string(),
+  created_at: z.string(),
+  claimed_at: z.string().nullable().optional(),
+}).passthrough();
+
+const autonomyInboxListSchema = z.object({
+  items: z.array(autonomyInboxItemSchema),
+}).passthrough();
+
+const autonomyRunListSchema = z.object({
+  runs: z.array(autonomyRunLinkSchema),
+}).passthrough();
+
+const autonomyStatusSchema = autonomySubsystemSchema;
+
+const autonomyKillSwitchSchema = z.object({
+  active: z.boolean(),
+  reason: z.string().nullable().optional(),
+  set_at: z.string().nullable().optional(),
+  cleared_at: z.string().nullable().optional(),
+  set_by: z.string().nullable().optional(),
+}).passthrough();
+
+const autonomyControlResponseSchema = z.object({
+  agent_id: z.string(),
+  status: z.string(),
+}).passthrough();
+
+const autonomyBudgetLedgerListSchema = z.object({
+  ledgers: z.array(autonomyBudgetLedgerSchema),
+}).passthrough();
+
+const autonomyEscalationSchema = z.object({
+  agent_id: z.string(),
+  trigger_id: z.string(),
+  run_id: z.string().nullable().optional(),
+  status: z.string(),
+  last_state: z.string().nullable().optional(),
+  last_decision: z.string().nullable().optional(),
+  checkpointed_at: z.string(),
+}).passthrough();
+
+const autonomyEscalationListSchema = z.object({
+  escalations: z.array(autonomyEscalationSchema),
+}).passthrough();
+
+const autonomyCheckpointListSchema = z.object({
+  checkpoints: z.array(autonomyCheckpointSchema),
 }).passthrough();
 
 const subsystemsResponseSchema = z.object({
@@ -471,4 +594,168 @@ export function deleteMemoryRecord(memoryId) {
   return fetchJson(`/hca/memory/${encodeSegment(memoryId)}`, {
     method: "DELETE",
   }, deleteMemorySchema);
+}
+
+export function getAutonomyStatus() {
+  return fetchJson("/hca/autonomy/status", undefined, autonomyStatusSchema);
+}
+
+export function enableAutonomyKillSwitch({ reason, setBy = "operator_ui" } = {}) {
+  return fetchJson(
+    "/hca/autonomy/kill",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: true, reason: reason || null, set_by: setBy }),
+    },
+    autonomyKillSwitchSchema
+  );
+}
+
+export function clearAutonomyKillSwitch({ setBy = "operator_ui" } = {}) {
+  return fetchJson(
+    "/hca/autonomy/unkill",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: false, reason: null, set_by: setBy }),
+    },
+    autonomyKillSwitchSchema
+  );
+}
+
+export function listAutonomyAgents() {
+  return fetchJson("/hca/autonomy/agents", undefined, autonomyAgentListSchema);
+}
+
+export function createAutonomyAgent(payload) {
+  return fetchJson(
+    "/hca/autonomy/agents",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    autonomyAgentSchema
+  );
+}
+
+export function getAutonomyAgent(agentId) {
+  return fetchJson(
+    `/hca/autonomy/agents/${encodeSegment(agentId)}`,
+    undefined,
+    autonomyAgentSchema
+  );
+}
+
+function postAutonomyAgentAction(agentId, action) {
+  return fetchJson(
+    `/hca/autonomy/agents/${encodeSegment(agentId)}/${encodeSegment(action)}`,
+    { method: "POST" },
+    autonomyControlResponseSchema
+  );
+}
+
+export function pauseAutonomyAgent(agentId) {
+  return postAutonomyAgentAction(agentId, "pause");
+}
+
+export function resumeAutonomyAgent(agentId) {
+  return postAutonomyAgentAction(agentId, "resume");
+}
+
+export function stopAutonomyAgent(agentId) {
+  return postAutonomyAgentAction(agentId, "stop");
+}
+
+export function listAutonomySchedules() {
+  return fetchJson(
+    "/hca/autonomy/schedules",
+    undefined,
+    autonomyScheduleListSchema
+  );
+}
+
+export function createAutonomySchedule(payload) {
+  return fetchJson(
+    "/hca/autonomy/schedules",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    autonomyScheduleSchema
+  );
+}
+
+function postAutonomyScheduleAction(scheduleId, action) {
+  return fetchJson(
+    `/hca/autonomy/schedules/${encodeSegment(scheduleId)}/${encodeSegment(action)}`,
+    { method: "POST" },
+    autonomyScheduleSchema
+  );
+}
+
+export function enableAutonomySchedule(scheduleId) {
+  return postAutonomyScheduleAction(scheduleId, "enable");
+}
+
+export function disableAutonomySchedule(scheduleId) {
+  return postAutonomyScheduleAction(scheduleId, "disable");
+}
+
+export function listAutonomyInbox({ agentId, status } = {}) {
+  return fetchJson(
+    `/hca/autonomy/inbox${buildQuery({ agent_id: agentId, status })}`,
+    undefined,
+    autonomyInboxListSchema
+  );
+}
+
+export function createAutonomyInboxItem(payload) {
+  return fetchJson(
+    "/hca/autonomy/inbox",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    autonomyInboxItemSchema
+  );
+}
+
+export function cancelAutonomyInboxItem(itemId) {
+  return fetchJson(
+    `/hca/autonomy/inbox/${encodeSegment(itemId)}/cancel`,
+    { method: "POST" },
+    autonomyInboxItemSchema
+  );
+}
+
+export function listAutonomyCheckpoints(agentId) {
+  const basePath = agentId
+    ? `/hca/autonomy/checkpoints/${encodeSegment(agentId)}`
+    : "/hca/autonomy/checkpoints";
+
+  return fetchJson(basePath, undefined, autonomyCheckpointListSchema);
+}
+
+export function listAutonomyRuns() {
+  return fetchJson("/hca/autonomy/runs", undefined, autonomyRunListSchema);
+}
+
+export function listAutonomyBudgets() {
+  return fetchJson(
+    "/hca/autonomy/budgets",
+    undefined,
+    autonomyBudgetLedgerListSchema
+  );
+}
+
+export function listAutonomyEscalations() {
+  return fetchJson(
+    "/hca/autonomy/escalations",
+    undefined,
+    autonomyEscalationListSchema
+  );
 }

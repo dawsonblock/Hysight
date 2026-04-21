@@ -168,26 +168,33 @@ Frontend proof details:
 
 ## Release Seal Status
 
-The current Hysight-main 42 release candidate is documented from an externally verified
-clean-directory pass against base commit `10966b3bc57905b298563145dba8450d610f9c1c`.
+The current Hysight-main 42 release candidate is freshly sealed from base commit
+`10966b3bc57905b298563145dba8450d610f9c1c`.
 
-**Classification: sealed local-core release**
+**Classification: sealed full-proof release**
 
 - Packaging install: PASS via `python -m pip install -e '.[dev]'`
 - Supported bootstrap: PASS via `make venv`
 - `.pkg-venv` contamination check: PASS
 - Baseline proof: 123 passed, 0 failed (7 pipeline + 98 backend-baseline + 18 contract)
 - Autonomy optional proof: 61 passed, 0 failed
-- Live Rust sidecar proof: UNPROVEN — not re-run in this pass
-- Frontend proof: UNPROVEN — exact Node/Yarn runtime proof not re-run in this pass
+- Live Rust sidecar receipt: 13 passed, 2 skipped, 0 failed
+- Live sidecar parity: 4 passed, 0 failed (additive evidence)
+- Sidecar no-fallback check: PASS — rust-mode backend exits fail-closed when the sidecar is unreachable
+- Frontend proof: 20 passed, 0 failed on Node `24.15.0` and Yarn `1.22.22`
 - Live Mongo proof was not rerun in this release seal and is not counted as fresh evidence
 
-Hysight-main 41 remains the last in-repo **sealed full-proof release** in repository
-history. Older Hysight 27–41 summary files remain in the repository as audit history only
-and are not proof for 42.
+Packaging, bootstrap, baseline, and autonomy were verified from the clean `Hysight-main 42.zip`
+copy; sidecar and frontend were then re-run in a detached worktree at the same base commit.
+
+Older Hysight 27–41 summary files remain in the repository as audit history only and are not
+proof for 42.
 
 Authoritative 42 release-truth documents live in `RELEASE_SEAL_HYSIGHT42.md`,
-`FULL_PROOF_SUMMARY_HYSIGHT42.md`, and `OPTIONAL_PROOF_SUMMARY_HYSIGHT42.md`.
+`FULL_PROOF_SUMMARY_HYSIGHT42.md`, and `OPTIONAL_PROOF_SUMMARY_HYSIGHT42.md`. Fresh exact-commit
+artifacts live in `artifacts/proof/release_live_sidecar_receipt_hysight42.json`,
+`artifacts/proof/release_frontend_receipt_hysight42.json`, and
+`artifacts/proof/release_sidecar_no_fallback_hysight42.txt`.
 
 ## Run Modes
 

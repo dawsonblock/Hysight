@@ -1,0 +1,433 @@
+.autonomy-workspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.autonomy-workspaceHeader,
+.autonomy-panel {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.06);
+}
+
+.autonomy-workspaceHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+}
+
+.autonomy-workspaceControls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.autonomy-refreshMeta,
+.autonomy-subtleCell,
+.autonomy-sectionDescription,
+.autonomy-metricHint,
+.autonomy-keyValueLabel {
+  color: #64748b;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.autonomy-grid {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+}
+
+.autonomy-grid--twoColumn {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.autonomy-grid--threeColumn {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.autonomy-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 18px;
+}
+
+.autonomy-panel--kill {
+  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(255, 250, 250, 0.9);
+}
+
+.autonomy-panel--selectedRun {
+  border-color: rgba(15, 118, 110, 0.28);
+}
+
+.autonomy-sectionHeader,
+.autonomy-sectionTitleRow,
+.autonomy-inlineActions,
+.autonomy-formActions,
+.autonomy-killBar,
+.autonomy-toggleRow,
+.autonomy-selectedRunSummary,
+.autonomy-styleSummary {
+  display: flex;
+  gap: 12px;
+}
+
+.autonomy-sectionHeader,
+.autonomy-killBar {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.autonomy-sectionTitleRow {
+  align-items: center;
+}
+
+.autonomy-sectionTitle {
+  margin: 0;
+  color: #10233c;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
+}
+
+.autonomy-sectionCount {
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.74);
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 4px 10px;
+}
+
+.autonomy-sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.autonomy-panelMessage {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.94);
+  color: #334155;
+  padding: 12px 14px;
+}
+
+.autonomy-panelMessage--error {
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(255, 241, 242, 0.95);
+  color: #b91c1c;
+}
+
+.autonomy-panelMessage--success {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(236, 253, 245, 0.95);
+  color: #047857;
+}
+
+.autonomy-metricGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.autonomy-metric {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 128px;
+  padding: 14px;
+}
+
+.autonomy-metric--success {
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(236, 253, 245, 0.92);
+}
+
+.autonomy-metric--warning {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(255, 251, 235, 0.92);
+}
+
+.autonomy-metric--danger {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(254, 242, 242, 0.92);
+}
+
+.autonomy-metricLabel {
+  color: #0f766e;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.autonomy-metricValue,
+.autonomy-keyValueValue {
+  color: #10233c;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.autonomy-keyValueValue--wrap {
+  overflow-wrap: anywhere;
+}
+
+.autonomy-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 4px 10px;
+}
+
+.autonomy-status--success {
+  background: rgba(209, 250, 229, 0.9);
+  color: #047857;
+}
+
+.autonomy-status--warning {
+  background: rgba(254, 243, 199, 0.95);
+  color: #b45309;
+}
+
+.autonomy-status--danger {
+  background: rgba(254, 226, 226, 0.95);
+  color: #b91c1c;
+}
+
+.autonomy-status--neutral {
+  background: rgba(226, 232, 240, 0.95);
+  color: #334155;
+}
+
+.autonomy-strongCell {
+  color: #10233c;
+  font-weight: 700;
+}
+
+.autonomy-inlineActions {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.autonomy-inlineActions--table {
+  gap: 8px;
+}
+
+.autonomy-button {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #10233c;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 8px 12px;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.autonomy-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(15, 118, 110, 0.4);
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+}
+
+.autonomy-button:disabled {
+  cursor: wait;
+  opacity: 0.66;
+}
+
+.autonomy-button--secondary {
+  color: #155e75;
+}
+
+.autonomy-button--success {
+  border-color: rgba(16, 185, 129, 0.34);
+  background: rgba(236, 253, 245, 0.95);
+  color: #047857;
+}
+
+.autonomy-button--danger {
+  border-color: rgba(239, 68, 68, 0.34);
+  background: rgba(254, 242, 242, 0.95);
+  color: #b91c1c;
+}
+
+.autonomy-tableWrap {
+  overflow: auto;
+}
+
+.autonomy-tableWrap--tall {
+  max-height: 380px;
+}
+
+.autonomy-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.88rem;
+}
+
+.autonomy-tableHeader {
+  position: sticky;
+  top: 0;
+  background: rgba(248, 250, 252, 0.98);
+  color: #475569;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 10px 10px 8px;
+  text-align: left;
+  text-transform: uppercase;
+  vertical-align: top;
+}
+
+.autonomy-tableCell {
+  border-top: 1px solid rgba(226, 232, 240, 0.82);
+  color: #0f172a;
+  padding: 10px;
+  vertical-align: top;
+}
+
+.autonomy-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
+  padding-top: 12px;
+}
+
+.autonomy-formTitle {
+  color: #10233c;
+  font-weight: 800;
+}
+
+.autonomy-formGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.autonomy-formGrid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.autonomy-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.autonomy-field--wide {
+  grid-column: span 3;
+}
+
+.autonomy-fieldLabel {
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.autonomy-input,
+.autonomy-select,
+.autonomy-textarea {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.autonomy-textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.autonomy-toggleRow {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.autonomy-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.autonomy-killSummary,
+.autonomy-killControls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.autonomy-killMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #475569;
+  font-size: 0.88rem;
+}
+
+.autonomy-stylePanel,
+.autonomy-selectedRunSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.autonomy-styleSummary,
+.autonomy-selectedRunSummary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+@media (max-width: 1320px) {
+  .autonomy-grid--threeColumn {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1120px) {
+  .autonomy-grid--twoColumn,
+  .autonomy-grid--threeColumn,
+  .autonomy-formGrid--three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .autonomy-field--wide {
+    grid-column: auto;
+  }
+
+  .autonomy-workspaceHeader,
+  .autonomy-killBar,
+  .autonomy-sectionHeader {
+    flex-direction: column;
+  }
+
+  .autonomy-workspaceControls {
+    align-items: flex-start;
+  }
+}

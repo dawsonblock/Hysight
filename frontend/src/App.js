@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import HCAChat from "@/components/HCAChat";
 import MemoryBrowser from "@/components/MemoryBrowser";
 import OperatorConsole from "@/components/OperatorConsole";
+import AutonomyWorkspace from "@/features/autonomy/AutonomyWorkspace";
 import { Toaster } from "@/components/ui/toaster";
 
 const SELECTED_RUN_STORAGE_KEY = "hysight:selected-run-id";
@@ -27,6 +28,11 @@ const WORKSPACE_VIEWS = [
     label: "Memory",
     description: "Search retained context, facts, traces, and procedures.",
   },
+  {
+    id: "autonomy",
+    label: "Autonomy",
+    description: "Inspect the bounded autonomy supervisor, agents, schedules, and escalations.",
+  },
 ];
 
 const GUIDE_ITEMS = [
@@ -44,6 +50,11 @@ const GUIDE_ITEMS = [
     title: "Reuse remembered context",
     description:
       "Open Memory to inspect stored traces, facts, and procedures before starting another run or cleaning up stale records.",
+  },
+  {
+    title: "Operate the control plane",
+    description:
+      "Open Autonomy to inspect bounded operator-style control state, manage agents and schedules, and jump back into replay when a run needs review.",
   },
 ];
 
@@ -206,6 +217,11 @@ function App() {
     }
   };
 
+  const handleOpenRunFromAutonomy = (runId) => {
+    handleSelectRun(runId);
+    setActiveView("runs");
+  };
+
   const renderWorkspace = () => {
     if (activeView === "runs") {
       return (
@@ -251,6 +267,30 @@ function App() {
               title="Memory workspace"
               subtitle="Search, inspect, and clean up retained context."
               variant="embedded"
+            />
+          </div>
+        </section>
+      );
+    }
+
+    if (activeView === "autonomy") {
+      return (
+        <section className="workspace-column workspace-column--full">
+          <div className="workspace-context">
+            <div>
+              <div className="workspace-eyebrow">Autonomy control plane</div>
+              <h2 className="workspace-title">Inspect bounded autonomy without leaving operator replay.</h2>
+              <p className="workspace-description">
+                Use this workspace to inspect supervisor state, control kill-switch behavior,
+                manage agents and schedules, and link active autonomous work back into the
+                ordinary Runs surface.
+              </p>
+            </div>
+          </div>
+          <div className="workspace-surface workspace-surface--full">
+            <AutonomyWorkspace
+              onOpenRun={handleOpenRunFromAutonomy}
+              selectedRunId={selectedRunId}
             />
           </div>
         </section>
@@ -320,7 +360,8 @@ function App() {
               <h1 className="shell-title">Guide the agent without losing control.</h1>
               <p className="shell-subtitle">
                 Start in Assist for live goals, switch to Runs for replay-backed
-                inspection, and open Memory when you need retained context.
+                inspection, open Memory when you need retained context, and use
+                Autonomy for the bounded control plane.
               </p>
             </div>
 

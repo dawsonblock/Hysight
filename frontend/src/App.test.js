@@ -56,6 +56,18 @@ jest.mock("@/components/MemoryBrowser", () => ({
   },
 }));
 
+jest.mock("@/features/autonomy/AutonomyWorkspace", () => ({
+  __esModule: true,
+  default: function MockAutonomyWorkspace({ onOpenRun, selectedRunId }) {
+    return (
+      <div data-testid="autonomy-workspace">
+        <div data-testid="autonomy-selected-run">{selectedRunId || "none"}</div>
+        <button onClick={() => onOpenRun("run-from-autonomy")}>Open autonomy run</button>
+      </div>
+    );
+  },
+}));
+
 jest.mock("@/components/ui/toaster", () => ({
   __esModule: true,
   Toaster: function MockToaster() {
@@ -74,7 +86,7 @@ afterEach(() => {
   window.history.pushState({}, "", "/");
 });
 
-test("keeps run selection synced while switching between the new workspaces", async () => {
+test("keeps run selection synced while switching between all operator workspaces", async () => {
   const user = userEvent.setup();
 
   render(<App />);
@@ -118,5 +130,25 @@ test("keeps run selection synced while switching between the new workspaces", as
     expect(window.localStorage.getItem("hysight:selected-run-id")).toBe(
       "run-observed"
     );
+  });
+
+  await user.click(screen.getByRole("button", { name: /^Autonomy/ }));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("autonomy-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("autonomy-selected-run")).toHaveTextContent(
+      "run-observed"
+    );
+    expect(window.location.search).toContain("view=autonomy");
+  });
+
+  await user.click(screen.getByRole("button", { name: "Open autonomy run" }));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("selected-run-id")).toHaveTextContent(
+      "run-from-autonomy"
+    );
+    expect(window.location.search).toContain("run=run-from-autonomy");
+    expect(window.location.search).toContain("view=runs");
   });
 });

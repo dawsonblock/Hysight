@@ -108,7 +108,7 @@
 .shell-guideGrid {
     display: grid;
     gap: 14px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .shell-guideCard {
@@ -133,7 +133,7 @@
 .shell-nav {
     display: grid;
     gap: 10px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     flex: 1;
 }
 
@@ -217,7 +217,8 @@
 }
 
 .shell-workspace--runs,
-.shell-workspace--memory {
+.shell-workspace--memory,
+.shell-workspace--autonomy {
     grid-template-columns: minmax(0, 1fr);
 }
 
@@ -276,6 +277,20 @@
     }
 
     .shell-workspace--assist {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 920px) {
+    .shell-nav,
+    .shell-guideGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .shell-nav,
+    .shell-guideGrid {
         grid-template-columns: minmax(0, 1fr);
     }
 }
