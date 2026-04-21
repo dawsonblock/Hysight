@@ -11,7 +11,6 @@ import {
   enableAutonomyKillSwitch,
   enableAutonomySchedule,
   getAutonomyStatus,
-  getRunSummary,
   listAutonomyAgents,
   listAutonomyBudgets,
   listAutonomyCheckpoints,
@@ -22,9 +21,12 @@ import {
   pauseAutonomyAgent,
   resumeAutonomyAgent,
   stopAutonomyAgent,
+} from "@/lib/autonomy-api";
+import {
+  getRunSummary,
 } from "@/lib/api";
 
-jest.mock("@/lib/api", () => ({
+jest.mock("@/lib/autonomy-api", () => ({
   cancelAutonomyInboxItem: jest.fn(),
   clearAutonomyKillSwitch: jest.fn(),
   createAutonomyAgent: jest.fn(),
@@ -45,6 +47,10 @@ jest.mock("@/lib/api", () => ({
   pauseAutonomyAgent: jest.fn(),
   resumeAutonomyAgent: jest.fn(),
   stopAutonomyAgent: jest.fn(),
+}));
+
+jest.mock("@/lib/api", () => ({
+  getRunSummary: jest.fn(),
   toErrorMessage: jest.fn((error, fallback) => error?.message || fallback),
 }));
 

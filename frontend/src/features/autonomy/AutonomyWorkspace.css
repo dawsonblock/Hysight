@@ -135,6 +135,12 @@
   color: #047857;
 }
 
+.autonomy-panelMessage--warning {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(255, 251, 235, 0.95);
+  color: #b45309;
+}
+
 .autonomy-metricGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
