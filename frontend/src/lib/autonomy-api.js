@@ -7,6 +7,9 @@ const autonomyRunLinkSchema = z.object({
   agent_id: z.string(),
   trigger_id: z.string(),
   run_id: z.string(),
+  run_status: z.string().optional(),
+  last_state: z.string().nullable().optional(),
+  last_decision: z.string().nullable().optional(),
 }).passthrough();
 
 const autonomyBudgetLedgerSchema = z.object({

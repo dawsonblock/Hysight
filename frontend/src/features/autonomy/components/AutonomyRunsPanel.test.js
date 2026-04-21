@@ -31,13 +31,6 @@ function renderAutonomyRunsPanel(overrides = {}) {
     onOpenRun: jest.fn(),
     resourceErrors: {
       runs: "Runs degraded",
-      runSummaries: "Run summaries degraded",
-    },
-    runSummaries: {
-      "run-autonomy-1": {
-        goal: "Review release drift",
-        state: "awaiting_approval",
-      },
     },
     selectedRunId: "run-autonomy-1",
     ...overrides,
@@ -53,7 +46,6 @@ test("shows degraded run-state messages and routes replay through the existing r
   const props = renderAutonomyRunsPanel();
 
   expect(screen.getByText("Runs degraded")).toBeInTheDocument();
-  expect(screen.getByText("Run summaries degraded")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Viewing in Runs" }));
 

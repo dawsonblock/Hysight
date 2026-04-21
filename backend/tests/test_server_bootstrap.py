@@ -451,6 +451,8 @@ def test_frontend_uses_shared_api_client_only():
     allowed_frontend_api_files = {
         "frontend/src/lib/api.js",
         "frontend/src/lib/api.test.js",
+        "frontend/src/lib/autonomy-api.js",
+        "frontend/src/lib/autonomy-api.test.js",
     }
 
     for path in frontend_root.rglob("*.js"):

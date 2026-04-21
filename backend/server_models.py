@@ -217,6 +217,9 @@ class AutonomyRunLinkResponse(BackendModel):
     agent_id: str
     trigger_id: str
     run_id: str
+    run_status: str = ""
+    last_state: Optional[str] = None
+    last_decision: Optional[str] = None
 
 
 class AutonomyRunListResponse(BackendModel):

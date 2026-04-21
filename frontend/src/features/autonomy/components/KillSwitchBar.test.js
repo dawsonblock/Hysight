@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import KillSwitchBar from "@/features/autonomy/components/KillSwitchBar";
 
@@ -10,8 +10,6 @@ function renderKillSwitchBar(overrides = {}) {
       kill_switch_reason: null,
       kill_switch_set_at: "2026-04-21T10:00:00Z",
     },
-    killReason: "",
-    onKillReasonChange: jest.fn(),
     onSetKillSwitch: jest.fn(),
     ...overrides,
   };
@@ -21,24 +19,26 @@ function renderKillSwitchBar(overrides = {}) {
   return props;
 }
 
-test("routes kill-switch activation with the operator reason", async () => {
+test("opens dialog on Kill autonomy and calls onSetKillSwitch with reason", async () => {
   const user = userEvent.setup();
   const props = renderKillSwitchBar();
 
-  fireEvent.change(
-    screen.getByPlaceholderText("Operator reason recorded with kill-switch activation"),
-    { target: { value: "Operator hold" } }
-  );
-
-  expect(props.onKillReasonChange).toHaveBeenCalledWith("Operator hold");
   expect(screen.getByRole("button", { name: "Clear kill switch" })).toBeDisabled();
 
   await user.click(screen.getByRole("button", { name: "Kill autonomy" }));
 
-  expect(props.onSetKillSwitch).toHaveBeenCalledWith(true);
+  expect(await screen.findByText("Activate kill switch?")).toBeInTheDocument();
+
+  await user.type(
+    screen.getByPlaceholderText("Operator reason recorded with kill-switch activation"),
+    "Operator hold"
+  );
+  await user.click(screen.getByRole("button", { name: "Activate kill switch" }));
+
+  expect(props.onSetKillSwitch).toHaveBeenCalledWith(true, "Operator hold");
 });
 
-test("routes kill-switch clearing when the backend reports an active stop", async () => {
+test("opens dialog on Clear kill switch and calls onSetKillSwitch with null reason", async () => {
   const user = userEvent.setup();
   const props = renderKillSwitchBar({
     autonomyStatus: {
@@ -46,12 +46,28 @@ test("routes kill-switch clearing when the backend reports an active stop", asyn
       kill_switch_reason: "Operator hold",
       kill_switch_set_at: "2026-04-21T10:00:00Z",
     },
-    killReason: "Operator hold",
   });
 
   expect(screen.getByRole("button", { name: "Kill autonomy" })).toBeDisabled();
 
   await user.click(screen.getByRole("button", { name: "Clear kill switch" }));
 
-  expect(props.onSetKillSwitch).toHaveBeenCalledWith(false);
+  expect(await screen.findByText("Clear kill switch?")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Confirm clear" }));
+
+  expect(props.onSetKillSwitch).toHaveBeenCalledWith(false, null);
+});
+
+test("cancel closes the dialog without calling onSetKillSwitch", async () => {
+  const user = userEvent.setup();
+  const props = renderKillSwitchBar();
+
+  await user.click(screen.getByRole("button", { name: "Kill autonomy" }));
+  await screen.findByText("Activate kill switch?");
+
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  expect(props.onSetKillSwitch).not.toHaveBeenCalled();
+  expect(screen.queryByText("Activate kill switch?")).not.toBeInTheDocument();
 });

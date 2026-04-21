@@ -1,7 +1,28 @@
+import { useState } from "react";
 import { formatTimestamp } from "@/features/autonomy/formatters";
 import { ActionButton, SectionHeader, StatusPill } from "@/features/autonomy/components/ui";
+import KillSwitchConfirmDialog from "@/features/autonomy/components/KillSwitchConfirmDialog";
 
-export default function KillSwitchBar({ actionKey, autonomyStatus, killReason, onKillReasonChange, onSetKillSwitch }) {
+export default function KillSwitchBar({ actionKey, autonomyStatus, onSetKillSwitch }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [pendingActive, setPendingActive] = useState(false);
+  const [killReason, setKillReason] = useState("");
+
+  function openDialog(nextActive) {
+    setPendingActive(nextActive);
+    setKillReason("");
+    setDialogOpen(true);
+  }
+
+  function handleConfirm() {
+    setDialogOpen(false);
+    onSetKillSwitch(pendingActive, killReason.trim() || null);
+  }
+
+  function handleCancel() {
+    setDialogOpen(false);
+  }
+
   return (
     <section className="autonomy-panel autonomy-panel--kill">
       <SectionHeader
@@ -20,20 +41,11 @@ export default function KillSwitchBar({ actionKey, autonomyStatus, killReason, o
           </div>
         </div>
         <div className="autonomy-killControls">
-          <label className="autonomy-field autonomy-field--wide">
-            <span className="autonomy-fieldLabel">Kill reason</span>
-            <input
-              className="autonomy-input"
-              onChange={(event) => onKillReasonChange(event.target.value)}
-              placeholder="Operator reason recorded with kill-switch activation"
-              value={killReason}
-            />
-          </label>
           <div className="autonomy-inlineActions">
             <ActionButton
               busy={actionKey === "kill"}
               disabled={autonomyStatus?.kill_switch_active}
-              onClick={() => onSetKillSwitch(true)}
+              onClick={() => openDialog(true)}
               tone="danger"
             >
               Kill autonomy
@@ -41,7 +53,7 @@ export default function KillSwitchBar({ actionKey, autonomyStatus, killReason, o
             <ActionButton
               busy={actionKey === "unkill"}
               disabled={!autonomyStatus?.kill_switch_active}
-              onClick={() => onSetKillSwitch(false)}
+              onClick={() => openDialog(false)}
               tone="success"
             >
               Clear kill switch
@@ -49,6 +61,14 @@ export default function KillSwitchBar({ actionKey, autonomyStatus, killReason, o
           </div>
         </div>
       </div>
+      <KillSwitchConfirmDialog
+        open={dialogOpen}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+        nextActive={pendingActive}
+        reason={killReason}
+        onReasonChange={setKillReason}
+      />
     </section>
   );
 }

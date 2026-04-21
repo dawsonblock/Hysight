@@ -503,6 +503,9 @@ def register_autonomy_routes(router: APIRouter) -> None:
                     agent_id=c.agent_id,
                     trigger_id=c.trigger_id,
                     run_id=c.run_id or "",
+                    run_status=c.status.value,
+                    last_state=c.last_state,
+                    last_decision=c.last_decision,
                 )
                 for c in checkpoints
                 if c.run_id

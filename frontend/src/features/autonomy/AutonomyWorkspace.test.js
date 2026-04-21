@@ -171,7 +171,7 @@ const INBOX_FIXTURE = {
 
 const RUNS_FIXTURE = {
   runs: [
-    { agent_id: "agent-1", trigger_id: "trigger-1", run_id: "run-autonomy-1" },
+    { agent_id: "agent-1", trigger_id: "trigger-1", run_id: "run-autonomy-1", run_status: "awaiting_approval", last_state: "awaiting_approval", last_decision: "escalate" },
   ],
 };
 
@@ -257,7 +257,6 @@ function renderWorkspace(props = {}) {
 
 beforeEach(() => {
   primeMocks();
-  window.confirm = jest.fn(() => true);
 });
 
 afterEach(() => {
@@ -287,16 +286,19 @@ test("shows confirmation for kill switch changes and calls the backend", async (
 
   await screen.findByText("Kill switch");
 
+  await user.click(screen.getByRole("button", { name: "Kill autonomy" }));
+
+  await screen.findByText("Activate kill switch?");
+
   await user.type(
     screen.getByPlaceholderText(
       "Operator reason recorded with kill-switch activation"
     ),
     "Operator hold"
   );
-  await user.click(screen.getByRole("button", { name: "Kill autonomy" }));
+  await user.click(screen.getByRole("button", { name: "Activate kill switch" }));
 
   await waitFor(() => {
-    expect(window.confirm).toHaveBeenCalled();
     expect(enableAutonomyKillSwitch).toHaveBeenCalledWith({
       reason: "Operator hold",
     });

@@ -8,7 +8,6 @@ export default function AutonomyRunsPanel({
   latestCheckpointByRun,
   onOpenRun,
   resourceErrors,
-  runSummaries,
   selectedRunId,
 }) {
   return (
@@ -19,7 +18,6 @@ export default function AutonomyRunsPanel({
         description="Inspect live autonomy run links and jump back into the existing replay surface."
       />
       {resourceErrors.runs ? <PanelMessage text={resourceErrors.runs} tone="error" /> : null}
-      {resourceErrors.runSummaries ? <PanelMessage text={resourceErrors.runSummaries} tone="error" /> : null}
       <div className="autonomy-tableWrap">
         <table className="autonomy-table">
           <thead>
@@ -41,18 +39,17 @@ export default function AutonomyRunsPanel({
             ) : (
               autonomyRuns.map((runRecord) => {
                 const checkpoint = latestCheckpointByRun[runRecord.run_id];
-                const summary = runSummaries[runRecord.run_id];
                 const runEscalation = escalations.find((item) => item.run_id === runRecord.run_id);
                 const isSelectedRun = selectedRunId === runRecord.run_id;
                 return (
                   <tr key={`${runRecord.agent_id}:${runRecord.trigger_id}:${runRecord.run_id}`}>
                     <TableCell>
                       <div className="autonomy-strongCell">{runRecord.run_id}</div>
-                      <div className="autonomy-subtleCell">{summary?.goal || "Goal unavailable"}</div>
+                      <div className="autonomy-subtleCell">{runRecord.last_state || "In progress"}</div>
                     </TableCell>
                     <TableCell>{runRecord.agent_id}</TableCell>
                     <TableCell>{runRecord.trigger_id}</TableCell>
-                    <TableCell>{formatLabel(summary?.state)}</TableCell>
+                    <TableCell>{formatLabel(runRecord.run_status)}</TableCell>
                     <TableCell>{formatLabel(checkpoint?.current_attention_mode)}</TableCell>
                     <TableCell>{formatLabel(checkpoint?.last_decision || autonomyStatus?.last_evaluator_decision)}</TableCell>
                     <TableCell>{formatLabel(checkpoint?.status)}</TableCell>

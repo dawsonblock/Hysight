@@ -48,7 +48,6 @@ export default function AutonomyWorkspace({ onOpenRun, selectedRunId }) {
     inboxForm,
     inboxItems,
     isStaleData,
-    killReason,
     lastAttemptedSyncAt,
     lastSuccessfulSyncAt,
     latestCheckpointByAgent,
@@ -57,17 +56,15 @@ export default function AutonomyWorkspace({ onOpenRun, selectedRunId }) {
     refreshWorkspace,
     refreshing,
     resourceErrors,
-    runSummaries,
     scheduleForm,
     schedules,
     selectedRunSummary,
-    setKillReason,
     supervisorTone,
   } = useAutonomyWorkspaceController({ selectedRunId });
 
   const degradedResourcesLabel = degradedResourceKeys
     .slice(0, 3)
-    .map((resourceKey) => (resourceKey === "runSummaries" ? "run summaries" : resourceKey))
+    .map((resourceKey) => resourceKey)
     .join(", ");
   const additionalDegradedResources = degradedResourceKeys.length > 3
     ? `, and ${degradedResourceKeys.length - 3} more`
@@ -132,8 +129,6 @@ export default function AutonomyWorkspace({ onOpenRun, selectedRunId }) {
       <KillSwitchBar
         actionKey={actionKey}
         autonomyStatus={autonomyStatus}
-        killReason={killReason}
-        onKillReasonChange={setKillReason}
         onSetKillSwitch={handleKillSwitchChange}
       />
 
@@ -189,11 +184,7 @@ export default function AutonomyWorkspace({ onOpenRun, selectedRunId }) {
           escalations={escalations}
           latestCheckpointByRun={latestCheckpointByRun}
           onOpenRun={onOpenRun}
-          resourceErrors={{
-            runs: resourceErrors.runs,
-            runSummaries: resourceErrors.runSummaries,
-          }}
-          runSummaries={runSummaries}
+          resourceErrors={{ runs: resourceErrors.runs }}
           selectedRunId={selectedRunId}
         />
       </div>
