@@ -124,6 +124,22 @@ def _resolve_commit_sha() -> str:
     return result.stdout.strip() or "local-worktree"
 
 
+def _resolve_repo_fingerprint() -> str | None:
+    try:
+        result = subprocess.run(
+            ["sh", "-c", "find . -type f | sort | shasum | shasum | awk '{print $1}'"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except Exception:
+        return None
+
+    fingerprint = result.stdout.strip()
+    return fingerprint or None
+
+
 def write_proof_receipt(
     *,
     output_path: Path,
@@ -150,6 +166,7 @@ def write_proof_receipt(
         "timestamp": timestamp,
         "generated_at": timestamp,
         "commit_sha": _resolve_commit_sha(),
+        "repo_fingerprint": _resolve_repo_fingerprint(),
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "proof_tier": proof_tier,

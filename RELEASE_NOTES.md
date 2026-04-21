@@ -1,5 +1,22 @@
 # Release Notes
 
+## hysight-41 (2026-04-21)
+
+**Base commit:** `00ac024248272485bcf687635d7c7b1f97f567db`
+**Classification:** sealed full-proof release
+
+- Baseline: 123/0 — pipeline, backend, contract suites
+- Autonomy: 61/0
+- Live sidecar receipt: 13/0 (2 skipped, supervisorctl)
+- Live sidecar parity: 4/0 (additive evidence)
+- Sidecar no-fallback: PASS (`NO_FALLBACK_EXIT=1`)
+- Frontend: 20/0 on Node `24.15.0` and Yarn `1.22.22`
+- Live Mongo: not rerun; historical only
+- Historical Hysight 27–39 summaries and non-regenerated receipts remain audit history only and are not proof for 41
+- See `RELEASE_SEAL_HYSIGHT41.md`, `FULL_PROOF_SUMMARY_HYSIGHT41.md`, and `OPTIONAL_PROOF_SUMMARY_HYSIGHT41.md` for version-specific proof evidence.
+
+---
+
 ## hysight-38 (2026-04-20)
 
 **Commit:** `9a1bb3274476c0e7ea7e1af818ede4f235a5a51e`

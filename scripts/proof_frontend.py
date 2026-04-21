@@ -202,7 +202,7 @@ def _validate_runtime(stage_results: List[Dict[str, Any]]) -> tuple[str, str]:
     )
     if runtime_check.returncode != 0:
         raise FrontendProofError(
-            "Frontend runtime verification failed. Use Node 20.20.2 and Yarn 1.22.22."
+            "Frontend runtime verification failed. Use Node 24.15.0 and Yarn 1.22.22."
         )
     return node_version, yarn_version
 

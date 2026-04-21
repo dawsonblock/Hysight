@@ -115,7 +115,7 @@ Important bootstrap facts:
 - `make venv` installs `backend/requirements-test.txt`, which installs editable `./hca`.
 - The repo root is a workspace/meta-project; `python -m pip install -e '.[dev]'` at the root installs tooling only and does not install the runtime package surface.
 - The default proof surface does not require MongoDB or a running sidecar.
-- The frontend is pinned to Node 20 and Yarn 1.22.22 and validates its runtime on install.
+- The frontend is pinned to Node 24 and Yarn 1.22.22 and validates its runtime on install.
 
 ## Proof Surfaces
 
@@ -129,7 +129,7 @@ Current baseline expectations:
 | Backend baseline | 98 |
 | Contract conformance | 18 |
 | Overall baseline | 123 |
-| Autonomy optional | 50 |
+| Autonomy optional | 61 |
 
 Supported proof tiers:
 
@@ -168,23 +168,27 @@ Frontend proof details:
 
 ## Release Seal Status
 
-The current Hysight-main 36 release candidate was freshly sealed on 2026-04-20 from commit `78b5affefe6780694e69512e14e75038fda68dee`.
+The current Hysight-main 41 release candidate is freshly sealed from base commit
+`00ac024248272485bcf687635d7c7b1f97f567db`.
 
-**Classification: sealed local-core release**
+**Classification: sealed full-proof release**
 
 - Packaging install: PASS via `python -m pip install -e '.[dev]'`
 - Supported bootstrap: PASS via `make venv`
 - `.pkg-venv` contamination check: PASS
 - Baseline proof: 123 passed, 0 failed (7 pipeline + 98 backend-baseline + 18 contract)
 - Autonomy optional proof: 61 passed, 0 failed
-- Live Rust sidecar proof: 13 passed, 2 skipped (supervisorctl not in PATH — expected)
-- Sidecar no-fallback check: N/A — backend not running as standalone service in test mode; structural enforcement via `MEMORY_BACKEND=rust`
-- Frontend proof: UNPROVEN — Node 20.x unavailable at seal time (host has v25.9.0, frontend pins 20.x)
+- Live Rust sidecar receipt: 13 passed, 2 skipped, 0 failed
+- Live sidecar parity: 4 passed, 0 failed (additive evidence)
+- Sidecar no-fallback check: PASS — stopped-sidecar rust-mode backend exits fail-closed (`NO_FALLBACK_EXIT=1`)
+- Frontend proof: 20 passed, 0 failed on Node `24.15.0` and Yarn `1.22.22`
 - Live Mongo proof was not rerun in this release seal and is not counted as fresh evidence
 
-Older Hysight 27–36 summary files remain in the repository as audit history only and are not proof for 38.
+Older Hysight 27–39 summary files remain in the repository as audit history only and are
+not proof for 41.
 
-Authoritative 38 release-seal evidence lives in `artifacts/proof/release_env_hysight38.txt`, `artifacts/proof/release_quarantine_hysight38.md`, and `RELEASE_SEAL_HYSIGHT38.md`.
+Authoritative 41 release-seal evidence lives in `artifacts/proof/release_env_hysight41.txt`,
+`artifacts/proof/release_quarantine_hysight41.md`, and `RELEASE_SEAL_HYSIGHT41.md`.
 
 ## Run Modes
 

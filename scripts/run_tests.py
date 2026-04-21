@@ -906,7 +906,7 @@ def main() -> int:
         "--frontend",
         action="store_true",
         help=(
-            "Run the opt-in frontend proof tier. Requires Node 20.x, "
+            "Run the opt-in frontend proof tier. Requires Node 24.x, "
             "Yarn 1.22.22, installed frontend dependencies, and the repo-local "
             "Python test environment."
         ),

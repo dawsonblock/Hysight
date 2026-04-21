@@ -537,7 +537,7 @@ def test_frontend_proof_workflow_runs_documented_proof_script():
     assert "make test-bootstrap-frontend" in workflow
     assert "make proof-frontend" in workflow
     assert "frontend-proof-receipt" in workflow
-    assert 'node-version: "20"' in workflow
+    assert 'node-version: "24"' in workflow
     assert "actions/upload-artifact@v4" in workflow
     assert "artifacts/proof/frontend.json" in workflow
 

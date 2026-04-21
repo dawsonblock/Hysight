@@ -1,10 +1,10 @@
 {
   "command": "/Users/dawsonblock/Hysight/.venv/bin/python scripts/run_tests.py --autonomy",
-  "commit_sha": "af16597554ff8c2b8b00654657bcbed1e46e2097",
+  "commit_sha": "00ac024248272485bcf687635d7c7b1f97f567db",
   "environment_mode": "repo_local_venv",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-20T23:31:38.031601+00:00",
+  "generated_at": "2026-04-21T05:28:57.239595+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -52,10 +52,11 @@
   "platform": "macOS-26.2-arm64-arm-64bit",
   "proof_tier": "autonomy-optional",
   "python_version": "3.9.7",
+  "repo_fingerprint": "b56fb798e7ada6dfc57f1f84223cfde02185720b",
   "schema_version": 2,
   "service_connection_mode": "none",
   "service_endpoint": "n/a",
   "skipped_test_count": 0,
-  "timestamp": "2026-04-20T23:31:38.031601+00:00",
+  "timestamp": "2026-04-21T05:28:57.239595+00:00",
   "total_test_count": 61
 }

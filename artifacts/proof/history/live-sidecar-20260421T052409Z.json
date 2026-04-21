@@ -4,7 +4,7 @@
   "environment_mode": "cargo_local_sidecar",
   "error_test_count": 0,
   "failed_test_count": 0,
-  "generated_at": "2026-04-21T05:24:08.887557+00:00",
+  "generated_at": "2026-04-21T05:24:09.693689+00:00",
   "junit_xml": null,
   "metadata": {
     "covered_proof_steps": [
@@ -68,6 +68,6 @@
   "service_connection_mode": "cargo-run:memvid_service",
   "service_endpoint": "http://localhost:53104",
   "skipped_test_count": 2,
-  "timestamp": "2026-04-21T05:24:08.887557+00:00",
+  "timestamp": "2026-04-21T05:24:09.693689+00:00",
   "total_test_count": 15
 }

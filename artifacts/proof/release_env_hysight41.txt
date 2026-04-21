@@ -1,0 +1,21 @@
+REPO_PATH=/Users/dawsonblock/Hysight
+BASE_COMMIT_SHA=00ac024248272485bcf687635d7c7b1f97f567db
+PRE_SEAL_WORKTREE_STATUS=0
+PRE_SEAL_TIMESTAMP=2026-04-21T05:20:00Z
+PRE_SEAL_REPO_FINGERPRINT=8278e8a724dc962475e47f7674f297b26f0e2d7d
+LAST_METADATA_REFRESH_AT=2026-04-21T05:29:12Z
+PACKAGE_FINGERPRINT_SNAPSHOT=b56fb798e7ada6dfc57f1f84223cfde02185720b
+
+NOTE=Proof receipts record proof-time fingerprints. Writing release metadata changes the full-tree fingerprint, so this file preserves the clean pre-seal fingerprint and the last package snapshot separately.
+
+Darwin Mac.gateway.sasktel.net 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:07:05 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6020 arm64
+
+ProductName:		macOS
+ProductVersion:		26.2
+BuildVersion:		25C56
+
+Python 3.9.7
+rustc 1.94.0 (4a4ef493e 2026-03-02)
+cargo 1.94.0 (85eff7c80 2026-01-15)
+v24.15.0
+1.22.22

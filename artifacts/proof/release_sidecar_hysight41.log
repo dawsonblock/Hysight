@@ -1,0 +1,38 @@
+SIDECAR_PORT=53104
+Running 1 proof step(s).
+
+==> [Backend live sidecar proof]
+    MEMORY_BACKEND=rust HCA_STORAGE_ROOT=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-2y6h2xu9 MEMORY_STORAGE_DIR=/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/hysight-proof-2y6h2xu9/memory RUN_MEMVID_TESTS=1 MEMORY_SERVICE_URL=http://localhost:53104 /Users/dawsonblock/Hysight/.venv/bin/python -m pytest backend/tests/test_memvid_sidecar.py -q --run-live -ra --strict-markers --junitxml=/Users/dawsonblock/Hysight/test_reports/pytest/backend-live-sidecar-proof.xml
+..........ss...                                                          [100%]
+- generated xml file: /Users/dawsonblock/Hysight/test_reports/pytest/backend-live-sidecar-proof.xml -
+=========================== short test summary info ============================
+SKIPPED [1] backend/tests/test_memvid_sidecar.py:452: requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:53104, and supervisorctl in PATH
+SKIPPED [1] backend/tests/test_memvid_sidecar.py:466: requires RUN_MEMVID_TESTS=1, a live memvid sidecar at http://localhost:53104, and supervisorctl in PATH
+13 passed, 2 skipped in 3.02s
+
+All 1 proof step(s) passed (13 passed, 2 skipped).
+[2m2026-04-21T05:24:25.080213Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m memvid-sidecar v3 (Tantivy BM25 + HNSW semantic + session isolation)
+[2m2026-04-21T05:24:25.081177Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Creating store: /tmp/hysight41-sidecar-parity/user_default/memory.mv2
+[2m2026-04-21T05:24:25.086173Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T05:24:25.110812Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/private/var/folders/xt/jh84t2kj6hl26tk5qx3m_28h0000gn/T/.tmp8WuDYs/meta.json" was modified
+[2m2026-04-21T05:24:25.111258Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T05:24:25.111778Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
+[2m2026-04-21T05:24:25.111784Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
+[2m2026-04-21T05:24:25.111974Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T05:24:25.120042Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T05:24:25.120050Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T05:24:25.120471Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-04-21T05:24:25.120579Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 0
+[2m2026-04-21T05:24:25.120590Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 0
+[2m2026-04-21T05:24:25.120602Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-04-21T05:24:25.129050Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-04-21T05:24:25.129115Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-04-21T05:24:25.129601Z[0m [32m INFO[0m [2mmemvid_core::memvid::mutation[0m[2m:[0m rewrite_toc_footer: about to serialize TOC [3mvec_segments[0m[2m=[0m0 [3mlex_segments[0m[2m=[0m0 [3mtime_segments[0m[2m=[0m0 [3mfooter_offset[0m[2m=[0m69632 [3mdata_end[0m[2m=[0m69632
+[2m2026-04-21T05:24:25.138565Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Scanning 0 frames…
+[2m2026-04-21T05:24:25.138581Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Loaded 0 memories (0 with embeddings).
+[2m2026-04-21T05:24:25.140092Z[0m [32m INFO[0m [2mmemvid_sidecar[0m[2m:[0m Listening on 0.0.0.0:53584
+=== SIDECAR PARITY ===
+
+no tests ran in 0.01s
+....                                                                     [100%]
+4 passed in 2.95s
