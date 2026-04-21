@@ -10,14 +10,7 @@ import {
   disableAutonomySchedule,
   enableAutonomyKillSwitch,
   enableAutonomySchedule,
-  getAutonomyStatus,
-  listAutonomyAgents,
-  listAutonomyBudgets,
-  listAutonomyCheckpoints,
-  listAutonomyEscalations,
-  listAutonomyInbox,
-  listAutonomyRuns,
-  listAutonomySchedules,
+  getAutonomyWorkspace,
   pauseAutonomyAgent,
   resumeAutonomyAgent,
   stopAutonomyAgent,
@@ -35,15 +28,7 @@ jest.mock("@/lib/autonomy-api", () => ({
   disableAutonomySchedule: jest.fn(),
   enableAutonomyKillSwitch: jest.fn(),
   enableAutonomySchedule: jest.fn(),
-  getAutonomyStatus: jest.fn(),
-  getRunSummary: jest.fn(),
-  listAutonomyAgents: jest.fn(),
-  listAutonomyBudgets: jest.fn(),
-  listAutonomyCheckpoints: jest.fn(),
-  listAutonomyEscalations: jest.fn(),
-  listAutonomyInbox: jest.fn(),
-  listAutonomyRuns: jest.fn(),
-  listAutonomySchedules: jest.fn(),
+  getAutonomyWorkspace: jest.fn(),
   pauseAutonomyAgent: jest.fn(),
   resumeAutonomyAgent: jest.fn(),
   stopAutonomyAgent: jest.fn(),
@@ -216,14 +201,26 @@ const RUN_SUMMARY_FIXTURE = {
 };
 
 function primeMocks(overrides = {}) {
-  getAutonomyStatus.mockResolvedValue(overrides.status || STATUS_FIXTURE);
-  listAutonomyAgents.mockResolvedValue(overrides.agents || AGENTS_FIXTURE);
-  listAutonomySchedules.mockResolvedValue(overrides.schedules || SCHEDULES_FIXTURE);
-  listAutonomyInbox.mockResolvedValue(overrides.inbox || INBOX_FIXTURE);
-  listAutonomyRuns.mockResolvedValue(overrides.runs || RUNS_FIXTURE);
-  listAutonomyCheckpoints.mockResolvedValue(overrides.checkpoints || CHECKPOINTS_FIXTURE);
-  listAutonomyBudgets.mockResolvedValue(overrides.budgets || BUDGETS_FIXTURE);
-  listAutonomyEscalations.mockResolvedValue(overrides.escalations || ESCALATIONS_FIXTURE);
+  const statusData = overrides.status || STATUS_FIXTURE;
+  const agentsData = overrides.agents || AGENTS_FIXTURE;
+  const schedulesData = overrides.schedules || SCHEDULES_FIXTURE;
+  const inboxData = overrides.inbox || INBOX_FIXTURE;
+  const runsData = overrides.runs || RUNS_FIXTURE;
+  const checkpointsData = overrides.checkpoints || CHECKPOINTS_FIXTURE;
+  const budgetsData = overrides.budgets || BUDGETS_FIXTURE;
+  const escalationsData = overrides.escalations || ESCALATIONS_FIXTURE;
+  getAutonomyWorkspace.mockResolvedValue({
+    snapshot_at: "2026-04-21T10:00:00Z",
+    status: statusData,
+    agents: agentsData.agents || agentsData || [],
+    schedules: schedulesData.schedules || schedulesData || [],
+    inbox: inboxData.items || inboxData || [],
+    runs: runsData.runs || runsData || [],
+    checkpoints: checkpointsData.checkpoints || checkpointsData || [],
+    budgets: budgetsData.ledgers || budgetsData || [],
+    escalations: escalationsData.escalations || escalationsData || [],
+    section_errors: {},
+  });
   getRunSummary.mockResolvedValue(overrides.runSummary || RUN_SUMMARY_FIXTURE);
   enableAutonomyKillSwitch.mockResolvedValue({ active: true, reason: "Operator hold" });
   clearAutonomyKillSwitch.mockResolvedValue({ active: false, reason: null });

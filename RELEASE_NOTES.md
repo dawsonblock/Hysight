@@ -1,5 +1,22 @@
 # Release Notes
 
+## hysight-45 (2026-04-21)
+
+**Base commit:** `189980254f92214198fff7d561ca0405c7ccce82`
+**Classification:** sealed local-core release
+
+- Baseline: 123/0 — pipeline, backend, contract suites
+- Autonomy: 66/0 (+5 aggregate workspace tests)
+- Frontend: 67/0 — all 5 stages (runtime-verify, fixture-drift, lint, Jest, build)
+- Live sidecar: CARRY-FORWARD from hysight-42 (13/0, no sidecar code changed)
+- Live Mongo: not rerun; historical only
+- New: `GET /api/hca/autonomy/workspace` aggregate endpoint — all 9 workspace sections in a single round-trip via `asyncio.gather`
+- New: `getAutonomyWorkspace()` in frontend API client + `useAutonomyPolling.js` migrated from 8-resource polling to single fetch
+- Contract fix: `AutonomyRunLinkSummary` in `contract/schema.json` extended with `run_status`, `last_state`, `last_decision`
+- See `RELEASE_SEAL_HYSIGHT45.md`, `FULL_PROOF_SUMMARY_HYSIGHT45.md`, and `OPTIONAL_PROOF_SUMMARY_HYSIGHT45.md` for version-specific proof evidence.
+
+---
+
 ## hysight-42 (2026-04-21)
 
 **Base commit:** `10966b3bc57905b298563145dba8450d610f9c1c`

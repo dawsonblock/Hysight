@@ -129,7 +129,7 @@ Current baseline expectations:
 | Backend baseline | 98 |
 | Contract conformance | 18 |
 | Overall baseline | 123 |
-| Autonomy optional | 61 |
+| Autonomy optional | 66 |
 
 Supported proof tiers:
 
@@ -168,33 +168,23 @@ Frontend proof details:
 
 ## Release Seal Status
 
-The current Hysight-main 42 release candidate is freshly sealed from base commit
-`10966b3bc57905b298563145dba8450d610f9c1c`.
+The current Hysight-main 45 release is sealed from commit
+`189980254f92214198fff7d561ca0405c7ccce82`.
 
-**Classification: sealed full-proof release**
+**Classification: sealed local-core release**
 
-- Packaging install: PASS via `python -m pip install -e '.[dev]'`
-- Supported bootstrap: PASS via `make venv`
-- `.pkg-venv` contamination check: PASS
 - Baseline proof: 123 passed, 0 failed (7 pipeline + 98 backend-baseline + 18 contract)
-- Autonomy optional proof: 61 passed, 0 failed
-- Live Rust sidecar receipt: 13 passed, 2 skipped, 0 failed
-- Live sidecar parity: 4 passed, 0 failed (additive evidence)
-- Sidecar no-fallback check: PASS — rust-mode backend exits fail-closed when the sidecar is unreachable
-- Frontend proof: 20 passed, 0 failed on Node `24.15.0` and Yarn `1.22.22`
+- Autonomy optional proof: 66 passed, 0 failed (+5 aggregate workspace tests)
+- Frontend proof: 67 passed, 0 failed (all 5 stages)
+- Live Rust sidecar: CARRY-FORWARD from hysight-42 (13/0, no sidecar code changed)
 - Live Mongo proof was not rerun in this release seal and is not counted as fresh evidence
 
-Packaging, bootstrap, baseline, and autonomy were verified from the clean `Hysight-main 42.zip`
-copy; sidecar and frontend were then re-run in a detached worktree at the same base commit.
+Authoritative 45 release-truth documents live in `RELEASE_SEAL_HYSIGHT45.md`,
+`FULL_PROOF_SUMMARY_HYSIGHT45.md`, and `OPTIONAL_PROOF_SUMMARY_HYSIGHT45.md`.
+Quarantine ledger: `artifacts/proof/release_quarantine_hysight45.md`.
 
-Older Hysight 27–41 summary files remain in the repository as audit history only and are not
-proof for 42.
-
-Authoritative 42 release-truth documents live in `RELEASE_SEAL_HYSIGHT42.md`,
-`FULL_PROOF_SUMMARY_HYSIGHT42.md`, and `OPTIONAL_PROOF_SUMMARY_HYSIGHT42.md`. Fresh exact-commit
-artifacts live in `artifacts/proof/release_live_sidecar_receipt_hysight42.json`,
-`artifacts/proof/release_frontend_receipt_hysight42.json`, and
-`artifacts/proof/release_sidecar_no_fallback_hysight42.txt`.
+Older Hysight 27–42 summary files remain in the repository as audit history only and are not
+proof for 45.
 
 ## Run Modes
 
@@ -314,6 +304,7 @@ The frontend and the operator workflows use the same replay-backed backend surfa
 | --- | --- | --- |
 | `GET` | `/api/` | Backend root health message |
 | `GET` | `/api/subsystems` | Database, memory, storage, LLM, and bounded autonomy readiness |
+| `GET` | `/api/hca/autonomy/workspace` | Aggregate workspace snapshot — all 9 sections in a single round-trip |
 | `GET` | `/api/hca/autonomy/status` | Kill switch state, pending escalations, budget ledgers, recent runs, and latest checkpoint summary |
 | `GET` | `/api/hca/autonomy/budgets` | Per-agent durable autonomy budget ledgers |
 | `GET` | `/api/hca/autonomy/escalations` | Pending approval/escalation checkpoints |

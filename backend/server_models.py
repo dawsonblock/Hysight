@@ -301,6 +301,20 @@ class AutonomyEscalationListResponse(BackendModel):
     escalations: List[AutonomyEscalationResponse] = Field(default_factory=list)
 
 
+class AutonomyWorkspaceSnapshot(BackendModel):
+    snapshot_at: datetime
+    status: Optional[AutonomyStatusResponse] = None
+    agents: List[AutonomyAgentResponse] = Field(default_factory=list)
+    schedules: List[AutonomyScheduleResponse] = Field(default_factory=list)
+    inbox: List[AutonomyInboxItemResponse] = Field(default_factory=list)
+    runs: List[AutonomyRunLinkResponse] = Field(default_factory=list)
+    escalations: List[AutonomyEscalationResponse] = Field(default_factory=list)
+    budgets: List[AutonomyBudgetLedgerResponse] = Field(default_factory=list)
+    checkpoints: List[AutonomyCheckpointResponse] = Field(default_factory=list)
+    section_errors: Dict[str, str] = Field(default_factory=dict)
+
+
 AutonomyStatusResponse.model_rebuild()
 AutonomySubsystemStatus.model_rebuild()
 SubsystemsResponse.model_rebuild()
+AutonomyWorkspaceSnapshot.model_rebuild()

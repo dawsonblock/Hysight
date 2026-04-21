@@ -166,3 +166,59 @@ def test_invalid_mode_rejected(app_client):
         json={"name": "x", "mode": "not-a-mode"},
     )
     assert response.status_code == 400
+
+
+def test_workspace_snapshot_empty_state(app_client):
+    snapshot = app_client.get("/api/hca/autonomy/workspace").json()
+    assert snapshot["status"]["enabled"] is True
+    assert isinstance(snapshot["agents"], list)
+    assert isinstance(snapshot["schedules"], list)
+    assert isinstance(snapshot["inbox"], list)
+    assert isinstance(snapshot["runs"], list)
+    assert isinstance(snapshot["checkpoints"], list)
+    assert isinstance(snapshot["budgets"], list)
+    assert isinstance(snapshot["escalations"], list)
+    assert isinstance(snapshot["section_errors"], dict)
+    assert "snapshot_at" in snapshot
+
+
+def test_workspace_snapshot_agent_and_schedule_present(app_client):
+    agent = _create_agent(app_client, name="ws-agent")
+    app_client.post(
+        "/api/hca/autonomy/schedules",
+        json={"agent_id": agent["agent_id"], "interval_seconds": 60},
+    )
+    snapshot = app_client.get("/api/hca/autonomy/workspace").json()
+    agent_ids = [a["agent_id"] for a in snapshot["agents"]]
+    assert agent["agent_id"] in agent_ids
+    assert any(
+        s["agent_id"] == agent["agent_id"] for s in snapshot["schedules"]
+    )
+
+
+def test_workspace_snapshot_run_status_fields_present(app_client):
+    agent = _create_agent(app_client)
+    app_client.post(
+        "/api/hca/autonomy/inbox",
+        json={"agent_id": agent["agent_id"], "goal": "ws-run-goal"},
+    )
+    app_client.post("/api/hca/autonomy/tick")
+    snapshot = app_client.get("/api/hca/autonomy/workspace").json()
+    assert "active_agents" in snapshot["status"]
+    assert "pending_escalations" in snapshot["status"]
+
+
+def test_workspace_snapshot_kill_switch_visible(app_client):
+    app_client.post(
+        "/api/hca/autonomy/kill",
+        json={"active": True, "reason": "ws-test"},
+    )
+    snapshot = app_client.get("/api/hca/autonomy/workspace").json()
+    assert snapshot["status"]["kill_switch_active"] is True
+
+
+def test_workspace_snapshot_escalation_in_section(app_client):
+    # Escalations list is empty in fresh state — just verify the key exists
+    # and is a list (actual escalation routing tested in checkpoint tests).
+    snapshot = app_client.get("/api/hca/autonomy/workspace").json()
+    assert isinstance(snapshot["escalations"], list)

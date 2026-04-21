@@ -440,7 +440,10 @@
       "properties": {
         "agent_id": { "type": "string" },
         "trigger_id": { "type": "string" },
-        "run_id": { "type": "string" }
+        "run_id": { "type": "string" },
+        "run_status": { "type": "string" },
+        "last_state": { "type": ["string", "null"] },
+        "last_decision": { "type": ["string", "null"] }
       }
     },
     "AutonomyBudgetLedgerSummary": {

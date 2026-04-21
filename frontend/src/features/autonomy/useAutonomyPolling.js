@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toErrorMessage } from "@/lib/api";
-import {
-  getAutonomyStatus,
-  listAutonomyAgents,
-  listAutonomyBudgets,
-  listAutonomyCheckpoints,
-  listAutonomyEscalations,
-  listAutonomyInbox,
-  listAutonomyRuns,
-  listAutonomySchedules,
-} from "@/lib/autonomy-api";
+import { getAutonomyWorkspace } from "@/lib/autonomy-api";
 
 const POLL_INTERVAL_MS = 15000;
 const STALE_SYNC_THRESHOLD_MS = POLL_INTERVAL_MS * 2;
@@ -35,17 +26,6 @@ const EMPTY_DATA = {
   budgets: [],
   escalations: [],
 };
-
-const LOADER_ENTRIES = [
-  ["status", getAutonomyStatus],
-  ["agents", listAutonomyAgents],
-  ["schedules", listAutonomySchedules],
-  ["inbox", () => listAutonomyInbox()],
-  ["runs", listAutonomyRuns],
-  ["checkpoints", () => listAutonomyCheckpoints()],
-  ["budgets", listAutonomyBudgets],
-  ["escalations", listAutonomyEscalations],
-];
 
 export default function useAutonomyPolling() {
   const loadCancelledRef = useRef(false);
@@ -74,47 +54,44 @@ export default function useAutonomyPolling() {
       setRefreshing(true);
     }
 
-    const settledResources = await Promise.allSettled(
-      LOADER_ENTRIES.map(([, loader]) => Promise.resolve().then(() => loader()))
-    );
-
-    if (loadCancelledRef.current) {
-      return;
-    }
-
     const nextErrors = { ...EMPTY_ERRORS };
     const nextValues = {};
     let successfulResourceCount = 0;
 
-    LOADER_ENTRIES.forEach(([resourceKey], index) => {
-      const result = settledResources[index];
+    try {
+      const snapshot = await getAutonomyWorkspace();
 
-      if (result.status === "fulfilled") {
-        successfulResourceCount += 1;
-        if (resourceKey === "status") {
-          nextValues.status = result.value;
-        } else if (resourceKey === "agents") {
-          nextValues.agents = result.value.agents || [];
-        } else if (resourceKey === "schedules") {
-          nextValues.schedules = result.value.schedules || [];
-        } else if (resourceKey === "inbox") {
-          nextValues.inbox = result.value.items || [];
-        } else if (resourceKey === "runs") {
-          nextValues.runs = result.value.runs || [];
-        } else if (resourceKey === "checkpoints") {
-          nextValues.checkpoints = result.value.checkpoints || [];
-        } else if (resourceKey === "budgets") {
-          nextValues.budgets = result.value.ledgers || [];
-        } else if (resourceKey === "escalations") {
-          nextValues.escalations = result.value.escalations || [];
-        }
-      } else {
-        nextErrors[resourceKey] = toErrorMessage(
-          result.reason,
-          `Unable to load ${resourceKey}.`
-        );
+      if (loadCancelledRef.current) {
+        return;
       }
-    });
+
+      const sectionErrors = snapshot.section_errors || {};
+
+      nextValues.status = snapshot.status ?? null;
+      nextValues.agents = snapshot.agents || [];
+      nextValues.schedules = snapshot.schedules || [];
+      nextValues.inbox = snapshot.inbox || [];
+      nextValues.runs = snapshot.runs || [];
+      nextValues.checkpoints = snapshot.checkpoints || [];
+      nextValues.budgets = snapshot.budgets || [];
+      nextValues.escalations = snapshot.escalations || [];
+
+      for (const key of Object.keys(EMPTY_ERRORS)) {
+        nextErrors[key] = sectionErrors[key] || "";
+      }
+
+      successfulResourceCount = Object.values(nextErrors).filter(
+        (msg) => msg === ""
+      ).length;
+    } catch (err) {
+      if (loadCancelledRef.current) {
+        return;
+      }
+      const msg = toErrorMessage(err, "Unable to load workspace.");
+      for (const key of Object.keys(EMPTY_ERRORS)) {
+        nextErrors[key] = msg;
+      }
+    }
 
     const completedAt = new Date().toISOString();
 

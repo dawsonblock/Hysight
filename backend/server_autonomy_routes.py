@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -27,6 +28,7 @@ from backend.server_models import (
     AutonomyScheduleListResponse,
     AutonomyScheduleResponse,
     AutonomyStatusResponse,
+    AutonomyWorkspaceSnapshot,
     CreateAutonomyAgentRequest,
     CreateAutonomyInboxItemRequest,
     CreateAutonomyScheduleRequest,
@@ -525,3 +527,102 @@ def register_autonomy_routes(router: APIRouter) -> None:
 
         status = await asyncio.to_thread(_run_tick)
         return _status_to_response(status)
+
+    @router.get(
+        "/hca/autonomy/workspace",
+        response_model=AutonomyWorkspaceSnapshot,
+    )
+    async def autonomy_workspace_snapshot():
+        supervisor = get_supervisor()
+
+        async def _fetch_status():
+            status = await asyncio.to_thread(supervisor.status)
+            return _status_to_response(status)
+
+        async def _fetch_agents():
+            agents = await asyncio.to_thread(autonomy_storage.list_agents)
+            return [_agent_to_response(a) for a in agents]
+
+        async def _fetch_schedules():
+            schedules = await asyncio.to_thread(autonomy_storage.list_schedules)
+            return [_schedule_to_response(s) for s in schedules]
+
+        async def _fetch_inbox():
+            items = await asyncio.to_thread(
+                autonomy_storage.list_inbox_items, None, None
+            )
+            return [_inbox_to_response(i) for i in items]
+
+        async def _fetch_runs():
+            checkpoints = await asyncio.to_thread(
+                autonomy_storage.list_active_autonomy_runs
+            )
+            return [
+                AutonomyRunLinkResponse(
+                    agent_id=c.agent_id,
+                    trigger_id=c.trigger_id,
+                    run_id=c.run_id or "",
+                    run_status=c.status.value,
+                    last_state=c.last_state,
+                    last_decision=c.last_decision,
+                )
+                for c in checkpoints
+                if c.run_id
+            ]
+
+        async def _fetch_escalations():
+            checkpoints = await asyncio.to_thread(autonomy_storage.list_checkpoints)
+            return [
+                AutonomyEscalationResponse(
+                    agent_id=cp.agent_id,
+                    trigger_id=cp.trigger_id,
+                    run_id=cp.run_id,
+                    status=cp.status.value,
+                    last_state=cp.last_state,
+                    last_decision=cp.last_decision,
+                    checkpointed_at=cp.checkpointed_at,
+                )
+                for cp in checkpoints
+                if cp.status.value == "awaiting_approval"
+            ]
+
+        async def _fetch_budgets():
+            ledgers = await asyncio.to_thread(autonomy_storage.list_budget_ledgers)
+            return [
+                AutonomyBudgetLedgerResponse(**ledger.model_dump(mode="json"))
+                for ledger in ledgers
+            ]
+
+        async def _fetch_checkpoints():
+            checkpoints = await asyncio.to_thread(autonomy_storage.list_checkpoints)
+            return [_checkpoint_to_response(c) for c in checkpoints]
+
+        _SECTIONS = [
+            ("status", _fetch_status),
+            ("agents", _fetch_agents),
+            ("schedules", _fetch_schedules),
+            ("inbox", _fetch_inbox),
+            ("runs", _fetch_runs),
+            ("escalations", _fetch_escalations),
+            ("budgets", _fetch_budgets),
+            ("checkpoints", _fetch_checkpoints),
+        ]
+
+        results = await asyncio.gather(
+            *[fn() for _, fn in _SECTIONS],
+            return_exceptions=True,
+        )
+
+        section_kwargs: dict = {}
+        section_errors: dict = {}
+        for (name, _), result in zip(_SECTIONS, results):
+            if isinstance(result, BaseException):
+                section_errors[name] = str(result)
+            else:
+                section_kwargs[name] = result
+
+        return AutonomyWorkspaceSnapshot(
+            snapshot_at=datetime.now(timezone.utc),
+            section_errors=section_errors,
+            **section_kwargs,
+        )

@@ -1077,7 +1077,10 @@
       "recent_runs": [
         {
           "agent_id": "agent-1",
+          "last_decision": null,
+          "last_state": null,
           "run_id": "run-autonomy-1",
+          "run_status": "",
           "trigger_id": "trigger-1"
         }
       ],

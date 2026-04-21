@@ -212,4 +212,41 @@ describe("autonomy API client boundary", () => {
       { method: "POST" }
     );
   });
+
+  test("getAutonomyWorkspace fetches the aggregate snapshot endpoint", async () => {
+    const { getAutonomyWorkspace } = loadAutonomyApiModule();
+
+    const snapshotPayload = {
+      snapshot_at: "2026-04-21T10:00:00Z",
+      status: {
+        enabled: true,
+        running: false,
+        active_agents: 0,
+        active_runs: 0,
+        pending_triggers: 0,
+      },
+      agents: [],
+      schedules: [],
+      inbox: [],
+      runs: [],
+      escalations: [],
+      budgets: [],
+      checkpoints: [],
+      section_errors: {},
+    };
+
+    global.fetch.mockResolvedValueOnce(createJsonResponse(snapshotPayload));
+
+    const result = await getAutonomyWorkspace();
+
+    expect(result).toMatchObject({
+      snapshot_at: "2026-04-21T10:00:00Z",
+      section_errors: {},
+      agents: [],
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/hca/autonomy/workspace",
+      undefined
+    );
+  });
 });

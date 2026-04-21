@@ -183,6 +183,19 @@ const autonomyCheckpointListSchema = z.object({
   checkpoints: z.array(autonomyCheckpointSchema),
 }).passthrough();
 
+const autonomyWorkspaceSnapshotSchema = z.object({
+  snapshot_at: z.string(),
+  status: autonomySubsystemSchema.nullish(),
+  agents: z.array(autonomyAgentSchema).optional(),
+  schedules: z.array(autonomyScheduleSchema).optional(),
+  inbox: z.array(autonomyInboxItemSchema).optional(),
+  runs: z.array(autonomyRunLinkSchema).optional(),
+  escalations: z.array(autonomyEscalationSchema).optional(),
+  budgets: z.array(autonomyBudgetLedgerSchema).optional(),
+  checkpoints: z.array(autonomyCheckpointSchema).optional(),
+  section_errors: z.record(z.string()).optional(),
+}).passthrough();
+
 export function getAutonomyStatus() {
   return fetchJson("/hca/autonomy/status", undefined, autonomySubsystemSchema);
 }
@@ -333,4 +346,8 @@ export function listAutonomyBudgets() {
 
 export function listAutonomyEscalations() {
   return fetchJson("/hca/autonomy/escalations", undefined, autonomyEscalationListSchema);
+}
+
+export function getAutonomyWorkspace() {
+  return fetchJson("/hca/autonomy/workspace", undefined, autonomyWorkspaceSnapshotSchema);
 }
