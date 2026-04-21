@@ -1,5 +1,21 @@
 # Release Notes
 
+## hysight-42 (2026-04-21)
+
+**Base commit:** `10966b3bc57905b298563145dba8450d610f9c1c`
+**Classification:** sealed local-core release
+
+- Baseline: 123/0 — pipeline, backend, contract suites
+- Autonomy: 61/0
+- Live sidecar: UNPROVEN — not re-run in this pass
+- Frontend: UNPROVEN — exact Node/Yarn runtime proof not re-run in this pass
+- Live Mongo: not rerun; historical only
+- Verification context: clean external unzip (`Hysight-main 42.zip`), fresh `.pkg-venv`, fresh `make venv`, fresh baseline, fresh autonomy
+- Historical Hysight 27–41 summaries and older receipts remain audit history only and are not proof for 42
+- See `RELEASE_SEAL_HYSIGHT42.md`, `FULL_PROOF_SUMMARY_HYSIGHT42.md`, and `OPTIONAL_PROOF_SUMMARY_HYSIGHT42.md` for version-specific proof evidence.
+
+---
+
 ## hysight-41 (2026-04-21)
 
 **Base commit:** `00ac024248272485bcf687635d7c7b1f97f567db`

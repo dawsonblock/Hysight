@@ -168,27 +168,26 @@ Frontend proof details:
 
 ## Release Seal Status
 
-The current Hysight-main 41 release candidate is freshly sealed from base commit
-`00ac024248272485bcf687635d7c7b1f97f567db`.
+The current Hysight-main 42 release candidate is documented from an externally verified
+clean-directory pass against base commit `10966b3bc57905b298563145dba8450d610f9c1c`.
 
-**Classification: sealed full-proof release**
+**Classification: sealed local-core release**
 
 - Packaging install: PASS via `python -m pip install -e '.[dev]'`
 - Supported bootstrap: PASS via `make venv`
 - `.pkg-venv` contamination check: PASS
 - Baseline proof: 123 passed, 0 failed (7 pipeline + 98 backend-baseline + 18 contract)
 - Autonomy optional proof: 61 passed, 0 failed
-- Live Rust sidecar receipt: 13 passed, 2 skipped, 0 failed
-- Live sidecar parity: 4 passed, 0 failed (additive evidence)
-- Sidecar no-fallback check: PASS — stopped-sidecar rust-mode backend exits fail-closed (`NO_FALLBACK_EXIT=1`)
-- Frontend proof: 20 passed, 0 failed on Node `24.15.0` and Yarn `1.22.22`
+- Live Rust sidecar proof: UNPROVEN — not re-run in this pass
+- Frontend proof: UNPROVEN — exact Node/Yarn runtime proof not re-run in this pass
 - Live Mongo proof was not rerun in this release seal and is not counted as fresh evidence
 
-Older Hysight 27–39 summary files remain in the repository as audit history only and are
-not proof for 41.
+Hysight-main 41 remains the last in-repo **sealed full-proof release** in repository
+history. Older Hysight 27–41 summary files remain in the repository as audit history only
+and are not proof for 42.
 
-Authoritative 41 release-seal evidence lives in `artifacts/proof/release_env_hysight41.txt`,
-`artifacts/proof/release_quarantine_hysight41.md`, and `RELEASE_SEAL_HYSIGHT41.md`.
+Authoritative 42 release-truth documents live in `RELEASE_SEAL_HYSIGHT42.md`,
+`FULL_PROOF_SUMMARY_HYSIGHT42.md`, and `OPTIONAL_PROOF_SUMMARY_HYSIGHT42.md`.
 
 ## Run Modes
 
