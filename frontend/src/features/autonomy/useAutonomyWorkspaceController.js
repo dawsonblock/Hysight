@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { buildCountMap, latestBy } from "@/features/autonomy/formatters";
 import useAutonomyPolling from "@/features/autonomy/useAutonomyPolling";
 import useAutonomyActions from "@/features/autonomy/useAutonomyActions";
@@ -5,6 +6,7 @@ import useAutonomyForms from "@/features/autonomy/useAutonomyForms";
 import useAutonomyRunSummaries from "@/features/autonomy/useAutonomyRunSummaries";
 
 export default function useAutonomyWorkspaceController({ selectedRunId }) {
+  const [killReason, setKillReason] = useState("");
   const {
     resourceData,
     resourceErrors,
@@ -52,7 +54,8 @@ export default function useAutonomyWorkspaceController({ selectedRunId }) {
     handleCreateInboxItem,
   } = useAutonomyForms({ agents, performAction });
 
-  const { selectedRunSummary } = useAutonomyRunSummaries({ selectedRunId });
+  const activeRunIds = autonomyRuns.map((r) => r.run_id);
+  const { selectedRunSummary, runSummaries, runSummariesError } = useAutonomyRunSummaries({ selectedRunId, activeRunIds });
 
   const latestCheckpointByAgent = latestBy(
     checkpoints,
@@ -116,6 +119,7 @@ export default function useAutonomyWorkspaceController({ selectedRunId }) {
     inboxForm,
     inboxItems,
     isStaleData,
+    killReason,
     lastAttemptedSyncAt,
     lastSuccessfulSyncAt,
     latestCheckpointByAgent,
@@ -123,10 +127,12 @@ export default function useAutonomyWorkspaceController({ selectedRunId }) {
     loading,
     refreshWorkspace,
     refreshing,
-    resourceErrors,
+    resourceErrors: { ...resourceErrors, runSummaries: runSummariesError },
+    runSummaries,
     scheduleForm,
     schedules,
     selectedRunSummary,
+    setKillReason,
     supervisorTone,
   };
 }

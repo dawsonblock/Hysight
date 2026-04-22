@@ -48,6 +48,7 @@ export default function AutonomyWorkspace({ onOpenRun, selectedRunId }) {
     inboxForm,
     inboxItems,
     isStaleData,
+    killReason,
     lastAttemptedSyncAt,
     lastSuccessfulSyncAt,
     latestCheckpointByAgent,
@@ -59,6 +60,7 @@ export default function AutonomyWorkspace({ onOpenRun, selectedRunId }) {
     scheduleForm,
     schedules,
     selectedRunSummary,
+    setKillReason,
     supervisorTone,
   } = useAutonomyWorkspaceController({ selectedRunId });
 
@@ -129,7 +131,9 @@ export default function AutonomyWorkspace({ onOpenRun, selectedRunId }) {
       <KillSwitchBar
         actionKey={actionKey}
         autonomyStatus={autonomyStatus}
+        killReason={killReason}
         onSetKillSwitch={handleKillSwitchChange}
+        setKillReason={setKillReason}
       />
 
       <div className="autonomy-grid autonomy-grid--twoColumn">

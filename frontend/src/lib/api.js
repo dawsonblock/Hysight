@@ -237,7 +237,15 @@ export function apiUrl(path) {
 }
 
 async function readResponseBody(response) {
-  const text = await response.text();
+  if (response.bodyUsed) {
+    return null;
+  }
+  let text;
+  try {
+    text = await response.text();
+  } catch {
+    return null;
+  }
 
   if (!text) {
     return null;
@@ -309,6 +317,9 @@ export async function fetchJson(path, init, schema) {
 
 export function toErrorMessage(error, fallback = "Request failed.") {
   if (error instanceof Error && error.message) {
+    if (/body.*(disturbed|locked)/i.test(error.message)) {
+      return fallback;
+    }
     return error.message;
   }
 

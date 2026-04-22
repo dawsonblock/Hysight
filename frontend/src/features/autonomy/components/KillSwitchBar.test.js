@@ -1,22 +1,30 @@
 import { render, screen } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import KillSwitchBar from "@/features/autonomy/components/KillSwitchBar";
 
 function renderKillSwitchBar(overrides = {}) {
-  const props = {
+  const { onSetKillSwitch = jest.fn(), ...rest } = overrides;
+
+  const baseProps = {
     actionKey: "",
     autonomyStatus: {
       kill_switch_active: false,
       kill_switch_reason: null,
       kill_switch_set_at: "2026-04-21T10:00:00Z",
     },
-    onSetKillSwitch: jest.fn(),
-    ...overrides,
+    onSetKillSwitch,
+    ...rest,
   };
 
-  render(<KillSwitchBar {...props} />);
+  function Wrapper() {
+    const [killReason, setKillReason] = useState("");
+    return <KillSwitchBar {...baseProps} killReason={killReason} setKillReason={setKillReason} />;
+  }
 
-  return props;
+  render(<Wrapper />);
+
+  return baseProps;
 }
 
 test("opens dialog on Kill autonomy and calls onSetKillSwitch with reason", async () => {

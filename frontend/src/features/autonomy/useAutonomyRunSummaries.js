@@ -1,31 +1,55 @@
-import { useEffect, useState } from "react";
-import { getRunSummary } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { getRunSummary, toErrorMessage } from "@/lib/api";
 
-export default function useAutonomyRunSummaries({ selectedRunId }) {
-  const [selectedRunSummary, setSelectedRunSummary] = useState(null);
+export default function useAutonomyRunSummaries({ selectedRunId, activeRunIds = [] }) {
+  const [runSummaries, setRunSummaries] = useState({});
+  const [runSummariesError, setRunSummariesError] = useState("");
+  const activeRunIdsRef = useRef(activeRunIds);
+
+  const activeRunIdsKey = activeRunIds.slice().sort().join(",");
 
   useEffect(() => {
-    if (!selectedRunId) {
-      setSelectedRunSummary(null);
+    activeRunIdsRef.current = activeRunIds;
+
+    if (activeRunIds.length === 0) {
+      setRunSummaries({});
+      setRunSummariesError("");
       return;
     }
 
     let cancelled = false;
 
-    getRunSummary(selectedRunId).then((summary) => {
-      if (!cancelled) {
-        setSelectedRunSummary(summary);
+    Promise.all(
+      activeRunIds.map((runId) =>
+        getRunSummary(runId)
+          .then((summary) => ({ runId, summary, error: null }))
+          .catch((err) => ({ runId, summary: null, error: err }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+
+      const nextSummaries = {};
+      let firstError = null;
+      for (const { runId, summary, error } of results) {
+        if (summary !== null) {
+          nextSummaries[runId] = summary;
+        }
+        if (error !== null && firstError === null) {
+          firstError = error;
+        }
       }
-    }).catch(() => {
-      if (!cancelled) {
-        setSelectedRunSummary(null);
-      }
+
+      setRunSummaries(nextSummaries);
+      setRunSummariesError(firstError ? toErrorMessage(firstError, "Failed to load run summaries.") : "");
     });
 
     return () => {
       cancelled = true;
     };
-  }, [selectedRunId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRunIdsKey]);
 
-  return { selectedRunSummary };
+  const selectedRunSummary = selectedRunId ? (runSummaries[selectedRunId] ?? null) : null;
+
+  return { selectedRunSummary, runSummaries, runSummariesError };
 }

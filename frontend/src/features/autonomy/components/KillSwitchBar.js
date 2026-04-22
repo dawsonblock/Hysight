@@ -3,10 +3,9 @@ import { formatTimestamp } from "@/features/autonomy/formatters";
 import { ActionButton, SectionHeader, StatusPill } from "@/features/autonomy/components/ui";
 import KillSwitchConfirmDialog from "@/features/autonomy/components/KillSwitchConfirmDialog";
 
-export default function KillSwitchBar({ actionKey, autonomyStatus, onSetKillSwitch }) {
+export default function KillSwitchBar({ actionKey, autonomyStatus, killReason, onSetKillSwitch, setKillReason }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingActive, setPendingActive] = useState(false);
-  const [killReason, setKillReason] = useState("");
 
   function openDialog(nextActive) {
     setPendingActive(nextActive);
